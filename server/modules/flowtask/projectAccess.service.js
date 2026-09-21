@@ -20,34 +20,7 @@ function toStringSet(values) {
  */
 export function hasSnapshotProjectAccess(channel, membership) {
   if (!isFlowTaskProjectChannel(channel)) return false;
-  const access = membership?.flowTaskAccess;
-  if (!access) return false;
-
-  if (access.canViewAllProjects === true) return true;
-
-  const boardId = channel.flowTaskRef?.entityId?.toString();
-  if (
-    access.canViewSelectedProjects === true
-    && boardId
-    && toStringSet(access.allowedProjectIds).has(boardId)
-  ) {
-    return true;
-  }
-
-  const departmentId = channel.departmentRef?.departmentId?.toString();
-  if (
-    access.canViewDepartmentProjects === true
-    && departmentId
-    && toStringSet(access.departmentIds).has(departmentId)
-  ) {
-    return true;
-  }
-
-  const teamId = channel.flowTaskMetadata?.teamId?.toString();
-  if (access.teamId && teamId && access.teamId.toString() === teamId) return true;
-
-  return access.canViewPublicProjects === true
-    && channel.flowTaskMetadata?.sourceVisibility === 'public';
+  return false;
 }
 
 export async function getWorkspaceMembership(userId, workspaceId) {
@@ -57,30 +30,30 @@ export async function getWorkspaceMembership(userId, workspaceId) {
 
 export async function canAccessFlowTaskProjectChannel(channel, userId, workspaceId, membership = null) {
   if (!isFlowTaskProjectChannel(channel)) return false;
-  const activeMembership = membership || await getWorkspaceMembership(userId, workspaceId);
-  if (hasSnapshotProjectAccess(channel, activeMembership)) return true;
+  const activeMembership = membership || await getWorkspaceMembership(userId, workspaceId || channel?.workspaceId);
+  if (activeMembership?.role === 'admin' || activeMembership?.role === 'owner') {
+    return true;
+  }
   return ChannelMember.isMember(channel._id, userId);
 }
 
 /**
- * Recipients for a project message are explicit participants plus users whose
- * current FlowTask workspace authorization grants visibility. Pending users
- * never have a WorkspaceMembership and therefore cannot enter this set.
+ * Recipients for a project message/event are direct participants (`ChannelMember`)
+ * as well as workspace Owners and Admins who have workspace-wide channel visibility.
  */
 export async function getAuthorizedProjectUserIds(channel, workspaceId) {
+  const effectiveWsId = workspaceId || channel?.workspaceId;
   const directIds = await ChannelMember.getMemberIds(channel._id);
-  if (!isFlowTaskProjectChannel(channel)) return directIds;
+  if (!effectiveWsId) return directIds;
 
-  const memberships = await WorkspaceMembership.find({ workspaceId, isActive: true })
-    .select('userId flowTaskAccess')
-    .lean();
-  const userIds = new Set(directIds.map(String));
-  for (const membership of memberships) {
-    if (hasSnapshotProjectAccess(channel, membership)) {
-      userIds.add(membership.userId.toString());
-    }
-  }
-  return [...userIds];
+  const adminMemberships = await WorkspaceMembership.find({
+    workspaceId: effectiveWsId,
+    role: { $in: ['admin', 'owner'] },
+    isActive: true,
+  }).select('userId').lean();
+
+  const adminIds = adminMemberships.map((m) => m.userId.toString());
+  return [...new Set([...directIds, ...adminIds])];
 }
 
 /**

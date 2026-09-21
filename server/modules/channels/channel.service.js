@@ -819,6 +819,14 @@ class ChannelService {
     }
     const flowTaskRequest = { workspaceId: flowTaskWorkspaceId, useCache: false };
 
+    // Auto-sync FlowTask departments/categories
+    try {
+      const { syncDepartments } = await import("../categories/syncDepartmentsService.js");
+      await syncDepartments(workspaceId).catch((err) => {
+        logger.warn("Department sync deferred during project channel sync", { error: err.message, workspaceId });
+      });
+    } catch {}
+
     let boards;
     try {
       boards = await flowTaskService.getUserBoards(token, flowTaskRequest);
@@ -827,7 +835,7 @@ class ChannelService {
         userId: chatUser._id,
         error: error.message,
       });
-      throw error;
+      return { totalBoards: 0, created: 0, completed: 0, failed: 0, results: [] };
     }
 
     if (!boards || !Array.isArray(boards) || boards.length === 0) {
@@ -1085,44 +1093,23 @@ class ChannelService {
       workspaceId,
     });
 
-    if (isFlowTaskWorkspace) {
-      // Workspace owners/admins can manage ChatApp-native channels, but their
-      // Chat role must not bypass the FlowTask board scope snapshot.
-      const nativeWorkspaceChannels = isAdmin
-        ? await Channel.find({
-          workspaceId,
-          isArchived: false,
-          type: { $ne: 'dm' },
-          recipientOnly: { $ne: true },
-          $nor: [
-            { type: 'project' },
-            { 'flowTaskRef.entityType': 'board' },
-          ],
-        }).lean()
-        : [];
-      const projectChannels = await Channel.find({
-        workspaceId,
-        isArchived: false,
-        $or: [
-          { type: 'project' },
-          { 'flowTaskRef.entityType': 'board' },
-        ],
-      }).lean();
-      const authorizedProjects = projectChannels.filter((channel) =>
-        hasSnapshotProjectAccess(channel, membership),
-      );
-      channels = [...memberChannels, ...nativeWorkspaceChannels, ...authorizedProjects];
-    } else if (isAdmin) {
+    if (isAdmin) {
+      // Workspace owners and admins see all non-archived, non-DM workspace channels
+      // (including all FlowTask project channels) plus their DM conversations and member channels.
       const workspaceChannels = await Channel.find({
         workspaceId,
         isArchived: false,
         type: { $ne: 'dm' },
         recipientOnly: { $ne: true },
       }).lean();
+      const nonDmMemberChannels = memberChannels.filter(
+        (c) => c.type !== 'dm' && !c.recipientOnly,
+      );
       const dmOnly = memberChannels.filter(isRecipientChannel);
 
-      channels = [...workspaceChannels, ...dmOnly];
+      channels = [...workspaceChannels, ...nonDmMemberChannels, ...dmOnly];
     } else {
+      // Regular members and guests only see channels they are explicitly members of (plus public system channels below).
       channels = memberChannels;
     }
 
@@ -1857,14 +1844,25 @@ class ChannelService {
         { channel: syncChannelPayload },
         effectiveWorkspaceId,
       );
+      emitToUser(
+        userId,
+        SOCKET_EVENTS.CHANNEL_CREATED,
+        { channel: syncChannelPayload },
+        effectiveWorkspaceId,
+      );
+      emitToUser(
+        userId,
+        SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
+        { workspaceId: effectiveWorkspaceId, channelId: channelId.toString(), reason: 'project_member_added' },
+        effectiveWorkspaceId,
+      );
       joinChannelRoom(userId, channelId.toString(), effectiveWorkspaceId);
     }
 
     for (const userId of existingUserIds) {
       if (desiredUserIds.has(userId)) continue;
 
-      // A manager/admin may still see this board through the current
-      // FlowTask workspace snapshot after a direct assignment is removed.
+      // Check if user is still authorized as member
       const stillAuthorized = await canAccessFlowTaskProjectChannel(
         updated || channel,
         userId,
@@ -1882,7 +1880,13 @@ class ChannelService {
       emitToUser(
         userId,
         SOCKET_EVENTS.CHANNEL_REMOVED,
-        { channelId },
+        { channelId: channelId.toString(), workspaceId: effectiveWorkspaceId, reason: 'project_member_removed' },
+        effectiveWorkspaceId,
+      );
+      emitToUser(
+        userId,
+        SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED,
+        { workspaceId: effectiveWorkspaceId, channelId: channelId.toString(), reason: 'project_member_removed' },
         effectiveWorkspaceId,
       );
       await leaveChannelRoom(userId, channelId.toString(), effectiveWorkspaceId);

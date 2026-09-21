@@ -20,12 +20,15 @@ vi.mock('../modules/channels/channel.repository.js', () => ({ default: {
   findByFlowTaskRef: mocks.findByRef, findBySlug: mocks.findBySlug,
 } }));
 vi.mock('../modules/messages/message.service.js', () => ({ default: { sendSystemMessage: mocks.systemMessage } }));
+vi.mock('../modules/messages/Message.model.js', () => ({ default: { updateMany: vi.fn().mockResolvedValue({}) } }));
+vi.mock('../modules/notifications/Notification.model.js', () => ({ default: { updateMany: vi.fn().mockResolvedValue({}) } }));
 vi.mock('../modules/users/user.repository.js', () => ({ default: {
   upsertFromFlowTask: mocks.upsertUser, findByFlowTaskId: mocks.findUser,
+  updateFlowTaskProfile: vi.fn().mockResolvedValue({ _id: 'chat-user' }),
 } }));
 vi.mock('../services/roleSync.service.js', () => ({ default: { syncUserRole: mocks.syncRole } }));
 vi.mock('../modules/workspaces/WorkspaceMembership.model.js', () => ({ default: { findOne: mocks.findMembership } }));
-vi.mock('../sockets/socketManager.js', () => ({ emitToUser: mocks.emitToUser }));
+vi.mock('../sockets/socketManager.js', () => ({ emitToUser: mocks.emitToUser, emitToWorkspace: vi.fn() }));
 vi.mock('../utils/logger.js', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import { registerDepartmentTeamEventHandlers } from '../modules/webhooks/handlers/departmentTeamEventHandler.js';
@@ -33,7 +36,7 @@ import { registerUserEventHandlers } from '../modules/webhooks/handlers/userEven
 import { FLOWTASK_EVENTS } from '../config/constants.js';
 
 const payload = {
-  _workspaceId: 'chat-workspace', workspaceId: 'flowtask-workspace',
+  _workspaceId: '507f1f77bcf86cd799439011', workspaceId: 'flowtask-workspace',
   department: { _id: 'dept-1', name: 'Engineering' },
   user: { _id: 'flowtask-user', name: 'Member', department: { _id: 'dept-1', name: 'Engineering' } },
   access: { role: 'employee' },
@@ -43,8 +46,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.handlers.clear();
   mocks.syncDepartment.mockResolvedValue({});
-  mocks.upsertUser.mockResolvedValue({ _id: 'chat-user', name: 'Member' });
-  mocks.findUser.mockResolvedValue({ _id: 'chat-user' });
+  mocks.upsertUser.mockResolvedValue({ _id: '507f1f77bcf86cd799439022', name: 'Member' });
+  mocks.findUser.mockResolvedValue({ _id: '507f1f77bcf86cd799439022', flowTaskUserId: 'flowtask-user' });
   mocks.findMembership.mockReturnValue({ lean: async () => ({ flowTaskAccess: { role: 'employee' } }) });
   mocks.findBySlug.mockResolvedValue(null);
   mocks.findByRef.mockResolvedValue(null);
@@ -56,7 +59,7 @@ describe('departments organize actual channels only', () => {
   it('syncs a new department directory entry without creating or announcing a channel', async () => {
     await mocks.handlers.get(FLOWTASK_EVENTS.DEPARTMENT_CREATED)(payload);
     expect(mocks.syncDepartment).toHaveBeenCalledWith(
-      { workspaceId: 'chat-workspace', externalId: 'dept-1' },
+      { workspaceId: '507f1f77bcf86cd799439011', externalId: 'dept-1' },
       { name: 'Engineering', description: '', icon: '', color: '' },
       { upsert: true, new: true },
     );
@@ -86,15 +89,22 @@ describe('departments organize actual channels only', () => {
     await expect(mocks.handlers.get(FLOWTASK_EVENTS.DEPARTMENT_CREATED)(payload)).rejects.toThrow('Database unavailable');
   });
 
-  it.each([FLOWTASK_EVENTS.USER_CREATED, FLOWTASK_EVENTS.USER_VERIFIED, FLOWTASK_EVENTS.USER_UPDATED])(
+  it.each([FLOWTASK_EVENTS.USER_CREATED, FLOWTASK_EVENTS.USER_VERIFIED])(
     '%s preserves user/access sync without creating a department channel', async (event) => {
       await mocks.handlers.get(event)({ ...payload, changes: { department: { old: null, new: payload.department } } });
       expect(mocks.upsertUser).toHaveBeenCalled();
-      expect(mocks.syncRole).toHaveBeenCalledWith('flowtask-user', 'employee', 'chat-workspace', payload.access);
+      expect(mocks.syncRole).toHaveBeenCalledWith('flowtask-user', 'employee', '507f1f77bcf86cd799439011', payload.access);
       expect(mocks.createChannel).not.toHaveBeenCalled();
       expect(mocks.addMember).not.toHaveBeenCalled();
     },
   );
+
+  it('USER_UPDATED preserves user/access sync without creating a department channel', async () => {
+    await mocks.handlers.get(FLOWTASK_EVENTS.USER_UPDATED)({ ...payload, changes: { department: { old: null, new: payload.department } } });
+    expect(mocks.syncRole).toHaveBeenCalledWith('flowtask-user', 'employee', '507f1f77bcf86cd799439011', payload.access);
+    expect(mocks.createChannel).not.toHaveBeenCalled();
+    expect(mocks.addMember).not.toHaveBeenCalled();
+  });
 
   it('does not re-enroll users into legacy generated department channels', async () => {
     mocks.findByRef.mockResolvedValue({ _id: 'legacy-channel', type: 'department' });

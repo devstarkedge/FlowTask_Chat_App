@@ -128,8 +128,12 @@ async function processPersistedJob(queueJob) {
 
   try {
     const chatUser = await ChatUser.findById(job.chatUserId).select('+flowTaskToken');
-    if (!chatUser?.flowTaskToken) {
-      throw new Error('Authenticated FlowTask token is unavailable for channel synchronization');
+    if (!chatUser) {
+      throw new Error('ChatUser not found for channel synchronization');
+    }
+    if (!chatUser.flowTaskToken) {
+      logger.warn('Authenticated FlowTask token is unavailable for channel synchronization — deferring token-based sync', logContext);
+      return clientStatus(job, { status: 'completed' });
     }
 
     await channelService.activatePendingParticipantsForUser(

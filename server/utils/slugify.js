@@ -61,7 +61,8 @@ export function projectChannelSlug(departmentName, projectName, boardId = '') {
  * @returns {string}
  */
 export function appendCollisionSuffix(slug, entityId) {
-  const suffix = `-${entityId.slice(-4)}`;
+  const idStr = String(entityId || '');
+  const suffix = `-${idStr.slice(-4)}`;
   const maxBase = CHANNEL_NAME.MAX_LENGTH - suffix.length;
   const base = slug.substring(0, maxBase).replace(/-+$/, '');
   return `${base}${suffix}`;

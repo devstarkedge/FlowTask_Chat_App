@@ -311,6 +311,13 @@ async function startServer() {
       webhookRetryService.start();
     }
 
+    // 7d. Initialize background job queues and start project channel sync recovery loop
+    const { initQueues } = await import('./services/jobQueue.service.js');
+    await initQueues();
+    if (env.FLOWTASK_ENABLED) {
+      projectChannelSyncService.startRecovery();
+    }
+
     // 8. Start memory usage monitor
     memoryMonitorTimer = setInterval(() => {
       const mem = process.memoryUsage();
@@ -385,6 +392,7 @@ async function shutdown(signal) {
   // 3b. Stop webhook retry service
   if (env.FLOWTASK_ENABLED) {
     webhookRetryService.stop();
+    projectChannelSyncService.stopRecovery();
   }
 
   // 3c. Stop scheduled message processor

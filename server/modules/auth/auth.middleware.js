@@ -183,7 +183,7 @@ export function requireChannelAccess() {
         return next();
       }
 
-      // Chat workspace admins can access non-FlowTask project channels only.
+      // Chat workspace admins and owners can access non-DM workspace channels.
       if (req.membership?.role === 'admin' || req.membership?.role === 'owner') {
         req.channel = channel;
         return next();
@@ -301,7 +301,7 @@ export function requireMessageAccess(options = { allowMissing: false }) {
         return next();
       }
 
-      // Chat workspace admins can access non-FlowTask project channels only.
+      // Chat workspace admins and owners can access non-DM workspace channels.
       if (req.membership?.role === 'admin' || req.membership?.role === 'owner') {
         req.message = message;
         req.channel = channel;

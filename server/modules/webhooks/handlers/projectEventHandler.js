@@ -387,11 +387,30 @@ export function registerProjectEventHandlers() {
       await channelService.syncMembers(channel._id, [memberId], wsId);
     }
 
-    // Post join message
     const member = await userRepository.findByFlowTaskId(memberId, wsId);
     const addedBy = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
 
     if (member) {
+      emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_CREATED, {
+        channel: {
+          _id: channel._id,
+          name: channel.name,
+          slug: channel.slug,
+          type: channel.type,
+          visibility: channel.visibility,
+          isArchived: channel.isArchived,
+          systemManaged: channel.systemManaged,
+          departmentRef: channel.departmentRef,
+          adminOverrides: channel.adminOverrides,
+          flowTaskRef: channel.flowTaskRef,
+        },
+      }, wsId);
+      emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, {
+        workspaceId: wsId,
+        channelId: channel._id.toString(),
+        reason: 'project_member_added',
+      }, wsId);
+
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${member.name} was added to the project${addedBy ? ` by ${addedBy.name}` : ''}`,
@@ -422,7 +441,6 @@ export function registerProjectEventHandlers() {
     const removedByName = removedBy?.name || 'Someone';
 
     if (hasActiveTasks) {
-      // User still has task/subtask/nano assignments — keep in channel
       logger.info('project.member_removed: user has active tasks, keeping in channel', {
         memberId,
         boardId: normalizedBoardId,
@@ -438,7 +456,6 @@ export function registerProjectEventHandlers() {
         );
       }
     } else {
-      // No active tasks — safe to remove from channel
       if (memberIds.length > 0 || ownerId) {
         await channelService.reconcileProjectMembers(channel._id, memberIds, wsId, {
           ownerFlowTaskId: ownerId,
@@ -448,6 +465,18 @@ export function registerProjectEventHandlers() {
       }
 
       if (member) {
+        emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_REMOVED, {
+          channelId: channel._id.toString(),
+          workspaceId: wsId,
+          reason: 'project_member_removed',
+        }, wsId);
+        emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, {
+          workspaceId: wsId,
+          channelId: channel._id.toString(),
+          reason: 'project_member_removed',
+        }, wsId);
+        await leaveChannelRoom(member._id.toString(), channel._id.toString(), wsId);
+
         await messageService.sendSystemMessage(
           channel._id,
           `👤 ${removedByName} removed ${member.name} from the project`,
@@ -486,6 +515,26 @@ export function registerProjectEventHandlers() {
     const assignedBy = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
 
     if (member) {
+      emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_CREATED, {
+        channel: {
+          _id: channel._id,
+          name: channel.name,
+          slug: channel.slug,
+          type: channel.type,
+          visibility: channel.visibility,
+          isArchived: channel.isArchived,
+          systemManaged: channel.systemManaged,
+          departmentRef: channel.departmentRef,
+          adminOverrides: channel.adminOverrides,
+          flowTaskRef: channel.flowTaskRef,
+        },
+      }, wsId);
+      emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, {
+        workspaceId: wsId,
+        channelId: channel._id.toString(),
+        reason: 'project_member_assigned',
+      }, wsId);
+
       const roleLabel = role ? ` as **${role}**` : '';
       await messageService.sendSystemMessage(
         channel._id,

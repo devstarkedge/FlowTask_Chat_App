@@ -32,7 +32,32 @@ export async function resolveByFlowTaskWorkspaceId(flowTaskWorkspaceId, context 
     throw new BadRequestError('Missing or invalid FlowTask workspace identifier.');
   }
 
-  const mapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(ref);
+  let mapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(ref);
+  if (!mapping) {
+    // Auto-link unmapped FlowTask workspace to active ChatApp workspace if available
+    const activeWorkspaces = await Workspace.find({ isActive: true }).sort({ createdAt: 1 });
+    if (activeWorkspaces.length > 0) {
+      const targetWorkspace = activeWorkspaces.find((w) => w.source === 'flowtask') || activeWorkspaces[0];
+      try {
+        mapping = await WorkspaceMapping.create({
+          chatWorkspaceId: targetWorkspace._id,
+          flowTaskWorkspaceId: ref,
+          flowTaskWorkspaceSlug: targetWorkspace.slug,
+          flowTaskWorkspaceName: targetWorkspace.name,
+          syncOrigin: 'sync_provisioned',
+        });
+        logger.info('Auto-linked FlowTask workspace to ChatApp workspace via webhook', {
+          flowTaskWorkspaceId: ref,
+          chatWorkspaceId: targetWorkspace._id,
+        });
+      } catch (err) {
+        if (err?.code === 11000) {
+          mapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(ref);
+        }
+      }
+    }
+  }
+
   if (!mapping) {
     logger.error('Webhook workspace resolution failed: no linked ChatApp workspace', {
       flowTaskWorkspaceId: ref,

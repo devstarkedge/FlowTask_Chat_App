@@ -245,7 +245,7 @@ export default function NavigationSidebar({
   }, [categories, channels]);
 
   const projectChannels = channels.filter(
-    (c) => c.type === "project" && c.visibility !== "private" && !c.isArchived && !categorizedChannelIds.has(String(c._id)),
+    (c) => c.type === "project" && !c.isArchived && !categorizedChannelIds.has(String(c._id)),
   );
   
   const publicChannels = channels.filter(
@@ -264,11 +264,9 @@ export default function NavigationSidebar({
   
   const privateChannels = channels.filter(
     (c) =>
-      ((c.type === "private" && c.visibility !== "public") || c.visibility === "private") &&
-      c.type !== "dm" &&
-      c.type !== "system" &&
-      c.type !== "self" &&
+      c.type === "private" &&
       !c.isArchived &&
+      c.type !== "project" &&
       !categorizedChannelIds.has(String(c._id)),
   );
 

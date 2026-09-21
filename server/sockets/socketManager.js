@@ -399,19 +399,28 @@ export async function initializeSocket(httpServer, corsOptions) {
         const { canAccessFlowTaskProjectChannel, isFlowTaskProjectChannel } =
           await import('../modules/flowtask/projectAccess.service.js');
 
-        // FlowTask project visibility comes from the workspace snapshot or a
-        // reconciled direct participant record, never from ChatUser.role.
+        // FlowTask project visibility comes from project access service (supports owner/admin access & project members)
         if (isFlowTaskProjectChannel(channel)) {
           const allowed = await canAccessFlowTaskProjectChannel(
             channel,
             userId,
             wsId,
+            socket.workspaceMembership
           );
           if (!allowed) {
             socket.emit('error', { message: 'Not authorized for this FlowTask project' });
             return;
           }
-          socket.join(buildRoomName(wsId, 'channel', channelId));
+          const joinRoom = buildRoomName(wsId, 'channel', channelId);
+          socket.join(joinRoom);
+          try {
+            if (channel && Array.isArray(channel.canvasTabs) && channel.canvasTabs.length > 0) {
+              const tabs = channel.canvasTabs.map((t) => ({ _id: t.canvasId ? String(t.canvasId) : null, title: t.title || "" })).filter((x) => x._id);
+              if (tabs.length > 0) socket.emit('canvas:tabs:state', { channelId: channelId.toString(), tabs });
+            }
+          } catch (err) {
+            logger.debug('Failed to emit canvas tabs on channel:join (flowtask project)', { error: err.message, channelId });
+          }
           return;
         }
 
@@ -482,15 +491,24 @@ export async function initializeSocket(httpServer, corsOptions) {
           }
           return;
         }
-        // Check membership
+
+        // Check authorization (handles workspace admin/owner access, and direct members for remaining standard private channels)
         const { default: ChannelMember } = await import('../modules/channels/ChannelMember.model.js');
-        const isChannelMember = channel.hasMember(user._id)
-          ? true
-          : await ChannelMember.isMember(channelId, user._id);
-        if (!isChannelMember) {
+
+        let isAuthorized = false;
+        if (socket.workspaceMembership?.role === 'admin' || socket.workspaceMembership?.role === 'owner') {
+          isAuthorized = true;
+        } else {
+          isAuthorized = channel.hasMember(user._id)
+            ? true
+            : await ChannelMember.isMember(channelId, user._id);
+        }
+
+        if (!isAuthorized) {
           socket.emit('error', { message: 'Not a member of this channel' });
           return;
         }
+
         const joinRoom = buildRoomName(wsId, 'channel', channelId);
         socket.join(joinRoom);
         try {

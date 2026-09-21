@@ -988,6 +988,54 @@ export const useChatStore = create((set, get) => ({
     });
   },
 
+  removeAnnouncementMessages: (announcementId) => {
+    if (!announcementId) return;
+    set((state) => {
+      const targetChannelIds = Object.keys(state.messagesByChannel);
+      const nextMessagesByChannel = { ...state.messagesByChannel };
+      const nextMessagesById = { ...state.messagesById };
+      let updatedAny = false;
+
+      for (const chId of targetChannelIds) {
+        const msgs = nextMessagesByChannel[chId] || [];
+        let channelChanged = false;
+        const updatedMsgs = msgs.map((m) => {
+          const isLinked =
+            m.flowTaskRef?.entityId === String(announcementId) ||
+            String(m.activityMeta?.announcementId) === String(announcementId);
+
+          if (isLinked && m.activityMeta?.eventType !== 'ANNOUNCEMENT_DELETED' && !m.isDeleted) {
+            channelChanged = true;
+            updatedAny = true;
+            const updated = {
+              ...m,
+              activityMeta: {
+                ...(m.activityMeta || {}),
+                isAnnouncementDeleted: true,
+              },
+            };
+            if (m._id && nextMessagesById[m._id]) {
+              nextMessagesById[m._id] = updated;
+            }
+            return updated;
+          }
+          return m;
+        });
+
+        if (channelChanged) {
+          nextMessagesByChannel[chId] = updatedMsgs;
+        }
+      }
+
+      if (!updatedAny) return state;
+
+      return {
+        messagesByChannel: nextMessagesByChannel,
+        messagesById: nextMessagesById,
+      };
+    });
+  },
+
   /**
    * Update message delivery status (DM-only: sent → delivered → seen).
    */

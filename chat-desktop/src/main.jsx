@@ -18,33 +18,40 @@ if (import.meta.env.PROD) {
 
 // Reset the retry count on a successful load
 sessionStorage.removeItem('vitePreloadRetryCount');
-import { isDesktopApp, onDesktopNotificationClicked } from './services/desktopService';
-import { useChannelStore } from './stores/channelStore';
+
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter, HashRouter } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { Toaster } from 'react-hot-toast'
+import App from './App.jsx'
+import { queryClient } from './queries/queryClient'
+import { isDesktopApp } from './services/desktopService'
+import { notificationService, navigationRouter } from './notifications'
+import './stores/themeStore'
+import 'prosemirror-view/style/prosemirror.css'
+import './index.css'
+
+const AppRouter = isDesktopApp() ? HashRouter : BrowserRouter;
 
 if (isDesktopApp()) {
   document.body.classList.add('is-electron');
   if (window.electronAPI?.hasNativeWindowControls) {
     document.body.classList.add('has-native-window-controls');
   }
-  
-  onDesktopNotificationClicked((data) => {
-    if (data && data.channelId) {
-      useChannelStore.getState().setActiveChannel(data.channelId);
+}
+
+// Initialize notification service navigation click routing
+notificationService.setupNavigation();
+
+// Listen for custom web notification click events
+if (typeof window !== 'undefined') {
+  window.addEventListener('notification:click', (event) => {
+    if (event.detail) {
+      navigationRouter.navigate(event.detail);
     }
   });
 }
-
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, HashRouter } from 'react-router-dom'
-const AppRouter = isDesktopApp() ? HashRouter : BrowserRouter;
-import { QueryClientProvider } from '@tanstack/react-query'
-import { Toaster } from 'react-hot-toast'
-import App from './App.jsx'
-import { queryClient } from './queries/queryClient'
-import './stores/themeStore'
-import 'prosemirror-view/style/prosemirror.css'
-import './index.css'
 
 // Initialize conversation presence tracking for unread count management
 import { conversationPresence } from './services/conversationPresence'

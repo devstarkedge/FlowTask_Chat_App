@@ -28,13 +28,27 @@ export const showDesktopNotification = (title, options = {}) => {
       const notification = new Notification(title, options);
       if (options.onClick) {
         notification.onclick = options.onClick;
+      } else if (options.data) {
+        notification.onclick = () => {
+          if (typeof window !== 'undefined' && window.focus) window.focus();
+          // Dispatch notification click event for NavigationRouter
+          if (options.data.navigationTarget) {
+            window.dispatchEvent(
+              new CustomEvent('notification:click', { detail: options.data.navigationTarget })
+            );
+          } else if (options.data.channelId) {
+            window.dispatchEvent(
+              new CustomEvent('notification:click', { detail: { type: 'channel', targetId: options.data.channelId } })
+            );
+          }
+        };
       }
     }
   }
 };
 
 export const onDesktopNotificationClicked = (callback) => {
-  if (isDesktopApp() && window.electronAPI.onNotificationClicked) {
+  if (isDesktopApp() && window.electronAPI?.onNotificationClicked) {
     window.electronAPI.onNotificationClicked(callback);
   }
 };

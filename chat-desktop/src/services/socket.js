@@ -19,6 +19,7 @@ import { handleChannelRemoved } from './channelEvents'
 import { handleUserProfileUpdated } from './userProfileEvents'
 import { useUserProfileStore } from '../stores/userProfileStore'
 import { showDesktopNotification } from './desktopService'
+import { notificationService } from '../notifications'
 
 let socket = null
 let _disconnectTime = 0   // timestamp when socket last disconnected
@@ -111,6 +112,7 @@ const SOCKET_EVENTS = {
   ANNOUNCEMENT_UPDATED: 'announcement:updated',
 
   // Tasks
+  TASK_CREATED: 'task:created',
   TASK_DELETED: 'task:deleted',
   TASK_UPDATED: 'task:updated',
 
@@ -362,31 +364,7 @@ export function connectSocket() {
     useChannelStore.getState().handleNewMessage(message)
 
     // ── Desktop Notifications ──────────────────────────────────────────────
-    if (currentUserId && authorId !== currentUserId) {
-      const activeChannelId = useChannelStore.getState().activeChannelId
-      const isFocused = activeChannelId === channelId && document.visibilityState === 'visible'
-
-      const store = useNotificationStore.getState()
-      const channelPrefs = channelId ? store.preferences?.channels?.[channelId] : null
-      const isMuted = channelPrefs?.muted || channelPrefs?.paused
-
-      const prefs = useAuthStore.getState().user?.chatPreferences
-      const desktopEnabled = prefs?.desktopNotifications !== false
-
-      if (!isFocused && !isMuted && desktopEnabled) {
-        let bodyText = message.content || 'Sent an attachment'
-        bodyText = bodyText.replace(/<[^>]*>?/gm, '') // Strip HTML tags
-        
-        const channel = useChannelStore.getState().channels?.find(c => c._id === channelId)
-        const authorName = message.authorId?.name || message.author?.name || 'New Message'
-        const title = channel && channel.type !== 'dm' ? `#${channel.name}` : authorName
-
-        showDesktopNotification(title, {
-          body: channel && channel.type !== 'dm' ? `${authorName}: ${bodyText}` : bodyText,
-          data: { channelId }
-        })
-      }
-    }
+    notificationService.processEvent(SOCKET_EVENTS.MESSAGE_CREATE, message)
   })
 
   // ─── Thread Reply Events ──────────────────────────────────────────────
@@ -409,6 +387,7 @@ export function connectSocket() {
         useChatStore.getState().incrementReplyCount(resolvedRootId, message.channelId)
       }
     }
+    notificationService.processEvent(SOCKET_EVENTS.THREAD_REPLY, { message, rootMessageId })
   })
 
   // Thread stats update — carries populated participant data for replier avatars
@@ -751,34 +730,10 @@ export function connectSocket() {
   // ─── Notification Events ────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
-
-    // Suppress notification if user is actively viewing the channel, EXCEPT for critical system notifications
-    const activeChannelId = useChannelStore.getState().activeChannelId
-    const notifChannelId = notification.channelId?._id || notification.channelId || notification.conversationId
-    const isCriticalNotification = ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) || notification.priority === 'high'
-
-    // Drop notification if channel/user is muted
-    const store = useNotificationStore.getState();
-    const channelPrefs = store.preferences?.channels?.[notifChannelId] || store.preferences?.channels?.[String(notifChannelId)];
-    const isMuted = notifChannelId && (channelPrefs?.muted || channelPrefs?.paused);
-    if (isMuted && !isCriticalNotification) {
-      return // Suppress notification completely
+    const processed = notificationService.processEvent(SOCKET_EVENTS.NOTIFICATION, notification)
+    if (processed) {
+      useChatStore.getState().addNotification(notification)
     }
-    
-    if (
-      !isCriticalNotification &&
-      notifChannelId &&
-      activeChannelId &&
-      String(notifChannelId) === String(activeChannelId) &&
-      document.hasFocus()
-    ) {
-      return
-    }
-    
-    // Persist to notification store
-    useNotificationStore.getState().addNotification(notification)
-    // Also keep legacy in-memory notification for toast/badge
-    useChatStore.getState().addNotification(notification)
   })
 
   // ─── Multi-Device Notification Sync ──────────────────────────────────
@@ -888,12 +843,22 @@ export function connectSocket() {
   })
 
   // ─── Task Events ─────────────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.TASK_DELETED, ({ taskId, cardId, channelId, workspaceId }) => {
+  socket.on(SOCKET_EVENTS.TASK_CREATED, (payload) => {
+    notificationService.processEvent(SOCKET_EVENTS.TASK_CREATED, payload)
+  })
+
+  socket.on(SOCKET_EVENTS.TASK_UPDATED, (payload) => {
+    notificationService.processEvent(SOCKET_EVENTS.TASK_UPDATED, payload)
+  })
+
+  socket.on(SOCKET_EVENTS.TASK_DELETED, (payload) => {
+    const { taskId, cardId, channelId, workspaceId } = payload || {}
     const id = taskId || cardId
     if (!id) return
     const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
     if (workspaceId && workspaceId !== activeWsId) return
     useChatStore.getState().handleTaskDeleted?.(id, channelId)
+    notificationService.processEvent(SOCKET_EVENTS.TASK_DELETED, payload)
     logger.log('[Socket] Task deleted:', id)
   })
 

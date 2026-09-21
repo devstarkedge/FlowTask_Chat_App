@@ -33,6 +33,7 @@ import favoritesRoutes from './modules/favorites/favorites.routes.js';
 import canvasRoutes from './modules/canvas/canvas.routes.js';
 import pushRoutes from './modules/push/push.routes.js';
 import gifsRoutes from './modules/gifs/gifs.routes.js';
+import searchRoutes from './modules/search/search.routes.js';
 import { registerAllEventHandlers } from './modules/webhooks/registerHandlers.js';
 import eventBus from './services/eventBus.js';
 import projectChannelSyncService from './modules/flowtask/projectChannelSync.service.js';
@@ -246,6 +247,7 @@ app.use('/api/chat/favorites', favoritesRoutes);
 app.use('/api/chat/canvas', canvasRoutes);
 app.use('/api/chat/push', pushRoutes);
 app.use('/api/chat/gifs', gifsRoutes);
+app.use('/api/chat/search', searchRoutes);
 app.use('/api/chat', readReceiptRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────

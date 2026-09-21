@@ -823,21 +823,27 @@ const MessageItem = memo(
       }
 
       // GIF Message
-      if (message.contentType === 'gif' && message.gifMeta) {
+      const isGifMessage = message.contentType === 'gif' || Boolean(message.gifMeta) || Boolean(message.gifUrl);
+      if (isGifMessage) {
         const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
         const maxGifWidth = Math.min(350, Math.floor(viewportWidth * 0.45));
         const maxGifHeight = 320;
 
+        const width = message.gifMeta?.width || 350;
+        const height = message.gifMeta?.height || 260;
+
         const { width: displayW, height: displayH } = calculateResponsiveMediaDimensions(
-          message.gifMeta.width,
-          message.gifMeta.height,
+          width,
+          height,
           maxGifWidth,
           maxGifHeight
         );
 
+        const gifSrc = message.gifUrl || message.gifMeta?.gifUrl || message.gifMeta?.url || message.gifMeta?.previewUrl || (typeof message.content === 'string' && message.content.startsWith('http') ? message.content : null);
+
         return (
           <div className="message-content">
-            {message.content ? (
+            {message.content && message.contentType !== 'gif' && !message.content.startsWith('http') ? (
               <div
                 className="rich-message-content text-[14px] leading-relaxed break-words mb-2"
                 style={{ color: "inherit" }}
@@ -846,18 +852,29 @@ const MessageItem = memo(
                 }}
               />
             ) : null}
-            <img 
-              src={message.gifUrl || message.gifMeta.gifUrl || message.gifMeta.previewUrl} 
-              alt={message.gifMeta.title || 'GIF'} 
-              style={{
-                borderRadius: '8px',
-                width: displayW,
-                height: displayH,
-                maxWidth: '100%',
-                objectFit: 'contain'
-              }}
-              loading="lazy"
-            />
+            {gifSrc ? (
+              <img 
+                src={gifSrc} 
+                alt={message.gifMeta?.title || 'GIF'} 
+                style={{
+                  borderRadius: '8px',
+                  width: displayW ? `${displayW}px` : 'auto',
+                  height: displayH ? `${displayH}px` : 'auto',
+                  maxWidth: '100%',
+                  maxHeight: '320px',
+                  minWidth: '120px',
+                  minHeight: '100px',
+                  objectFit: 'contain',
+                  background: 'var(--bg-tertiary, rgba(255,255,255,0.05))'
+                }}
+                loading="lazy"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="text-xs italic" style={{ color: 'var(--text-muted)' }}>GIF unavailable</div>
+            )}
           </div>
         );
       }

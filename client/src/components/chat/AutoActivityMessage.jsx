@@ -29,6 +29,8 @@ const EVENT_CONFIG = {
   ESTIMATED_TIME_UPDATED:{ label: 'updated estimate',          accent: 'var(--accent-primary)' },
   ESTIMATED_TIME_DELETED:{ label: 'removed estimate',          accent: 'var(--accent-red)' },
   ANNOUNCEMENT_CREATED:  { label: 'posted an announcement',    accent: 'var(--accent-primary)' },
+  ANNOUNCEMENT_UPDATED:  { label: 'updated announcement',      accent: 'var(--accent-primary)' },
+  ANNOUNCEMENT_DELETED:  { label: 'deleted announcement',      accent: 'var(--accent-red)' },
   SUBTASK_CREATED:       { label: 'added subtask',             accent: 'var(--accent-primary)' },
   SUBTASK_UPDATED:       { label: 'updated subtask',           accent: 'var(--accent-primary)' },
   SUBTASK_COMPLETED:     { label: 'completed subtask',         accent: 'var(--accent-green, #22c55e)' },
@@ -211,7 +213,7 @@ export default function AutoActivityMessage({ message }) {
     || eventType.startsWith('LOGGED_TIME_')
     || eventType.startsWith('ESTIMATED_TIME_')
   const actionLabel = isTimeEntry ? getTimeEntryActionLabel(eventType, meta) : config.label
-  const isAnnouncement = eventType === 'ANNOUNCEMENT_CREATED'
+  const isAnnouncement = eventType.startsWith('ANNOUNCEMENT_')
   const isTaskUpdate = eventType === 'TASK_UPDATED'
   const isStatusChange = eventType === 'TASK_STATUS_CHANGED'
   const isDueDateChange = eventType === 'TASK_DUE_DATE_CHANGED'
@@ -219,6 +221,7 @@ export default function AutoActivityMessage({ message }) {
   const isSubtask = eventType.startsWith('SUBTASK_')
   const isNano = eventType.startsWith('NANO_')
   const isAttachment = eventType === 'ATTACHMENT_ADDED'
+  const isDeletedEntity = meta.isTaskDeleted || meta.isAnnouncementDeleted || message.isDeleted || eventType === 'TASK_DELETED' || eventType === 'ANNOUNCEMENT_DELETED' || eventType === 'SUBTASK_DELETED' || eventType === 'NANO_DELETED';
 
   // For messages without activityMeta (legacy), render text-only fallback
   if (!meta.eventType) {
@@ -239,9 +242,9 @@ export default function AutoActivityMessage({ message }) {
   }
 
   return (
-    <div className="auto-activity-card" style={{ borderLeftColor: config.accent }}>
+    <div className="auto-activity-card" style={{ borderLeftColor: isDeletedEntity ? 'var(--danger-color, #ef4444)' : config.accent }}>
       {/* Hover CTA */}
-      {redirect && eventType !== 'TASK_DELETED' && !meta.isTaskDeleted && !message.isDeleted && (
+      {redirect && !isDeletedEntity && (
         <div className="activity-cta">
           <a href={redirect.url} target="_blank" rel="noopener noreferrer" className="activity-cta-btn" title="Open in FlowTask">
             {redirect.label}
@@ -250,13 +253,12 @@ export default function AutoActivityMessage({ message }) {
         </div>
       )}
 
-      <div style={{ paddingRight: redirect ? 100 : 0 }}>
+      <div style={{ paddingRight: (redirect && !isDeletedEntity) ? 100 : 0 }}>
         {/* Actor + Action */}
         <div style={{ lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {(meta.isTaskDeleted || message.isDeleted) ? (
+          {isDeletedEntity ? (
             <span className="activity-action" style={{ color: 'var(--danger-color, #ef4444)', fontWeight: 600 }}>
-              This card is deleted by @{meta.actorName || 'someone'}    
-              
+              {isAnnouncement ? 'This announcement was deleted' : 'This card was deleted'}{meta.actorName ? ` by @${meta.actorName}` : ''}
             </span>
           ) : (
             <>

@@ -219,6 +219,7 @@ export default function AutoActivityMessage({ message }) {
   const isSubtask = eventType.startsWith('SUBTASK_')
   const isNano = eventType.startsWith('NANO_')
   const isAttachment = eventType === 'ATTACHMENT_ADDED'
+  const isDeletedEntity = meta.isTaskDeleted || meta.isAnnouncementDeleted || message.isDeleted || eventType === 'TASK_DELETED' || eventType === 'ANNOUNCEMENT_DELETED' || eventType === 'SUBTASK_DELETED' || eventType === 'NANO_DELETED'
 
   // For messages without activityMeta (legacy), render text-only fallback
   if (!meta.eventType) {
@@ -239,9 +240,9 @@ export default function AutoActivityMessage({ message }) {
   }
 
   return (
-    <div className="auto-activity-card" style={{ borderLeftColor: config.accent }}>
+    <div className="auto-activity-card" style={{ borderLeftColor: isDeletedEntity ? 'var(--danger-color, #ef4444)' : config.accent }}>
       {/* Hover CTA */}
-      {redirect && eventType !== 'TASK_DELETED' && !meta.isTaskDeleted && !message.isDeleted && (
+      {redirect && !isDeletedEntity && (
         <div className="activity-cta">
           <a href={redirect.url} target="_blank" rel="noopener noreferrer" className="activity-cta-btn" title="Open in FlowTask">
             {redirect.label}
@@ -250,12 +251,12 @@ export default function AutoActivityMessage({ message }) {
         </div>
       )}
 
-      <div style={{ paddingRight: redirect ? 100 : 0 }}>
+      <div style={{ paddingRight: (redirect && !isDeletedEntity) ? 100 : 0 }}>
         {/* Actor + Action */}
         <div style={{ lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {(meta.isTaskDeleted || message.isDeleted) ? (
+          {isDeletedEntity ? (
             <span className="activity-action" style={{ color: 'var(--danger-color, #ef4444)', fontWeight: 600 }}>
-              This card is deleted by @{meta.actorName || 'someone'}
+              {isAnnouncement ? 'This announcement is deleted' : 'This card is deleted'}{meta.actorName ? ` by @${meta.actorName}` : ''}
             </span>
           ) : (
             <>
@@ -275,240 +276,252 @@ export default function AutoActivityMessage({ message }) {
           )}
         </div>
 
-        {/* Task title (for task events) */}
-        {!isAnnouncement && !isSubtask && !isNano && meta.taskTitle && (
-          <div className="activity-detail" style={{ marginTop: 3 }}>
-            <span className="activity-detail-label">Task:</span>
-            <span className="activity-target">{meta.taskTitle}</span>
-          </div>
-        )}
-
-        {/* ─── TASK_UPDATED: Field-level diffs ─── */}
-        {isTaskUpdate && meta.changedFields && (
-          <div className="activity-changes" style={{ marginTop: 4 }}>
-            {Object.entries(meta.changedFields).map(([field, diff]) => {
-              if (field === 'status') {
-                return (
-                  <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                    <span className="activity-detail-label">{FIELD_LABELS[field]}:</span>
-                    <StatusPill status={diff.old} />
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>→</span>
-                    <StatusPill status={diff.new} />
-                  </div>
-                )
-              }
-              if (field === 'description') {
-                return (
-                  <div key={field} className="activity-detail" style={{ marginTop: 3 }}>
-                    <span className="activity-detail-label">Description:</span>
-                    <span className="activity-detail-value">content updated</span>
-                  </div>
-                )
-              }
-              if (field === 'labels') {
-                return (
-                  <div key={field} className="activity-detail" style={{ marginTop: 3 }}>
-                    <span className="activity-detail-label">Labels:</span>
-                    <span className="activity-detail-value">updated</span>
-                  </div>
-                )
-              }
-              return (
-                <div key={field} className="activity-detail" style={{ marginTop: 3 }}>
-                  <span className="activity-detail-label">{FIELD_LABELS[field] || field}:</span>
-                  <span className="activity-detail-value">{diff.old || '—'}</span>
-                  <span style={{ color: 'var(--text-muted)', margin: '0 4px', fontSize: 12 }}>→</span>
-                  <span className="activity-detail-value" style={{ fontWeight: 600 }}>{diff.new || '—'}</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Status change pills (for dedicated TASK_STATUS_CHANGED event) */}
-        {isStatusChange && meta.oldValue && meta.newValue && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
-            <StatusPill status={meta.oldValue} />
-            <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>→</span>
-            <StatusPill status={meta.newValue} />
-          </div>
-        )}
-
-        {/* Due date change */}
-        {isDueDateChange && (meta.oldValue || meta.newValue) && (
-          <div className="activity-detail" style={{ marginTop: 5 }}>
-            <span className="activity-detail-label">From:</span>
-            <span className="activity-detail-value">{meta.oldValue || 'none'}</span>
-            <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>→</span>
-            <span className="activity-detail-label">To:</span>
-            <span className="activity-detail-value">{meta.newValue || 'removed'}</span>
-          </div>
-        )}
-
-        {/* Assignment target */}
-        {isAssignment && meta.newValue && (
-          <div className="activity-detail" style={{ marginTop: 3 }}>
-            <span className="activity-detail-label">Assigned to:</span>
-            <span className="activity-detail-value">{meta.newValue}</span>
-          </div>
-        )}
-
-        {/* Time entry details */}
-        {isTimeEntry && (
+        {isDeletedEntity ? (
           <>
-            {(meta.oldValue || meta.newValue) && (
+            {(meta.taskTitle || meta.parentTaskTitle) && (
               <div className="activity-detail" style={{ marginTop: 3 }}>
-                <span className="activity-detail-label">{getTimeEntryValueLabel(meta)}:</span>
-                {meta.oldValue && meta.newValue ? (
-                  <>
-                    <span className="activity-detail-value">{meta.oldValue}</span>
-                    <span style={{ color: 'var(--text-muted)', margin: '0 4px', fontSize: 12 }}>→</span>
-                    <span className="activity-detail-value" style={{ fontWeight: 600 }}>{meta.newValue}</span>
-                  </>
-                ) : (
-                  <span className="activity-detail-value">{meta.newValue || meta.oldValue}</span>
-                )}
+                <span className="activity-detail-label">Task:</span>
+                <span className="activity-target" style={{ fontWeight: 600 }}>{meta.taskTitle || meta.parentTaskTitle}</span>
               </div>
             )}
-
-            {meta.subtaskTitle && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">Subtask:</span>
-                <span className="activity-detail-value">{meta.subtaskTitle}</span>
-              </div>
-            )}
-
-            {meta.nanoTitle && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">Item:</span>
-                <span className="activity-detail-value">{meta.nanoTitle}</span>
-              </div>
-            )}
-
-            {meta.entryNote && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">{getTimeEntryNoteLabel(meta)}:</span>
-                <span className="activity-detail-value">{meta.entryNote}</span>
-              </div>
-            )}
-
-            {meta.totalMinutes != null && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">{getTimeEntryTotalLabel(meta)}:</span>
-                <span className="activity-detail-value" style={{ fontWeight: 600 }}>{formatMinutes(meta.totalMinutes)}</span>
-              </div>
-            )}
-
-            {/* {meta.projectName && (
+            {meta.projectName && (
               <div className="activity-detail" style={{ marginTop: 2 }}>
                 <span className="activity-detail-label">Project:</span>
                 <span className="activity-detail-value">{meta.projectName}</span>
               </div>
-            )} */}
-          </>
-        )}
-
-        {/* ─── Subtask events ─── */}
-        {isSubtask && (
-          <>
-            {meta.parentTaskTitle && (
-              <div className="activity-detail" style={{ marginTop: 3 }}>
-                <span className="activity-detail-label">Task:</span>
-                <span className="activity-target">{meta.parentTaskTitle}</span>
-              </div>
-            )}
-            {meta.subtaskTitle && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">Subtask:</span>
-                <span className="activity-detail-value">{meta.subtaskTitle}</span>
-              </div>
             )}
           </>
-        )}
-
-        {/* ─── Nano subtask events ─── */}
-        {isNano && (
+        ) : (
           <>
-            {meta.parentTaskTitle && (
-              <div className="activity-detail" style={{ marginTop: 3 }}>
-                <span className="activity-detail-label">Task:</span>
-                <span className="activity-target">{meta.parentTaskTitle}</span>
-              </div>
-            )}
-            {meta.subtaskTitle && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">Subtask:</span>
-                <span className="activity-detail-value">{meta.subtaskTitle}</span>
-              </div>
-            )}
-            {meta.nanoTitle && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">Item:</span>
-                <span className="activity-detail-value">{meta.nanoTitle}</span>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ─── Attachment events ─── */}
-        {isAttachment && meta.fileName && (
-          <>
-            {meta.taskTitle && (
+            {/* Task title (for task events) */}
+            {!isAnnouncement && !isSubtask && !isNano && meta.taskTitle && (
               <div className="activity-detail" style={{ marginTop: 3 }}>
                 <span className="activity-detail-label">Task:</span>
                 <span className="activity-target">{meta.taskTitle}</span>
               </div>
             )}
-            <div className="activity-detail" style={{ marginTop: 2 }}>
-              <span className="activity-detail-label">File:</span>
-              <span className="activity-detail-value">{meta.fileName}</span>
-            </div>
-          </>
-        )}
 
-        {/* ─── Announcement events ─── */}
-        {isAnnouncement && (
-          <>
-            {meta.announcementTitle && (
+            {/* ─── TASK_UPDATED: Field-level diffs ─── */}
+            {isTaskUpdate && meta.changedFields && (
+              <div className="activity-changes" style={{ marginTop: 4 }}>
+                {Object.entries(meta.changedFields).map(([field, diff]) => {
+                  if (field === 'status') {
+                    return (
+                      <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <span className="activity-detail-label">{FIELD_LABELS[field]}:</span>
+                        <StatusPill status={diff.old} />
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>→</span>
+                        <StatusPill status={diff.new} />
+                      </div>
+                    )
+                  }
+                  if (field === 'description') {
+                    return (
+                      <div key={field} className="activity-detail" style={{ marginTop: 3 }}>
+                        <span className="activity-detail-label">Description:</span>
+                        <span className="activity-detail-value">content updated</span>
+                      </div>
+                    )
+                  }
+                  if (field === 'labels') {
+                    return (
+                      <div key={field} className="activity-detail" style={{ marginTop: 3 }}>
+                        <span className="activity-detail-label">Labels:</span>
+                        <span className="activity-detail-value">updated</span>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div key={field} className="activity-detail" style={{ marginTop: 3 }}>
+                      <span className="activity-detail-label">{FIELD_LABELS[field] || field}:</span>
+                      <span className="activity-detail-value">{diff.old || '—'}</span>
+                      <span style={{ color: 'var(--text-muted)', margin: '0 4px', fontSize: 12 }}>→</span>
+                      <span className="activity-detail-value" style={{ fontWeight: 600 }}>{diff.new || '—'}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Status change pills (for dedicated TASK_STATUS_CHANGED event) */}
+            {isStatusChange && meta.oldValue && meta.newValue && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
+                <StatusPill status={meta.oldValue} />
+                <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }}>→</span>
+                <StatusPill status={meta.newValue} />
+              </div>
+            )}
+
+            {/* Due date change */}
+            {isDueDateChange && (meta.oldValue || meta.newValue) && (
+              <div className="activity-detail" style={{ marginTop: 5 }}>
+                <span className="activity-detail-label">From:</span>
+                <span className="activity-detail-value">{meta.oldValue || 'none'}</span>
+                <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>→</span>
+                <span className="activity-detail-label">To:</span>
+                <span className="activity-detail-value">{meta.newValue || 'removed'}</span>
+              </div>
+            )}
+
+            {/* Assignment target */}
+            {isAssignment && meta.newValue && (
               <div className="activity-detail" style={{ marginTop: 3 }}>
-                <span className="activity-detail-label">Title:</span>
-                <span className="activity-target">{meta.announcementTitle}</span>
+                <span className="activity-detail-label">Assigned to:</span>
+                <span className="activity-detail-value">{meta.newValue}</span>
               </div>
             )}
-            {meta.announcementDescription && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-value" style={{ fontStyle: 'italic' }}>{meta.announcementDescription}</span>
+
+            {/* Time entry details */}
+            {isTimeEntry && (
+              <>
+                {(meta.oldValue || meta.newValue) && (
+                  <div className="activity-detail" style={{ marginTop: 3 }}>
+                    <span className="activity-detail-label">{getTimeEntryValueLabel(meta)}:</span>
+                    {meta.oldValue && meta.newValue ? (
+                      <>
+                        <span className="activity-detail-value">{meta.oldValue}</span>
+                        <span style={{ color: 'var(--text-muted)', margin: '0 4px', fontSize: 12 }}>→</span>
+                        <span className="activity-detail-value" style={{ fontWeight: 600 }}>{meta.newValue}</span>
+                      </>
+                    ) : (
+                      <span className="activity-detail-value">{meta.newValue || meta.oldValue}</span>
+                    )}
+                  </div>
+                )}
+
+                {meta.subtaskTitle && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">Subtask:</span>
+                    <span className="activity-detail-value">{meta.subtaskTitle}</span>
+                  </div>
+                )}
+
+                {meta.nanoTitle && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">Item:</span>
+                    <span className="activity-detail-value">{meta.nanoTitle}</span>
+                  </div>
+                )}
+
+                {meta.entryNote && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">{getTimeEntryNoteLabel(meta)}:</span>
+                    <span className="activity-detail-value">{meta.entryNote}</span>
+                  </div>
+                )}
+
+                {meta.totalMinutes != null && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">{getTimeEntryTotalLabel(meta)}:</span>
+                    <span className="activity-detail-value" style={{ fontWeight: 600 }}>{formatMinutes(meta.totalMinutes)}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ─── Subtask events ─── */}
+            {isSubtask && (
+              <>
+                {meta.parentTaskTitle && (
+                  <div className="activity-detail" style={{ marginTop: 3 }}>
+                    <span className="activity-detail-label">Task:</span>
+                    <span className="activity-target">{meta.parentTaskTitle}</span>
+                  </div>
+                )}
+                {meta.subtaskTitle && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">Subtask:</span>
+                    <span className="activity-detail-value">{meta.subtaskTitle}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ─── Nano subtask events ─── */}
+            {isNano && (
+              <>
+                {meta.parentTaskTitle && (
+                  <div className="activity-detail" style={{ marginTop: 3 }}>
+                    <span className="activity-detail-label">Task:</span>
+                    <span className="activity-target">{meta.parentTaskTitle}</span>
+                  </div>
+                )}
+                {meta.subtaskTitle && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">Subtask:</span>
+                    <span className="activity-detail-value">{meta.subtaskTitle}</span>
+                  </div>
+                )}
+                {meta.nanoTitle && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">Item:</span>
+                    <span className="activity-detail-value">{meta.nanoTitle}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ─── Attachment events ─── */}
+            {isAttachment && meta.fileName && (
+              <>
+                {meta.taskTitle && (
+                  <div className="activity-detail" style={{ marginTop: 3 }}>
+                    <span className="activity-detail-label">Task:</span>
+                    <span className="activity-target">{meta.taskTitle}</span>
+                  </div>
+                )}
+                <div className="activity-detail" style={{ marginTop: 2 }}>
+                  <span className="activity-detail-label">File:</span>
+                  <span className="activity-detail-value">{meta.fileName}</span>
+                </div>
+              </>
+            )}
+
+            {/* ─── Announcement events ─── */}
+            {isAnnouncement && (
+              <>
+                {meta.announcementTitle && (
+                  <div className="activity-detail" style={{ marginTop: 3 }}>
+                    <span className="activity-detail-label">Title:</span>
+                    <span className="activity-target">{meta.announcementTitle}</span>
+                  </div>
+                )}
+                {meta.announcementDescription && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-value" style={{ fontStyle: 'italic' }}>{meta.announcementDescription}</span>
+                  </div>
+                )}
+                {meta.category && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">Category:</span>
+                    <span className="activity-detail-value">{meta.category}</span>
+                  </div>
+                )}
+                {meta.priority && (
+                  <div className="activity-detail" style={{ marginTop: 2 }}>
+                    <span className="activity-detail-label">Priority:</span>
+                    <PriorityBadge priority={meta.priority} />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Project name (non-announcement, non-subtask/nano) */}
+            {!isAnnouncement && !isSubtask && !isNano && !isAttachment && meta.projectName && (
+              <div className="activity-detail">
+                <span className="activity-detail-label">Project:</span>
+                <span className="activity-detail-value">{meta.projectName}</span>
               </div>
             )}
-            {meta.category && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">Category:</span>
-                <span className="activity-detail-value">{meta.category}</span>
-              </div>
-            )}
-            {meta.priority && (
-              <div className="activity-detail" style={{ marginTop: 2 }}>
-                <span className="activity-detail-label">Priority:</span>
-                <PriorityBadge priority={meta.priority} />
+
+            {/* Subtask/nano/attachment — show project if available */}
+            {(isSubtask || isNano || isAttachment) && meta.projectName && (
+              <div className="activity-detail">
+                <span className="activity-detail-label">Project:</span>
+                <span className="activity-detail-value">{meta.projectName}</span>
               </div>
             )}
           </>
-        )}
-
-        {/* Project name (non-announcement, non-subtask/nano) */}
-        {!isAnnouncement && !isSubtask && !isNano && !isAttachment && meta.projectName && (
-          <div className="activity-detail">
-            <span className="activity-detail-label">Project:</span>
-            <span className="activity-detail-value">{meta.projectName}</span>
-          </div>
-        )}
-
-        {/* Subtask/nano/attachment — show project if available */}
-        {(isSubtask || isNano || isAttachment) && meta.projectName && (
-          <div className="activity-detail">
-            <span className="activity-detail-label">Project:</span>
-            <span className="activity-detail-value">{meta.projectName}</span>
-          </div>
         )}
 
         {/* Timestamp */}

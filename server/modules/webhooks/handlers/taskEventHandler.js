@@ -519,10 +519,11 @@ export function registerTaskEventHandlers() {
 
     const activityMeta = {
       eventType: 'TASK_DELETED',
+      isTaskDeleted: true,
       taskId: taskId.toString(),
       projectId: normalizedBoardId,
       departmentId: departmentId || null,
-      projectName: project?.name || null,
+      projectName: project?.name || channel?.name || null,
       taskTitle: title,
       actorName: userName,
       actorFlowTaskUserId: activityActorId(payload),

@@ -273,6 +273,26 @@ function sanitizeDocxHtml(html) {
   return wrapper.innerHTML
 }
 
+export function normalizeSvgString(svgStr) {
+  if (!svgStr || typeof svgStr !== 'string') return svgStr;
+  let normalized = svgStr;
+  normalized = normalized.replace(/<svg\b([^>]*)>/i, (match, attrs) => {
+    if (!/viewBox/i.test(attrs)) {
+      const wMatch = attrs.match(/width=["']?([\d.]+)(?:px)?["']?/i);
+      const hMatch = attrs.match(/height=["']?([\d.]+)(?:px)?["']?/i);
+      if (wMatch && hMatch) {
+        const w = parseFloat(wMatch[1]);
+        const h = parseFloat(hMatch[1]);
+        if (w > 0 && h > 0) {
+          return `<svg ${attrs} viewBox="0 0 ${w} ${h}">`;
+        }
+      }
+    }
+    return match;
+  });
+  return normalized;
+}
+
 function getSourceUrl(file) {
   return file?.secureUrl || file?.url || ''
 }
@@ -911,27 +931,39 @@ export default function FilePreviewRenderer({
           ) : svgError ? (
             <ErrorState title="Failed to load SVG" message={svgError} file={file} onDownload={onDownload} />
           ) : svgContent ? (
-            <div style={{ maxWidth: '100%', maxHeight: '100%', overflow: 'auto', transform, transition: 'transform 0.2s ease' }}>
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transform, transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
               <style>{`
+                .svg-preview-container {
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  width: 100%;
+                  height: 100%;
+                  max-width: min(85vw, 950px);
+                  max-height: min(78vh, 720px);
+                }
                 .svg-preview-container svg {
-                  max-width: 100%;
-                  max-height: 100%;
-                  width: auto;
-                  height: auto;
-                  object-fit: contain;
+                  width: 100% !important;
+                  height: 100% !important;
+                  max-width: 100% !important;
+                  max-height: 100% !important;
+                  min-width: 250px !important;
+                  min-height: 250px !important;
+                  object-fit: contain !important;
+                  filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.5));
                 }
               `}</style>
-              <div className="svg-preview-container" dangerouslySetInnerHTML={{ __html: svgContent }} />
+              <div className="svg-preview-container" dangerouslySetInnerHTML={{ __html: normalizeSvgString(svgContent) }} />
             </div>
           ) : imageBlobUrl ? (
-            <img src={imageBlobUrl} alt={fileName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transform, transition: 'transform 0.2s ease', borderRadius: 4 }} draggable={false} />
+            <img src={imageBlobUrl} alt={fileName} style={{ maxWidth: 'min(90vw, 1100px)', maxHeight: 'min(80vh, 760px)', minWidth: 220, minHeight: 220, objectFit: 'contain', transform, transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)', borderRadius: 8, boxShadow: '0 20px 60px rgba(0, 0, 0, 0.65)' }} draggable={false} />
           ) : null
         ) : imageLoading ? (
           <LoadingState label="Loading image..." />
         ) : imageError ? (
           <ErrorState title="Failed to load image" message={imageError} file={file} onDownload={onDownload} />
         ) : imageBlobUrl ? (
-          <img src={imageBlobUrl} alt={fileName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transform, transition: 'transform 0.2s ease', borderRadius: 4 }} draggable={false} />
+          <img src={imageBlobUrl} alt={fileName} style={{ maxWidth: 'min(90vw, 1100px)', maxHeight: 'min(80vh, 760px)', minWidth: 220, minHeight: 220, objectFit: 'contain', transform, transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)', borderRadius: 8, boxShadow: '0 20px 60px rgba(0, 0, 0, 0.65)' }} draggable={false} />
         ) : null
       )}
 

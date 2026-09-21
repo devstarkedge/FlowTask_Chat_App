@@ -367,9 +367,8 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
     setView(null);
     setAllCanvases([]);
 
-    // If there's a pending intent, handle it directly without loading first
-    // (intent processing runs in the effect below)
-    if (!intent) {
+    // If there's a pending intent or specific canvasId, handle it directly without loading default
+    if (!intent && !canvasId) {
       loadDefaultCanvas(channelId)
         .then(() => {
           // loadDefaultCanvas sets activeCanvas in the store if a canvas exists.
@@ -377,6 +376,9 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
           const storeCanvas = useCanvasStore.getState().activeCanvas;
           if (storeCanvas && storeCanvas.channelId === channelId) {
             setView("editor");
+            if (storeCanvas && typeof onCreated === "function") {
+              onCreated(storeCanvas);
+            }
           } else {
             setView(null); // shows EmptyState
           }
@@ -385,7 +387,7 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
       didInitRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId]);
+  }, [channelId, canvasId]);
 
   // ── Consume intent from header popup ───────────────────────────────────────
   // Runs whenever `intent` changes (and is non-null).
@@ -438,6 +440,7 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
         setView("editor");
       } catch (err) {
         console.error("[CanvasPanel] failed to load canvasId:", err);
+        setView(null);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -617,7 +620,9 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  if (isLoading) return <LoadingSkeleton />;
+  if (isLoading || (canvasId && activeCanvas?._id !== canvasId && view === null)) {
+    return <LoadingSkeleton />;
+  }
 
   // No canvas and no view choice yet → empty state
   if (!view && !activeCanvas) {

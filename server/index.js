@@ -332,6 +332,14 @@ async function startServer() {
     const { startScheduledMessageProcessor } = await import('./services/scheduledMessages.service.js');
     startScheduledMessageProcessor();
 
+    // 8c. Start Canvas Collaboration (Hocuspocus WebSocket) server
+    try {
+      const { startCanvasCollaborationServer } = await import('./modules/canvas/canvasCollaboration.server.js');
+      await startCanvasCollaborationServer();
+    } catch (collabErr) {
+      logger.error('Failed to start canvas collaboration server', { error: collabErr?.message || collabErr });
+    }
+
     // 9. Start HTTP server
     httpServer.listen(env.PORT, () => {
       logger.info(`TaskChat server running`, {
@@ -384,6 +392,15 @@ async function shutdown(signal) {
     const { stopScheduledMessageProcessor } = await import('./services/scheduledMessages.service.js');
     stopScheduledMessageProcessor();
     logger.info('Scheduled message processor stopped');
+  } catch {
+    // May not be initialized
+  }
+
+  // 3d. Stop Canvas Collaboration server
+  try {
+    const { stopCanvasCollaborationServer } = await import('./modules/canvas/canvasCollaboration.server.js');
+    await stopCanvasCollaborationServer();
+    logger.info('Canvas collaboration server stopped');
   } catch {
     // May not be initialized
   }

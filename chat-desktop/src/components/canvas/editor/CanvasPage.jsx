@@ -223,6 +223,13 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
     createComment(firstBlockId, content);
   }, [blocks, createComment]);
 
+  const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
+
+  // Reset initial loaded flag when canvas changes
+  useEffect(() => {
+    setHasInitialLoaded(false);
+  }, [canvas?._id]);
+
   // ── Collaboration timeout ──────────────────────────────────────────────
   useEffect(() => {
     setCollabTimedOut(false);
@@ -235,12 +242,37 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
     if (status === "connected" || status === "synced") setCollabTimedOut(false);
   }, [status]);
 
+  useEffect(() => {
+    if (
+      status === "connected" ||
+      status === "synced" ||
+      status === "disabled" ||
+      status === "auth-failed" ||
+      status === "disconnected" ||
+      status === "closed" ||
+      collabTimedOut
+    ) {
+      setHasInitialLoaded(true);
+    }
+  }, [status, collabTimedOut]);
+
   const collaborationLoading = useMemo(() => {
-    if (status === "connecting") return true;
+    if (hasInitialLoaded) return false;
+    if (collabTimedOut) return false;
     if (!provider) return false;
-    if (status === "connected" || status === "synced" || status === "disabled" || status === "auth-failed") return false;
-    return !collabTimedOut;
-  }, [provider, status, collabTimedOut]);
+    if (
+      status === "connected" ||
+      status === "synced" ||
+      status === "disabled" ||
+      status === "auth-failed" ||
+      status === "disconnected" ||
+      status === "closed"
+    ) {
+      return false;
+    }
+    if (status === "connecting") return true;
+    return false;
+  }, [provider, status, collabTimedOut, hasInitialLoaded]);
 
   // ── Loading state ──────────────────────────────────────────────────────
   if (!editor || collaborationLoading) {

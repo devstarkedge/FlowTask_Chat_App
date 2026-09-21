@@ -7,7 +7,9 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Minus,
   RotateCw,
+  Square,
   X,
   ZoomIn,
   ZoomOut,
@@ -18,6 +20,7 @@ import FilePreviewRenderer, {
   getFileDisplayName,
   getFilePreviewInfo,
 } from './FilePreviewRenderer'
+import './FilePreviewModal.css'
 
 function formatFileSize(bytes) {
   if (!bytes) return ''
@@ -26,15 +29,23 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function ToolbarBtn({ icon: Icon, onClick, title }) {
+function ToolbarBtn({ icon: Icon, onClick, title, className = '' }) {
+  const handleClick = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onClick?.(event)
+  }
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={handleClick}
       title={title}
-      className="file-preview-toolbar-btn"
+      aria-label={title}
+      className={`file-preview-toolbar-btn ${className}`}
       style={{
-        color: 'var(--preview-icon-color)',
+        color: 'var(--preview-icon-color, #ffffff)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -54,7 +65,45 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const [copyableText, setCopyableText] = useState(null)
   const [canCopyText, setCanCopyText] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(false)
   const containerRef = useRef(null)
+
+  const isDesktop = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.electronAPI !== undefined || navigator.userAgent.toLowerCase().includes('electron');
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.isMaximized) {
+      window.electronAPI.isMaximized().then((max) => setIsMaximized(Boolean(max)));
+    }
+    if (typeof window !== 'undefined' && window.electronAPI?.onMaximizedChange) {
+      const unsub = window.electronAPI.onMaximizedChange((max) => {
+        setIsMaximized(Boolean(max));
+      });
+      return () => {
+        if (typeof unsub === 'function') unsub();
+      };
+    }
+  }, []);
+
+  const handleMinimizeWindow = useCallback(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.minimize) {
+      window.electronAPI.minimize();
+    }
+  }, []);
+
+  const handleMaximizeWindow = useCallback(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.maximize) {
+      window.electronAPI.maximize();
+    }
+  }, []);
+
+  const handleCloseWindow = useCallback(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.close) {
+      window.electronAPI.close();
+    }
+  }, []);
 
   const currentFile = files[currentIndex] || file
   const info = useMemo(() => getFilePreviewInfo(currentFile), [currentFile])
@@ -129,13 +178,20 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
 
   const content = (
     <div className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="file-preview-topbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-          <div className="file-preview-icon-bg">
+      <div
+        className={`file-preview-topbar ${isDesktop ? 'is-desktop' : ''}`}
+        style={{
+          paddingRight: isDesktop ? (window.electronAPI?.hasNativeWindowControls ? '152px' : '20px') : '20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1, paddingRight: 12 }}>
+          <div className="file-preview-icon-bg" style={{ flexShrink: 0 }}>
             <FilePreviewKindIcon file={currentFile} size={16} style={{ color: 'var(--preview-icon-color)' }} />
           </div>
-          <div style={{ minWidth: 0 }}>
-            <p className="file-preview-topbar-title">{fileName}</p>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p className="file-preview-topbar-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fileName}
+            </p>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
               {currentFile.fileSize && (
                 <span className="file-preview-topbar-meta">{formatFileSize(currentFile.fileSize)}</span>
@@ -150,26 +206,48 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {info.isImage && (
+        <div className="file-preview-header-right">
+          <div className="file-preview-toolbar">
+            {info.isImage && (
+              <>
+                <ToolbarBtn title="Zoom out" icon={ZoomOut} onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} />
+                <span style={{ color: 'var(--preview-icon-color)', fontSize: 12, minWidth: 40, textAlign: 'center' }}>
+                  {Math.round(zoom * 100)}%
+                </span>
+                <ToolbarBtn title="Zoom in" icon={ZoomIn} onClick={() => setZoom((z) => Math.min(z + 0.25, 3))} />
+                <ToolbarBtn title="Rotate" icon={RotateCw} onClick={() => setRotation((r) => r + 90)} />
+                <div className="file-preview-divider" />
+              </>
+            )}
+            {canCopyText && copyableText && (
+              <>
+                <ToolbarBtn title="Copy text" icon={copied ? Check : Copy} onClick={handleCopy} />
+                <div className="file-preview-divider" />
+              </>
+            )}
+            <ToolbarBtn title="Download" icon={Download} onClick={() => handleDownload(currentFile)} />
+            <ToolbarBtn title="Close Preview" icon={X} onClick={onClose} />
+          </div>
+
+          {isDesktop && !window.electronAPI?.hasNativeWindowControls && (
             <>
-              <ToolbarBtn title="Zoom out" icon={ZoomOut} onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} />
-              <span style={{ color: 'var(--preview-icon-color)', fontSize: 12, minWidth: 40, textAlign: 'center' }}>
-                {Math.round(zoom * 100)}%
-              </span>
-              <ToolbarBtn title="Zoom in" icon={ZoomIn} onClick={() => setZoom((z) => Math.min(z + 0.25, 3))} />
-              <ToolbarBtn title="Rotate" icon={RotateCw} onClick={() => setRotation((r) => r + 90)} />
               <div className="file-preview-divider" />
+              <div className="file-preview-window-controls">
+                <ToolbarBtn title="Minimize" icon={Minus} onClick={handleMinimizeWindow} />
+                <ToolbarBtn
+                  title={isMaximized ? "Restore" : "Maximize"}
+                  icon={isMaximized ? Copy : Square}
+                  onClick={handleMaximizeWindow}
+                />
+                <ToolbarBtn
+                  title="Close Window"
+                  icon={X}
+                  onClick={handleCloseWindow}
+                  className="file-preview-win-close"
+                />
+              </div>
             </>
           )}
-          {canCopyText && copyableText && (
-            <>
-              <ToolbarBtn title="Copy text" icon={copied ? Check : Copy} onClick={handleCopy} />
-              <div className="file-preview-divider" />
-            </>
-          )}
-          <ToolbarBtn title="Download" icon={Download} onClick={() => handleDownload(currentFile)} />
-          <ToolbarBtn title="Close" icon={X} onClick={onClose} />
         </div>
       </div>
 
@@ -201,8 +279,12 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
-          height: '100%',
-          padding: 60,
+          height: 'calc(100vh - 64px)',
+          marginTop: 64,
+          padding: '24px 48px',
+          boxSizing: 'border-box',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
         <FilePreviewRenderer

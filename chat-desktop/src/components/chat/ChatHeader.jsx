@@ -73,6 +73,7 @@ export default function ChatHeader({
     useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS;
   const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
   const activeCanvas = useCanvasStore((s) => s.activeCanvas);
+  const activeCanvasIdByChannel = useCanvasStore((s) => s.activeCanvasIdByChannel);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showTabsDropdown, setShowTabsDropdown] = useState(false);
@@ -303,6 +304,7 @@ export default function ChatHeader({
 
     // Fallback to previous single-canvas behavior
     if (tab.isCanvas && !tab.isDynamic) {
+      onTabChange?.("canvas");
       if (showCanvasPopup) onCloseCanvasMenu?.();
       else onOpenCanvasMenu?.();
     } else if (tab.id) {

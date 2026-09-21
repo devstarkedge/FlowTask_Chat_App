@@ -117,15 +117,9 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
     },
     onClose: ({ event } = {}) => {
       logger.warn('[COLLAB MANAGER] provider closed', { key, code: event?.code, reason: event?.reason });
-      if (!isDestroyed && consecutiveFailures < maxConsecutiveFailures) {
-        scheduleReconnect();
-      }
     },
     onDisconnect: ({ event } = {}) => {
       logger.warn('[COLLAB MANAGER] provider disconnected', { key, code: event?.code, reason: event?.reason });
-      if (!isDestroyed && consecutiveFailures < maxConsecutiveFailures) {
-        scheduleReconnect();
-      }
     },
     onAwarenessChange: () => logger.debug('[COLLAB MANAGER] awareness changed', { key }),
     onAuthenticationFailed: async () => {

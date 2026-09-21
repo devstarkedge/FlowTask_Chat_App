@@ -43,52 +43,35 @@ class FileUploadService {
   constructor() {
     this.uploadQueue = [];
     this.isProcessing = false;
+    this.tempLocalPaths = new Map();
   }
 
   /**
    * Recover stuck uploads from a previous crash.
-   * Finds FileAssets left in 'uploading' state and marks them as failed
-   * since local temp files won't survive a restart.
+   * Finds FileAssets left in 'uploading' state and marks them as failed.
+   * Strips any legacy localPath metadata from MongoDB documents.
    */
   async recoverStuckUploads() {
     try {
+      // Clean up legacy localPath from MongoDB documents so disk paths are never stored in DB
+      await FileAsset.updateMany(
+        { "metadata.localPath": { $exists: true } },
+        { $unset: { "metadata.localPath": 1 } }
+      ).catch(() => {});
+
       const stuckUploads = await FileAsset.find({ status: "uploading" });
       if (stuckUploads.length === 0) return;
 
-      let recoveredCount = 0;
       for (const asset of stuckUploads) {
-        // Check if local file still exists (unlikely after restart, but possible)
-        const localPath = asset.metadata?.localPath;
-        if (localPath && fs.existsSync(localPath)) {
-          // Re-queue for upload
-          this.uploadQueue.push({
-            assetId: asset._id,
-            file: {
-              path: localPath,
-              size: asset.fileSize,
-              mimetype: asset.mimeType,
-              originalname: asset.originalName,
-            },
-          });
-          recoveredCount++;
-        } else {
-          // Can't recover without the file — mark as failed
-          asset.status = "failed";
-          await asset.save();
-        }
+        asset.status = "failed";
+        await asset.save();
       }
 
       logger.info("Upload recovery complete", {
         metric: "upload_recovery",
         total: stuckUploads.length,
-        requeued: recoveredCount,
-        markedFailed: stuckUploads.length - recoveredCount,
+        markedFailed: stuckUploads.length,
       });
-
-      // Process any re-queued uploads
-      if (recoveredCount > 0) {
-        this.processQueue();
-      }
     } catch (error) {
       logger.error("Upload recovery failed", { error: error.message });
     }
@@ -120,7 +103,7 @@ class FileUploadService {
         ? "video"
         : "raw";
 
-    // Create a preliminary asset. Cloudinary details will be populated asynchronously.
+    // Create a preliminary asset. Only Cloudinary metadata will be saved in DB.
     const asset = new FileAsset({
       publicId: `pending_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       secureUrl: "/placeholder-loading", // Frontend can show a loading state
@@ -132,10 +115,13 @@ class FileUploadService {
       workspaceId,
       checksumHash,
       status: "uploading",
-      metadata: { localPath: file.path }, // persisted for crash recovery
+      metadata: {}, // No local server file paths stored in MongoDB
     });
 
     await asset.save();
+
+    // Track temp local path in memory for the Cloudinary upload lifespan
+    this.tempLocalPaths.set(asset._id.toString(), file.path);
 
     // Push to processing queue
     this.uploadQueue.push({ assetId: asset._id, file });
@@ -168,10 +154,13 @@ class FileUploadService {
       workspaceId,
       checksumHash,
       status: "uploading",
-      metadata: { localPath: file.path },
+      metadata: {}, // No local server file paths stored in MongoDB
     });
 
     await asset.save();
+
+    // Track temp local path in memory for the Cloudinary upload lifespan
+    this.tempLocalPaths.set(asset._id.toString(), file.path);
 
     // Call handleUpload directly and await it
     await this.handleUpload(asset._id, file);
@@ -461,8 +450,14 @@ class FileUploadService {
       await asset.save();
       throw error;
     } finally {
-      // Always ensure local file is deleted post-upload
-      fs.unlink(file.path, () => {});
+      // Always ensure local file is deleted post-upload and memory map is cleared
+      const tempPath = file?.path || this.tempLocalPaths.get(assetId?.toString());
+      if (tempPath) {
+        fs.unlink(tempPath, () => {});
+      }
+      if (assetId) {
+        this.tempLocalPaths.delete(assetId.toString());
+      }
     }
   }
 }

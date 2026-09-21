@@ -118,14 +118,22 @@ export function useCanvasContentSync({
     } else {
       const handleSynced = () => seedIfNeeded();
       prov.on("synced", handleSynced);
+
+      // Fallback timer: if provider doesn't sync within 2.5 seconds (e.g. offline / connection refused),
+      // seed content locally so the user is not left with a blank document.
+      const fallbackTimer = setTimeout(() => {
+        seedIfNeeded();
+      }, 2500);
+
       return () => {
+        clearTimeout(fallbackTimer);
         try {
           prov.off("synced", handleSynced);
         } catch (e) {}
       };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas?.content, editor]);
+  }, [canvas?.content, editor, ydoc]);
 
   // ─── Non-collab content sync ─────────────────────────────────────
   //

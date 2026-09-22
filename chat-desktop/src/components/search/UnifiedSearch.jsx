@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { Search, SlidersHorizontal, X, BrushCleaning } from "lucide-react";
 import { messageAPI, searchAPI } from "../../services/api";
 import { useChannelStore } from "../../stores/channelStore";
@@ -451,6 +452,7 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [panelStyle, setPanelStyle] = useState(null);
 
   // Global mode
   const [globalResults, setGlobalResults] = useState(EMPTY_RESULTS_GLOBAL);
@@ -612,6 +614,40 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
   useEffect(() => {
     onOpenChange?.(effectiveOpen);
   }, [effectiveOpen, onOpenChange]);
+
+  useEffect(() => {
+    if (!effectiveOpen || !containerRef.current) {
+      setPanelStyle(null);
+      return undefined;
+    }
+
+    const updatePosition = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const targetWidth = Math.min(Math.max(rect.width, 580), viewportWidth - 32);
+      let left = rect.left + (rect.width - targetWidth) / 2;
+      left = Math.max(16, Math.min(left, viewportWidth - targetWidth - 16));
+
+      setPanelStyle({
+        position: "fixed",
+        top: `${rect.bottom + 8}px`,
+        left: `${left}px`,
+        width: `${targetWidth}px`,
+        maxHeight: "min(75vh, 720px)",
+        zIndex: 99999,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [effectiveOpen]);
 
   useEffect(() => {
     if (!effectiveOpen) return undefined;
@@ -983,12 +1019,12 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
       >
         <div
           className="global-search__control"
-          onMouseDown={(event) => {
+          onClick={(event) => {
             if (event.target.closest("button")) return;
             if (!effectiveOpen) {
-              event.preventDefault();
               openGlobal();
             }
+            inputRef.current?.focus();
           }}
         >
           <span className="global-search__search-icon">
@@ -1061,11 +1097,12 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
           </div>
         </div>
 
-        {effectiveOpen && (
+        {effectiveOpen && panelStyle && createPortal(
           <div
             id="global-search-results"
             ref={panelRef}
             className="global-search__panel"
+            style={panelStyle}
             role="listbox"
             aria-label="Search results"
           >
@@ -1094,7 +1131,8 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
               onSelect={handleSelectResult}
               onShowResultsPage={handleShowResultsPage}
             />
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </>

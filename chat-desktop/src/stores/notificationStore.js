@@ -5,6 +5,26 @@ import logger from '../utils/logger'
 import { normalizeNotification } from '../utils/notificationFormat'
 import { useAuthStore } from './authStore'
 
+const mergeActivities = (existing = [], incoming = []) => {
+  const map = new Map()
+
+  ;[...existing, ...incoming].forEach((item) => {
+    if (!item) return
+    const id = item._id || item.id || item.activityId
+    if (id) {
+      const normalized = normalizeNotification(item) || { ...item, _id: id }
+      const existingEntry = map.get(id)
+      map.set(id, existingEntry ? { ...existingEntry, ...normalized } : normalized)
+    }
+  })
+
+  return Array.from(map.values()).sort((a, b) => {
+    const timeA = new Date(a.createdAt || a.timestamp || Date.now()).getTime()
+    const timeB = new Date(b.createdAt || b.timestamp || Date.now()).getTime()
+    return timeB - timeA
+  })
+}
+
 export const useNotificationStore = create((set, get) => ({
   notifications: [],
   unreadCount: 0,
@@ -36,16 +56,23 @@ export const useNotificationStore = create((set, get) => ({
 
       const { data } = await api.get('/notifications', { params })
       const payload = data?.data || data || {}
-      const items = payload.notifications || []
+      const rawItems = payload.notifications || []
       const hasMore = payload.hasMore ?? false
       const nextCursor = payload.nextCursor || null
 
-      set((state) => ({
-        notifications: reset ? items : [...state.notifications, ...items],
-        hasMore,
-        cursor: nextCursor,
-        isLoading: false,
-      }))
+      set((state) => {
+        logger.log('[Desktop][Activity] store before', state.notifications.map((n) => n._id))
+        logger.log('[Desktop][Activity] API response', rawItems.map((n) => n._id || n.id || n.activityId))
+        const merged = mergeActivities(state.notifications, rawItems)
+        logger.log('[Desktop][Activity] API replacing/merging state', merged.map((n) => n._id))
+        return {
+          notifications: merged,
+          hasMore,
+          cursor: nextCursor,
+          isLoading: false,
+        }
+      })
+      logger.log('[Desktop][Activity] fetch completed', { count: rawItems.length })
     } catch (error) {
       set({ isLoading: false })
       logger.error('Failed to fetch notifications:', error)
@@ -97,15 +124,21 @@ export const useNotificationStore = create((set, get) => ({
 
   // ─── Add notification from socket (real-time) ────────────────────────
   addNotification: (notification) => {
+    logger.log('[Desktop][Activity] socket received', notification)
+    const id = notification?._id || notification?.id || notification?.activityId
+    logger.log('[Desktop][Activity] activity ID', id)
+
     const normalized = normalizeNotification(notification)
     if (!normalized) return
 
     set((state) => {
-      // Deduplicate
-      if (state.notifications.some((n) => n._id === normalized._id)) return state
+      logger.log('[Desktop][Activity] store before', state.notifications.map((n) => n._id))
+      const isNew = !state.notifications.some((n) => n._id === normalized._id)
+      const merged = mergeActivities(state.notifications, [normalized])
+      logger.log('[Desktop][Activity] store after', merged.map((n) => n._id))
       return {
-        notifications: [normalized, ...state.notifications],
-        unreadCount: state.unreadCount + 1,
+        notifications: merged,
+        unreadCount: isNew ? state.unreadCount + 1 : state.unreadCount,
       }
     })
   },

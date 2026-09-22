@@ -146,7 +146,7 @@ const LAYOUT_STYLES = `
   position: relative;
   z-index: 100;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
   -webkit-app-region: drag;
 }
 
@@ -234,7 +234,8 @@ const LAYOUT_STYLES = `
   flex: 1;
   min-width: 0;
   max-width: 640px;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .cl-topbar__actions {

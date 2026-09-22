@@ -229,7 +229,15 @@
   color: var(--text-secondary);
 }
 
-/* ─── Global Search — Trigger Bar ───────────────────────────────────────── */
+.global-search,
+.global-search__control,
+.global-search__panel,
+.global-search-row,
+.global-search__backdrop,
+.channel-search-result,
+.channel-search-popup {
+  -webkit-app-region: no-drag;
+}
 
 .global-search {
   position: relative;

@@ -54,7 +54,7 @@ export default ({ mode }) => {
   }
 
   return defineConfig({
-    base: "./",
+    base: mode === "production" ? "./" : "/",
 
     plugins: [
       react(), 
@@ -63,7 +63,7 @@ export default ({ mode }) => {
         name: 'html-csp-transform',
         transformIndexHtml(html) {
           if (mode === 'production') {
-            const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: wss:;";
+            const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src 'self' blob: https:; child-src 'self' blob: https:; connect-src 'self' https: wss: http: ws:;";
             return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`);
           }
           return html;
@@ -77,11 +77,11 @@ export default ({ mode }) => {
         "y-prosemirror": path.resolve(__dirname, "node_modules/y-prosemirror"),
         "y-protocols/awareness": path.resolve(
           __dirname,
-          "node_modules/y-protocols/awareness",
+          "node_modules/y-protocols/awareness.js",
         ),
         "y-protocols/sync": path.resolve(
           __dirname,
-          "node_modules/y-protocols/sync",
+          "node_modules/y-protocols/sync.js",
         ),
         "@tiptap/y-tiptap": path.resolve(
           __dirname,
@@ -100,11 +100,11 @@ export default ({ mode }) => {
         "lib0/observable",
         "lib0/binary",
       ],
-      exclude: ["y-protocols"],
     },
 
     server: {
       port: 5174,
+      strictPort: true,
       proxy: {
         "/api/chat": {
           target: validatedBackend,

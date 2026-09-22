@@ -153,7 +153,6 @@ function GlobalRow({ item, selected, onClick }) {
   return (
     <button
       className={`global-search-row${selected ? ' is-selected' : ''}`}
-      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       role="option"
       aria-selected={selected}
@@ -234,7 +233,6 @@ export default function SearchDropdown({
             key={action.id}
             type="button"
             className={`channel-search-popup__action${activeIndex === index ? ' is-selected' : ''}`}
-            onMouseDown={(e) => e.preventDefault()}
             onClick={onShowResultsPage}
           >
             <span className="channel-search-popup__action-copy">
@@ -367,11 +365,11 @@ export default function SearchDropdown({
           <Section key={section.key} title={section.title} hint={hint}>
             {items.map((item) => {
               const rowIndex = rows.findIndex(
-                (r) => r.section === section.key && r.id === item.id,
+                (r) => r.section === section.key && getItemKey(r) === getItemKey(item),
               )
               return (
                 <GlobalRow
-                  key={`${section.key}-${item.id}`}
+                  key={`${section.key}-${item.id || getItemKey(item)}`}
                   item={{ ...item, section: section.key }}
                   selected={rowIndex === activeIndex}
                   onClick={() => onSelect({ ...item, section: section.key })}

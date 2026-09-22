@@ -1,8 +1,9 @@
 export function normalizeNotification(notification) {
   if (!notification) return null
 
-  const senderName = notification.senderName || notification.senderId?.name || 'Someone'
-  const senderAvatar = notification.senderAvatar || notification.senderId?.avatar || null
+  const id = notification._id || notification.id || notification.activityId || null
+  const senderName = notification.senderName || notification.sender?.name || notification.senderId?.name || 'Someone'
+  const senderAvatar = notification.senderAvatar || notification.sender?.avatar || notification.senderId?.avatar || null
   const conversationId = notification.conversationId || notification.channelId?._id || notification.channelId || null
   const conversationType = notification.conversationType
     || (notification.type === 'dm' ? 'dm' : 'channel')
@@ -11,6 +12,7 @@ export function normalizeNotification(notification) {
 
   return {
     ...notification,
+    _id: id || notification._id,
     senderName,
     senderAvatar,
     conversationId,

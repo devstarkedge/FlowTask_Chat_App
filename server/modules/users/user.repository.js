@@ -229,26 +229,25 @@ class UserRepository {
    * @returns {Promise<ChatUser>}
    */
   async upsertFromFlowTask(flowTaskUser, options = {}) {
-    const { _id, name, email, avatar } = flowTaskUser;
+    const rawId = flowTaskUser._id || flowTaskUser.id;
+    if (!rawId) {
+      throw new Error('upsertFromFlowTask requires a valid FlowTask user ID');
+    }
+    const flowTaskUserId = String(rawId);
+    const { name, email, avatar } = flowTaskUser;
     const markRegistered = typeof options === 'object' && options.markRegistered === true;
     const createIfMissing = typeof options === 'object' && options.createIfMissing === true;
     const normalizedEmail = email?.trim().toLowerCase();
 
     const [byFlowTaskId, byEmail] = await Promise.all([
-      ChatUser.findOne({ flowTaskUserId: _id.toString() }),
+      ChatUser.findOne({ flowTaskUserId }),
       normalizedEmail ? ChatUser.findOne({ email: normalizedEmail }) : null,
     ]);
-    if (
-      byFlowTaskId &&
-      byEmail &&
-      byFlowTaskId._id.toString() !== byEmail._id.toString()
-    ) {
-      throw new Error('FlowTask ID and verified email resolve to different ChatApp users');
-    }
 
+    // Primary identity match is by flowTaskUserId. If missing on ChatUser, safely link matching email account.
     const existing = byFlowTaskId || byEmail;
     if (!existing && !createIfMissing) return null;
-    const filter = existing ? { _id: existing._id } : { flowTaskUserId: _id.toString() };
+    const filter = existing ? { _id: existing._id } : { flowTaskUserId };
     const incomingVersion = flowTaskUser.profileUpdatedAt || flowTaskUser.updatedAt;
     const keepCurrentProfile = existing?.flowTaskProfileUpdatedAt
       && (!incomingVersion || new Date(incomingVersion) < existing.flowTaskProfileUpdatedAt);
@@ -263,7 +262,7 @@ class UserRepository {
       {
         $set: {
           authProvider: existing?.authProvider || 'flowtask',
-          flowTaskUserId: _id.toString(),
+          flowTaskUserId,
           ...(!keepCurrentProfile ? { name, email: normalizedEmail, avatar: avatar || null } : {}),
           ...(!keepCurrentProfile && incomingVersion ? { flowTaskProfileUpdatedAt: incomingVersion } : {}),
           isActive: true,

@@ -189,6 +189,7 @@ export function connectSocket() {
     }).catch((error) => logger.warn('Profile refresh on reconnect failed', { error: error.message }))
 
     logger.log('[Socket] Connected:', socket.id)
+    logger.log('[Desktop][Socket] connected', socket.id)
     useChatStore.getState().setConnectionStatus('connected')
 
     // Reconcile sidebar state against the server. Channel-room membership
@@ -231,6 +232,7 @@ export function connectSocket() {
 
   socket.on('disconnect', (reason) => {
     logger.log('[Socket] Disconnected:', reason)
+    logger.log('[Desktop][Socket] disconnected', reason)
     _disconnectTime = Date.now()
     useChatStore.getState().setConnectionStatus('disconnected')
   })
@@ -730,7 +732,16 @@ export function connectSocket() {
   // ─── Notification Events ────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
+    logger.log('[Desktop][Activity] socket received', notification)
+    logger.log('[Desktop][Activity] activity ID', notification?._id || notification?.id || notification?.activityId)
+
+    // Update Activity store (useNotificationStore) so Activity UI updates in real-time
+    useNotificationStore.getState().addNotification(notification)
+
+    // Process native desktop OS notifications / sounds
     const processed = notificationService.processEvent(SOCKET_EVENTS.NOTIFICATION, notification)
+
+    // Keep legacy in-memory store for toast/badge
     if (processed) {
       useChatStore.getState().addNotification(notification)
     }

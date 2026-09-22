@@ -66,7 +66,36 @@ class AuthService {
     // Find user with password field
     const user = await userRepository.findByEmail(email);
 
-    // If user is not found, or user uses FlowTask SSO, attempt FlowTask login proxy
+    // 1. If user has a local password stored, check local password match first
+    if (user && user.password) {
+      const isMatch = await user.comparePassword(password);
+      if (isMatch) {
+        if (!user.isActive) {
+          throw new UnauthorizedError('Account is deactivated');
+        }
+        if (user.isLocked()) {
+          throw new UnauthorizedError('Account is temporarily locked due to too many failed attempts. Please try again later.');
+        }
+        if (user.accountStatus === 'deletion_pending') {
+          await userRepository.recoverAccount(user._id);
+          logger.info('Account recovered during native login', { userId: user._id });
+        }
+        await user.resetLoginAttempts();
+        const accessToken = tokenService.issueAccessToken({ id: user._id.toString() });
+        const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
+        await userRepository.addRefreshToken(user._id, {
+          tokenHash: tokenService.hashToken(refreshToken),
+          expiresAt: tokenService.refreshTokenExpiryDate(),
+          userAgent,
+        });
+        await userRepository.pruneExpiredRefreshTokens(user._id);
+        const emailWarning = !user.emailVerified ? 'Please verify your email address.' : undefined;
+        logger.info('User logged in via password authentication', { userId: user._id, email });
+        return { chatUser: user, accessToken, refreshToken, emailWarning };
+      }
+    }
+
+    // 2. If user is not found, or has no local password / authProvider !== 'native', attempt FlowTask login proxy
     if (!user || user.authProvider !== 'native') {
       if (env.FLOWTASK_ENABLED) {
         try {
@@ -82,10 +111,17 @@ class AuthService {
           }
           logger.warn('Failed to authenticate against FlowTask API via email/password proxy', { error: error.message });
           if (!user) throw new UnauthorizedError('Invalid email or password');
+          if (user.authProvider !== 'native') {
+            throw new UnauthorizedError('User not found or invalid authentication method');
+          }
         }
       } else if (!user) {
         throw new UnauthorizedError('Invalid email or password');
       }
+    }
+
+    if (!user) {
+      throw new UnauthorizedError('Invalid email or password');
     }
 
     // Check account is active
@@ -98,56 +134,10 @@ class AuthService {
       throw new UnauthorizedError('Account is temporarily locked due to too many failed attempts. Please try again later.');
     }
 
-    // Check auth provider (Should only reach here if user.authProvider === 'native')
-    if (user.authProvider !== 'native') {
-      throw new UnauthorizedError('This account uses FlowTask SSO. Please log in via FlowTask.');
-    }
-
-    // Verify password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      await user.incrementLoginAttempts();
-      throw new UnauthorizedError('Invalid email or password');
-    }
-
-    // Check if account is in deletion_pending state and recover if necessary
-    if (user.accountStatus === 'deletion_pending') {
-      await userRepository.recoverAccount(user._id);
-      logger.info('Account recovered during native login', { userId: user._id });
-    }
-
-    // Reset login attempts on success
-    await user.resetLoginAttempts();
-
-    // Check email verification (allow login but flag it)
-    const emailWarning = !user.emailVerified
-      ? 'Please verify your email address.'
-      : undefined;
-
-    // Issue tokens (no workspaceId in JWT — workspace resolved via header)
-    const accessToken = tokenService.issueAccessToken({ id: user._id.toString() });
-    const refreshToken = tokenService.issueRefreshToken({ id: user._id.toString() });
-
-    // Store hashed refresh token
-    await userRepository.addRefreshToken(user._id, {
-      tokenHash: tokenService.hashToken(refreshToken),
-      expiresAt: tokenService.refreshTokenExpiryDate(),
-      userAgent,
-    });
-
-    // Prune expired tokens
-    await userRepository.pruneExpiredRefreshTokens(user._id);
-
-    logger.info('Native user logged in', { userId: user._id, email });
-
-    return {
-      chatUser: user,
-      accessToken,
-      refreshToken,
-      emailWarning,
-    };
+    // Incorrect password
+    await user.incrementLoginAttempts();
+    throw new UnauthorizedError('Invalid email or password');
   }
-
   // ═══════════════════════════════════════════════════════════════════════
   // FLOWTASK SSO AUTH
   // ═══════════════════════════════════════════════════════════════════════

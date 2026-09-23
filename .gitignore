@@ -1,2 +1,16 @@
 node_modules
 .amazonq
+# Electron generated builds
+chat-desktop(mac)/dist-electron/
+*.asar
+*.dmg
+*.zip
+
+# Mobile generated builds
+chat-mobile/dist_check/
+chat-mobile/dist_test2/
+
+# General build output
+dist/
+build/
+.DS_Store

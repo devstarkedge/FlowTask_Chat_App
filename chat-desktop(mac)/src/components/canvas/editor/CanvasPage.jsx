@@ -274,7 +274,7 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
   }, [provider, status, collabTimedOut, hasInitialLoaded]);
 
   // ── Loading state ──────────────────────────────────────────────────────
-  if (!editor || collaborationLoading) {
+  if (!editor) {
     return <Loader center label="Loading canvas..." />;
   }
 

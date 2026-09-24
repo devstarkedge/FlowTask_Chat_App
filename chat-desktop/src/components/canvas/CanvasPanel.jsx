@@ -355,51 +355,47 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
     },
   });
 
-  // Track whether we already ran the initial channel load so we don't double-fire
+  // Track previous channelId to only reset view when channel actually changes
+  const prevChannelIdRef = useRef(channelId);
   const didInitRef = useRef(false);
-  // Track the last intent we processed so we don't re-process on re-renders
   const lastIntentRef = useRef(null);
 
-  // ── On channelId change: reset and load ────────────────────────────────────
+  // ── On channelId change: reset and load default if needed ──────────────────
   useEffect(() => {
     if (!channelId) return;
-    didInitRef.current = false;
-    setView(null);
-    setAllCanvases([]);
 
-    // If there's a pending intent or specific canvasId, handle it directly without loading default
-    if (!intent && !canvasId) {
-      loadDefaultCanvas(channelId)
-        .then(() => {
-          // loadDefaultCanvas sets activeCanvas in the store if a canvas exists.
-          // We check the store state after the call.
-          const storeCanvas = useCanvasStore.getState().activeCanvas;
-          if (storeCanvas && storeCanvas.channelId === channelId) {
-            setView("editor");
-            if (storeCanvas && typeof onCreated === "function") {
-              onCreated(storeCanvas);
+    if (prevChannelIdRef.current !== channelId) {
+      prevChannelIdRef.current = channelId;
+      didInitRef.current = false;
+      setView(null);
+      setAllCanvases([]);
+
+      // If there's no pending intent and no specific canvasId, load default canvas
+      if (!intent && !canvasId) {
+        loadDefaultCanvas(channelId)
+          .then(() => {
+            const storeCanvas = useCanvasStore.getState().activeCanvas;
+            if (storeCanvas && storeCanvas.channelId === channelId) {
+              setView("editor");
+              if (typeof onCreated === "function") {
+                onCreated(storeCanvas);
+              }
+            } else {
+              setView(null); // shows EmptyState
             }
-          } else {
-            setView(null); // shows EmptyState
-          }
-        })
-        .catch(() => setView(null));
-      didInitRef.current = true;
+          })
+          .catch(() => setView(null));
+        didInitRef.current = true;
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, canvasId]);
+  }, [channelId, intent, canvasId, loadDefaultCanvas, onCreated]);
 
   // ── Consume intent from header popup ───────────────────────────────────────
-  // Runs whenever `intent` changes (and is non-null).
   useEffect(() => {
     if (!intent || !channelId) return;
     if (lastIntentRef.current === intent) return; // already handled
     lastIntentRef.current = intent;
 
-    // Process the intent first, then notify parent to clear it. This
-    // avoids a re-entrant parent state update (clearing the intent)
-    // from interrupting our intent handling and potentially causing
-    // nested renders that lead to update loops.
     (async () => {
       try {
         if (intent === "blank") {
@@ -410,12 +406,9 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
           await handleLoadExisting();
         }
       } finally {
-        // Always tell the parent we consumed the intent after handling
-        // it so the parent's state changes don't interfere mid-processing.
         onIntentConsumed?.();
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent, channelId]);
 
   // Reset lastIntentRef when channelId changes so the same intent works again
@@ -423,27 +416,38 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
     lastIntentRef.current = null;
   }, [channelId]);
 
-  // If parent requests a specific canvas to load (e.g. via tab click), load it.
+  // ── On canvasId prop change: load or reuse existing canvas ─────────────────
   useEffect(() => {
     if (!canvasId || !channelId) return;
-    logger.debug('[CanvasPanel] canvasId prop changed', { canvasId, channelId });
-    // If already loaded, just show editor
+
     const storeActive = useCanvasStore.getState().activeCanvas;
+    // If already loaded in store, switch view to editor immediately
     if (storeActive && storeActive._id === canvasId) {
-      setView("editor");
+      if (view !== "editor") {
+        setView("editor");
+      }
       return;
+    }
+
+    // Check if cached in canvasesByChannel for immediate rendering
+    const channelList = useCanvasStore.getState().canvasesByChannel[channelId] || [];
+    const cached = channelList.find((c) => c._id === canvasId);
+    if (cached) {
+      useCanvasStore.setState({ activeCanvas: cached });
+      setView("editor");
     }
 
     (async () => {
       try {
-        await useCanvasStore.getState().loadCanvas(canvasId);
+        await useCanvasStore.getState().loadCanvas(canvasId, { silent: Boolean(cached || (storeActive && storeActive._id === canvasId)) });
         setView("editor");
       } catch (err) {
         console.error("[CanvasPanel] failed to load canvasId:", err);
-        setView(null);
+        if (!useCanvasStore.getState().activeCanvas) {
+          setView(null);
+        }
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, channelId]);
 
   // ── Create blank canvas ────────────────────────────────────────────────────
@@ -620,7 +624,9 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  if (isLoading || (canvasId && activeCanvas?._id !== canvasId && view === null)) {
+  const isCanvasReady = (view === "editor" || Boolean(activeCanvas)) && activeCanvas && (!canvasId || activeCanvas._id === canvasId);
+
+  if (!isCanvasReady && (isLoading || (canvasId && activeCanvas?._id !== canvasId && view === null))) {
     return <LoadingSkeleton />;
   }
 

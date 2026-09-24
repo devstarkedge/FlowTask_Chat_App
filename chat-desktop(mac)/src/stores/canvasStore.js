@@ -141,11 +141,19 @@ export const useCanvasStore = create((set, get) => ({
   },
 
   // ── Load specific canvas details (REST) ──────────────────────────────────────────
-  loadCanvas: async (canvasId) => {
+  loadCanvas: async (canvasId, options = {}) => {
     if (!canvasId) return;
-    set({ isLoading: true });
+
+    const currentActive = get().activeCanvas;
+    const isAlreadyLoaded = currentActive && currentActive._id === canvasId;
+    const isSilent = Boolean(options?.silent || isAlreadyLoaded);
+
+    if (!isSilent) {
+      set({ isLoading: true });
+    }
+
     try {
-      // Clean up previous room if any
+      // Clean up previous room if switching to a different canvas
       const currentRoom = get().currentJoinedRoom;
       if (currentRoom && currentRoom !== canvasId) {
         get().leaveCanvasRoom(currentRoom);
@@ -158,8 +166,10 @@ export const useCanvasStore = create((set, get) => ({
         // Sort blocks by order
         const sortedBlocks = [...blocks].sort((a, b) => a.order - b.order);
 
-        // Reset collaboration state for the newly loaded canvas
-        useCanvasCollabStore.getState().resetCollab();
+        // Reset collaboration state ONLY when switching to a different canvas
+        if (!currentActive || currentActive._id !== canvas._id) {
+          useCanvasCollabStore.getState().resetCollab();
+        }
 
         set((state) => {
           // Sync loaded title into openTabsByChannel so tab label is always fresh
@@ -196,20 +206,25 @@ export const useCanvasStore = create((set, get) => ({
         // Ensure global listeners are attached too
         get().ensureGlobalSocketListeners?.();
       } else {
-        // Canvas not found or error — clear active state for this channel
+        // Canvas not found or error — clear active state for this channel if it was active
         set((state) => {
           const nextActiveIds = { ...state.activeCanvasIdByChannel };
           Object.keys(nextActiveIds).forEach((chId) => {
             if (nextActiveIds[chId] === canvasId) delete nextActiveIds[chId];
           });
           persistActiveIds(nextActiveIds);
-          return { activeCanvasIdByChannel: nextActiveIds };
+          return {
+            activeCanvas: state.activeCanvas && state.activeCanvas._id === canvasId ? null : state.activeCanvas,
+            activeCanvasIdByChannel: nextActiveIds,
+          };
         });
       }
     } catch (err) {
       console.error("[CanvasStore] loadCanvas error:", err);
     } finally {
-      set({ isLoading: false });
+      if (!isSilent) {
+        set({ isLoading: false });
+      }
     }
   },
 
@@ -481,7 +496,8 @@ export const useCanvasStore = create((set, get) => ({
   // ── Fetch canvases for a channel and cache locally ───────────────────────────────
   fetchChannelCanvases: async (channelId) => {
     if (!channelId) return [];
-    set({ isLoading: true });
+    // Do NOT set global isLoading: true because fetchChannelCanvases is a background
+    // list fetch / cache update that should not unmount the active canvas editor.
     try {
       const res = await canvasAPI.getAllForChannel(channelId);
       const list = res.data?.data || [];
@@ -490,40 +506,45 @@ export const useCanvasStore = create((set, get) => ({
     } catch (err) {
       console.error("[CanvasStore] fetchChannelCanvases error:", err);
       return [];
-    } finally {
-      set({ isLoading: false });
     }
   },
 
   // ── Load a default canvas for a channel (used on initial channel open) ───────────
   loadDefaultCanvas: async (channelId) => {
     if (!channelId) return;
-    set({ isLoading: true });
-    try {
-      // Prefer cached list
-      let list = get().canvasesByChannel[channelId] || [];
-      if (!list || list.length === 0) {
-        try {
-          list = await get().fetchChannelCanvases(channelId) || [];
-        } catch (e) {
-          list = [];
-        }
+
+    // If active canvas is already loaded for this channel, reuse it immediately
+    const currentActive = get().activeCanvas;
+    if (currentActive && currentActive.channelId === channelId) {
+      return;
+    }
+
+    // Prefer cached list
+    let list = get().canvasesByChannel[channelId] || [];
+    if (!list || list.length === 0) {
+      try {
+        list = await get().fetchChannelCanvases(channelId) || [];
+      } catch (e) {
+        list = [];
+      }
+    }
+
+    if (list && list.length > 0) {
+      // Use persisted activeCanvasIdByChannel to restore the correct canvas
+      const persistedId = get().activeCanvasIdByChannel[channelId];
+      const canvasExists = persistedId && list.some((c) => c._id === persistedId);
+      const preferred = canvasExists ? persistedId : list[0]._id;
+
+      // Optimistically populate activeCanvas from cached list if available
+      const cachedCanvas = list.find((c) => c._id === preferred);
+      if (cachedCanvas && !get().activeCanvas) {
+        set({ activeCanvas: cachedCanvas });
       }
 
-      if (list && list.length > 0) {
-        // Use persisted activeCanvasIdByChannel to restore the correct canvas
-        const persistedId = get().activeCanvasIdByChannel[channelId];
-        const canvasExists = persistedId && list.some((c) => c._id === persistedId);
-        const preferred = canvasExists ? persistedId : list[0]._id;
-        await get().loadCanvas(preferred);
-      } else {
-        // Nothing to load; clear any active canvas for this channel
-        set({ activeCanvas: null });
-      }
-    } catch (err) {
-      console.error("[CanvasStore] loadDefaultCanvas error:", err);
-    } finally {
-      set({ isLoading: false });
+      await get().loadCanvas(preferred, { silent: Boolean(cachedCanvas) });
+    } else {
+      // Nothing to load; clear any active canvas for this channel
+      set({ activeCanvas: null });
     }
   },
 

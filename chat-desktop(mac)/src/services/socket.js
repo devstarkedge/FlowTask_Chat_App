@@ -38,7 +38,11 @@ function getSocketUrl() {
     }
   }
 
-  return window.location.origin
+  if (typeof window !== 'undefined' && /^https?:\/\//i.test(window.location.origin) && !window.location.origin.includes('localhost')) {
+    return window.location.origin
+  }
+
+  return 'https://chat-app-api-cyyl.onrender.com'
 }
 
 function getSocketAuth() {

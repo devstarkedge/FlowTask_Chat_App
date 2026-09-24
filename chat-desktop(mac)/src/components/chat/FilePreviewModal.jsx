@@ -229,7 +229,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <ToolbarBtn title="Close Preview" icon={X} onClick={onClose} />
           </div>
 
-          {isDesktop && !window.electronAPI?.hasNativeWindowControls && (
+          {/* isDesktop && !window.electronAPI?.hasNativeWindowControls && (
             <>
               <div className="file-preview-divider" />
               <div className="file-preview-window-controls">
@@ -247,7 +247,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
                 />
               </div>
             </>
-          )}
+          )*/}
         </div>
       </div>
 

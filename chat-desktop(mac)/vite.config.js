@@ -48,9 +48,9 @@ export default ({ mode }) => {
   let validatedBackend = env.VITE_BACKEND_URL;
   if (!validatedBackend) {
     console.warn(
-      "VITE_BACKEND_URL is missing in environment variables. Falling back to http://localhost:3200",
+      "VITE_BACKEND_URL is missing in environment variables. Falling back to https://chat-app-api-cyyl.onrender.com",
     );
-    validatedBackend = "http://localhost:3200";
+    validatedBackend = "https://chat-app-api-cyyl.onrender.com";
   }
 
   return defineConfig({

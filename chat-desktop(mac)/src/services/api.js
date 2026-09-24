@@ -24,14 +24,14 @@ export function getApiOrigin() {
       return new URL(backendUrl).origin;
     } catch (e) {}
   }
-  if (typeof window !== "undefined" && /^https?:\/\//i.test(window.location.origin)) {
+  if (typeof window !== "undefined" && /^https?:\/\//i.test(window.location.origin) && !window.location.origin.includes("localhost")) {
     return window.location.origin;
   }
-  return "http://localhost:3200";
+  return "https://chat-app-api-cyyl.onrender.com";
 }
 
 export function getApiBaseUrl() {
-  const rawBase = import.meta.env.VITE_API_BASE_URL || "/api/chat";
+  const rawBase = import.meta.env.VITE_API_BASE_URL || "https://chat-app-api-cyyl.onrender.com/api/chat";
   if (/^https?:\/\//i.test(rawBase)) {
     return rawBase.replace(/\/+$/, "");
   }

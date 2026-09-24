@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
+const { createDynamicTrayImage } = require('./trayGenerator.cjs');
 const isDev = !app.isPackaged;
 const isMac = process.platform === 'darwin';
 
@@ -194,8 +195,9 @@ app.whenReady().then(() => {
 
   createWindow();
 
-  // Create System Tray
-  tray = new Tray(logoPath);
+  // Create System Tray dynamically from logoPath at runtime
+  const trayImage = createDynamicTrayImage(logoPath, isMac);
+  tray = new Tray(trayImage);
   
   const contextMenu = Menu.buildFromTemplate([
     { 

@@ -542,94 +542,87 @@ export default function NavigationSidebar({
               }}
             />
             {isWorkspaceAdmin && (
-              <>
-                <NavButton
-                  icon={Globe}
-                  label="External Connections"
-                  hasDropdown
-                  expanded={expandedSections.external}
-                  onClick={() => toggleSection("external")}
-                />
-                {expandedSections.external && externalUsers.length > 0 && (
-                  <div style={{ marginLeft: 16 }}>
-                    {externalUsers.map((extUser) => (
-                      <SidebarItem
-                        key={extUser._id}
-                        icon={
-                          <div className="relative shrink-0">
-                            <Avatar
-                              member={{
-                                name: extUser.name || extUser.email || "Unknown",
-                                avatar: extUser.avatar,
-                                onlineStatus: onlineUsers[extUser._id] || "offline",
-                              }}
-                              size={20}
-                              showStatus={false}
-                            />
-                            <span
-                              className="absolute rounded-full"
-                              style={{
-                                width: 8,
-                                height: 8,
-                                background: onlineUsers[extUser._id] === "online" ? "var(--status-online)" : "var(--status-offline, transparent)",
-                                border: "2px solid var(--sidebar-bg-inner, var(--bg-sidebar))",
-                                bottom: -2,
-                                right: -2,
-                              }}
-                            />
-                          </div>
-                        }
-                        label={
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="truncate">{extUser.name || extUser.email || "Unknown"}</span>
-                            {extUser.ownWorkspaceName && (
-                              <span
-                                className="truncate text-[10px] shrink-0"
-                                style={{
-                                  color: 'rgba(255, 255, 255, 0.75)',
-                                  background: 'rgba(255, 255, 255, 0.12)',
-                                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                                  padding: '1px 6px',
-                                  borderRadius: '4px',
-                                  fontWeight: 500
-                                }}
-                                title={`Owner of ${extUser.ownWorkspaceName}`}
-                              >
-                                {extUser.ownWorkspaceName}
-                              </span>
-                            )}
-                          </div>
-                        }
-                        meta={
-                          <span
-                            className="text-[10px]"
-                            style={{
-                              color: "rgba(255, 255, 255, 0.8)",
-                              background: "rgba(255, 255, 255, 0.15)",
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              fontWeight: 500,
+              <SidebarSection
+                title="External Connections"
+                icon={<Globe size={15} />}
+                expanded={expandedSections.external}
+                onToggle={() => toggleSection("external")}
+              >
+                {externalUsers.length > 0 ? (
+                  externalUsers.map((extUser) => (
+                    <SidebarItem
+                      key={extUser._id}
+                      icon={
+                        <div className="relative shrink-0">
+                          <Avatar
+                            member={{
+                              name: extUser.name || extUser.email || "Unknown",
+                              avatar: extUser.avatar,
+                              onlineStatus: onlineUsers[extUser._id] || "offline",
                             }}
-                          >
-                            Guest
-                          </span>
-                        }
-                        onClick={() => {
-                          useChatStore.getState().handleDirectMessage(extUser._id);
-                          onClose?.();
-                        }}
-                      />
-                    ))}
-                  </div>
+                            size={20}
+                            showStatus={false}
+                          />
+                          <span
+                            className="absolute rounded-full"
+                            style={{
+                              width: 8,
+                              height: 8,
+                              background: onlineUsers[extUser._id] === "online" ? "var(--status-online)" : "var(--status-offline, transparent)",
+                              border: "2px solid var(--sidebar-bg-inner, var(--bg-sidebar))",
+                              bottom: -2,
+                              right: -2,
+                            }}
+                          />
+                        </div>
+                      }
+                      label={
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{extUser.name || extUser.email || "Unknown"}</span>
+                          {extUser.ownWorkspaceName && (
+                            <span
+                              className="truncate text-[10px] shrink-0"
+                              style={{
+                                color: 'rgba(255, 255, 255, 0.75)',
+                                background: 'rgba(255, 255, 255, 0.12)',
+                                border: '1px solid rgba(255, 255, 255, 0.3)',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontWeight: 500
+                              }}
+                              title={`Owner of ${extUser.ownWorkspaceName}`}
+                            >
+                              {extUser.ownWorkspaceName}
+                            </span>
+                          )}
+                        </div>
+                      }
+                      meta={
+                        <span
+                          className="text-[10px]"
+                          style={{
+                            color: "rgba(255, 255, 255, 0.8)",
+                            background: "rgba(255, 255, 255, 0.15)",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Guest
+                        </span>
+                      }
+                      onClick={() => {
+                        useChatStore.getState().handleDirectMessage(extUser._id);
+                        onClose?.();
+                      }}
+                    />
+                  ))
+                ) : (
+                  <p className="sidebar-nested-empty">
+                    No external connections
+                  </p>
                 )}
-                {expandedSections.external && externalUsers.length === 0 && (
-                  <div style={{ marginLeft: 16 }}>
-                     <p className="text-xs px-4 py-2" style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}>
-                       No external connections
-                     </p>
-                  </div>
-                )}
-              </>
+              </SidebarSection>
             )}
 
             {/* ── Category Header Option ── */}
@@ -645,6 +638,7 @@ export default function NavigationSidebar({
         {!isDMMode && favoriteChannels.length > 0 && (
           <SidebarSection
             title="Starred"
+            icon={<Star size={15} />}
             count={favoriteChannels.length}
             expanded={expandedSections.starred}
             onToggle={() => toggleSection("starred")}
@@ -697,6 +691,7 @@ export default function NavigationSidebar({
           {!isDMMode && systemChannels.length > 0 && (
             <SidebarSection
               title="System"
+              icon={<Volume2 size={15} />}
               count={systemChannels.length}
               expanded={expandedSections.system}
               onToggle={() => toggleSection("system")}
@@ -739,6 +734,7 @@ export default function NavigationSidebar({
           {!isDMMode && [...publicChannels, ...projectChannels, ...deptChannels].length > 0 && (
             <SidebarSection
               title="Channels"
+              icon={<Hash size={15} />}
               count={
                 [...publicChannels, ...projectChannels, ...deptChannels].length
               }
@@ -780,6 +776,7 @@ export default function NavigationSidebar({
           {!isDMMode && privateChannels.length > 0 && (
             <SidebarSection
               title="Private Channels"
+              icon={<Lock size={15} />}
               count={privateChannels.length}
               expanded={expandedSections.privateChannels}
               onToggle={() => toggleSection("privateChannels")}
@@ -800,6 +797,7 @@ export default function NavigationSidebar({
           {/* ── Direct Messages section ── */}
           <SidebarSection
             title={isDMMode ? "Direct messages" : "Direct Messages"}
+            icon={<MessageCircle size={15} />}
             count={dmChannels.length}
             expanded={expandedSections.dms}
             onToggle={() => toggleSection("dms")}
@@ -904,26 +902,25 @@ function NavButton({ icon: Icon, label, onClick, badge, active, hasDropdown, exp
     <button
       onClick={onClick}
       className={`sidebar-item ${active ? "active" : ""}`}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
-        <span className="sidebar-item-icon" style={{ flexShrink: 0 }}>
-          <Icon size={18} style={{ opacity: 0.8 }} />
+      <span className="sidebar-item-icon">
+        <Icon size={16} />
+      </span>
+      <span className="sidebar-item-content">
+        <span className="sidebar-item-label" style={{ fontWeight: 500 }}>
+          {label}
         </span>
-        <span className="sidebar-item-content" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span className="sidebar-item-label" style={{ fontWeight: 500 }}>
-            {label}
-          </span>
+      </span>
+      {(badge > 0 || hasDropdown) && (
+        <span className="sidebar-item-meta">
+          {badge > 0 && <span className="badge badge-red">{badge}</span>}
+          {hasDropdown && (
+            <span style={{ opacity: 0.6, display: 'flex', alignItems: 'center' }}>
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </span>
+          )}
         </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-        {badge > 0 && <span className="badge badge-red" style={{ marginRight: hasDropdown ? 8 : 0 }}>{badge}</span>}
-        {hasDropdown && (
-          <span style={{ opacity: 0.6, display: 'flex', alignItems: 'center' }}>
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </span>
-        )}
-      </div>
+      )}
     </button>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ListPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Folder, ListPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import SidebarSection from "./sidebar/SidebarSection";
 import SidebarItem from "./sidebar/SidebarItem";
 import ChannelListItem from "./sidebar/ChannelListItem";
@@ -132,7 +132,8 @@ const CategoryGroup = ({
   return (
     <SidebarSection
       key={`cat_${category._id}`}
-      title={`${category.icon || '📁'} ${category.name}`}
+      icon={category.icon || <Folder size={15} />}
+      title={category.name}
       count={categoryChannels.length}
       expanded={expanded}
       onToggle={onToggle}

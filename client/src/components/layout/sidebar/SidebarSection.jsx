@@ -17,6 +17,7 @@ import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
  */
 const SidebarSection = memo(function SidebarSection({
   title,
+  icon,
   count,
   expanded = true,
   onToggle,
@@ -30,15 +31,28 @@ const SidebarSection = memo(function SidebarSection({
   actionMenu,
   children,
 }) {
+  const hasCustomIcon = Boolean(icon);
+  const defaultIconNode = hasCustomIcon ? (
+    typeof icon === 'string' ? <span className="sidebar-category-emoji">{icon}</span> : icon
+  ) : (
+    expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />
+  );
+  const hoverChevronNode = expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />;
+
   return (
     <div className="sidebar-section">
       <div className="sidebar-section-header">
         <button
           onClick={onToggle}
-          className="sidebar-section-toggle"
+          className={`sidebar-section-toggle ${hasCustomIcon ? 'has-custom-icon' : ''}`}
         >
-          {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          <span>{title}</span>
+          <span className="sidebar-section-icon-wrapper">
+            <span className="sidebar-section-icon-default">{defaultIconNode}</span>
+            {hasCustomIcon && (
+              <span className="sidebar-section-icon-hover">{hoverChevronNode}</span>
+            )}
+          </span>
+          <span className="sidebar-section-title">{title}</span>
           {count != null && count > 0 && (
             <span className="sidebar-section-count">{count}</span>
           )}

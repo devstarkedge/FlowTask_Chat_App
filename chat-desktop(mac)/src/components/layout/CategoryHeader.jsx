@@ -2,15 +2,16 @@ import React, { useState } from "react";
 import { FolderPlus, Plus } from "lucide-react";
 
 export default function CategoryHeader({ onCreateCategory }) {
-
   return (
     <div className="sidebar-section-header mt-1 relative">
       <div 
         className="sidebar-section-toggle" 
-        style={{ cursor: "default", opacity: 0.8 }}
+        style={{ cursor: "default" }}
       >
-        <FolderPlus size={16} />
-        <span>Category</span>
+        <span className="sidebar-section-icon-wrapper">
+          <FolderPlus size={15} />
+        </span>
+        <span className="sidebar-section-title">Category</span>
       </div>
       <div className="relative">
         <button

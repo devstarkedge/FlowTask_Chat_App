@@ -28,7 +28,7 @@ export default function ChannelListItem({
 
   return (
     <SidebarItem
-      icon={<Icon size={18} style={{ opacity: isActive ? 1 : 0.6 }} />}
+      icon={<Icon size={14} style={{ opacity: isActive ? 1 : 0.65 }} />}
       label={channel.name}
       sublabel={
         hasDraft ? (

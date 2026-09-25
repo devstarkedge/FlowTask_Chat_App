@@ -24,7 +24,7 @@ export default function PushNotificationPrompt({ prompt }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: 24,
+          padding: "min(24px, 3vh) min(24px, 4vw)",
         }}
       >
         <motion.div
@@ -38,10 +38,13 @@ export default function PushNotificationPrompt({ prompt }) {
           className="push-prompt-card"
           style={{
             position: "relative",
-            width: "100%",
+            width: "min(92vw, 430px)",
             maxWidth: 430,
+            maxHeight: "min(90vh, 740px)",
+            display: "flex",
+            flexDirection: "column",
             overflow: "hidden",
-            borderRadius: 28,
+            borderRadius: "clamp(20px, 3.5vh, 28px)",
             border: "1px solid rgba(255,255,255,0.08)",
             background:
               "linear-gradient(180deg, var(--surface-primary, #ffffff) 0%, var(--surface-secondary, #f8fafc) 100%)",
@@ -67,15 +70,23 @@ export default function PushNotificationPrompt({ prompt }) {
           />
 
           {needsGuidance ? (
-            <div style={{ padding: 32, position: "relative" }}>
+            <div
+              style={{
+                padding: "clamp(20px, 3.8vh, 32px) clamp(18px, 4.5vw, 32px)",
+                position: "relative",
+                overflowY: "auto",
+                maxHeight: "100%",
+                scrollbarWidth: "thin",
+              }}
+            >
               <button
                 onClick={prompt.onLater}
                 style={{
                   position: "absolute",
-                  top: 18,
-                  right: 18,
-                  width: 34,
-                  height: 34,
+                  top: "clamp(12px, 2vh, 18px)",
+                  right: "clamp(12px, 2vw, 18px)",
+                  width: "clamp(30px, 4vh, 34px)",
+                  height: "clamp(30px, 4vh, 34px)",
                   borderRadius: 10,
                   border: "1px solid var(--border-primary)",
                   background: "var(--bg-secondary, rgba(255,255,255,0.65))",
@@ -86,9 +97,10 @@ export default function PushNotificationPrompt({ prompt }) {
                   cursor: "pointer",
                   color: "var(--text-secondary)",
                   transition: "0.2s ease",
+                  zIndex: 2,
                 }}
               >
-                <X size={18} />
+                <X style={{ width: "clamp(15px, 2vh, 18px)", height: "clamp(15px, 2vh, 18px)" }} />
               </button>
 
               <motion.div
@@ -96,10 +108,10 @@ export default function PushNotificationPrompt({ prompt }) {
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.1 }}
                 style={{
-                  width: 82,
-                  height: 82,
-                  margin: "0 auto 24px",
-                  borderRadius: 24,
+                  width: "clamp(64px, 9vh, 82px)",
+                  height: "clamp(64px, 9vh, 82px)",
+                  margin: "0 auto clamp(14px, 2.8vh, 24px)",
+                  borderRadius: "clamp(18px, 2.5vh, 24px)",
                   background:
                     "linear-gradient(135deg, rgba(239,68,68,0.12), rgba(249,115,22,0.12))",
                   display: "flex",
@@ -109,15 +121,18 @@ export default function PushNotificationPrompt({ prompt }) {
                   boxShadow: "0 10px 30px rgba(239,68,68,0.12)",
                 }}
               >
-                <Lock size={36} color="var(--danger-primary, #ef4444)" />
+                <Lock
+                  style={{ width: "clamp(28px, 4vh, 36px)", height: "clamp(28px, 4vh, 36px)" }}
+                  color="var(--danger-primary, #ef4444)"
+                />
               </motion.div>
 
               <div style={{ textAlign: "center" }}>
                 <h2
                   style={{
-                    fontSize: 24,
+                    fontSize: "clamp(20px, 3vh, 24px)",
                     fontWeight: 800,
-                    marginBottom: 12,
+                    marginBottom: "clamp(8px, 1.5vh, 12px)",
                     letterSpacing: "-0.03em",
                   }}
                 >
@@ -126,10 +141,10 @@ export default function PushNotificationPrompt({ prompt }) {
 
                 <p
                   style={{
-                    fontSize: 14,
-                    lineHeight: 1.7,
+                    fontSize: "clamp(13px, 1.7vh, 14px)",
+                    lineHeight: "clamp(1.45, 2vh, 1.7)",
                     color: "var(--text-secondary)",
-                    marginBottom: 28,
+                    marginBottom: "clamp(16px, 3vh, 28px)",
                   }}
                 >
                   Your browser is currently blocking notifications for FlowTask.
@@ -140,11 +155,11 @@ export default function PushNotificationPrompt({ prompt }) {
 
               <div
                 style={{
-                  padding: 16,
-                  borderRadius: 18,
+                  padding: "clamp(12px, 2vh, 16px)",
+                  borderRadius: "clamp(14px, 2vh, 18px)",
                   background: "var(--bg-card, rgba(255,255,255,0.7))",
                   border: "1px solid var(--border-primary)",
-                  marginBottom: 24,
+                  marginBottom: "clamp(16px, 3vh, 24px)",
                 }}
               >
                 <div
@@ -156,26 +171,27 @@ export default function PushNotificationPrompt({ prompt }) {
                 >
                   <div
                     style={{
-                      minWidth: 36,
-                      width: 36,
-                      height: 36,
+                      minWidth: "clamp(30px, 4vh, 36px)",
+                      width: "clamp(30px, 4vh, 36px)",
+                      height: "clamp(30px, 4vh, 36px)",
                       borderRadius: 12,
                       background: "linear-gradient(135deg, #f97316, #ef4444)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       color: "#fff",
+                      flexShrink: 0,
                     }}
                   >
-                    <Sparkles size={16} />
+                    <Sparkles style={{ width: "clamp(14px, 2vh, 16px)", height: "clamp(14px, 2vh, 16px)" }} />
                   </div>
 
                   <div>
                     <p
                       style={{
                         margin: 0,
-                        fontSize: 13,
-                        lineHeight: 1.6,
+                        fontSize: "clamp(12px, 1.6vh, 13px)",
+                        lineHeight: 1.5,
                         color: "var(--text-secondary)",
                       }}
                     >
@@ -190,13 +206,13 @@ export default function PushNotificationPrompt({ prompt }) {
                 onClick={prompt.onLater}
                 style={{
                   width: "100%",
-                  height: 50,
-                  borderRadius: 16,
+                  height: "clamp(42px, 5.5vh, 50px)",
+                  borderRadius: "clamp(12px, 2vh, 16px)",
                   border: "1px solid var(--border-primary)",
                   background:
                     "var(--bg-button-secondary, linear-gradient(180deg, var(--bg-primary, #ffffff), var(--bg-secondary, rgba(255,255,255,0.85))))",
                   color: "var(--text-primary)",
-                  fontSize: 14,
+                  fontSize: "clamp(13px, 1.7vh, 14px)",
                   fontWeight: 700,
                   cursor: "pointer",
                   transition: "0.2s ease",
@@ -206,25 +222,36 @@ export default function PushNotificationPrompt({ prompt }) {
               </button>
             </div>
           ) : (
-            <div style={{ padding: 34, position: "relative" }}>
+            <div
+              style={{
+                padding: "clamp(20px, 3.8vh, 34px) clamp(18px, 4.5vw, 34px)",
+                position: "relative",
+                overflowY: "auto",
+                maxHeight: "100%",
+                scrollbarWidth: "thin",
+              }}
+            >
               {/* Badge */}
               <div
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
-                  padding: "8px 14px",
+                  padding: "clamp(6px, 1vh, 8px) clamp(10px, 1.5vw, 14px)",
                   borderRadius: 999,
                   background:
                     "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(99,102,241,0.12))",
                   border: "1px solid rgba(37,99,235,0.14)",
-                  marginBottom: 26,
+                  marginBottom: "clamp(14px, 2.6vh, 26px)",
                 }}
               >
-                <Sparkles size={14} color="var(--accent-primary, #2563eb)" />
+                <Sparkles
+                  style={{ width: "clamp(12px, 1.6vh, 14px)", height: "clamp(12px, 1.6vh, 14px)" }}
+                  color="var(--accent-primary, #2563eb)"
+                />
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: "clamp(10px, 1.2vh, 11px)",
                     fontWeight: 800,
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
@@ -241,29 +268,33 @@ export default function PushNotificationPrompt({ prompt }) {
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.05 }}
                 style={{
-                  width: 92,
-                  height: 92,
-                  margin: "0 auto 26px",
-                  borderRadius: 28,
+                  width: "clamp(68px, 10vh, 92px)",
+                  height: "clamp(68px, 10vh, 92px)",
+                  margin: "0 auto clamp(14px, 2.8vh, 26px)",
+                  borderRadius: "clamp(20px, 3vh, 28px)",
                   background:
                     "linear-gradient(135deg, var(--accent-primary, #2563eb), #7c3aed)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   boxShadow: "0 20px 40px rgba(37,99,235,0.28)",
+                  flexShrink: 0,
                 }}
               >
-                <Bell size={42} color="#fff" />
+                <Bell
+                  style={{ width: "clamp(30px, 4.5vh, 42px)", height: "clamp(30px, 4.5vh, 42px)" }}
+                  color="#fff"
+                />
               </motion.div>
 
               <div style={{ textAlign: "center" }}>
                 <h2
                   style={{
-                    fontSize: 30,
-                    lineHeight: 1.1,
+                    fontSize: "clamp(22px, 3.4vh, 30px)",
+                    lineHeight: 1.15,
                     fontWeight: 800,
                     letterSpacing: "-0.04em",
-                    margin: "0 0 16px",
+                    margin: "0 0 clamp(8px, 1.6vh, 16px)",
                   }}
                 >
                   Never miss an update
@@ -271,10 +302,10 @@ export default function PushNotificationPrompt({ prompt }) {
 
                 <p
                   style={{
-                    fontSize: 15,
-                    lineHeight: 1.75,
+                    fontSize: "clamp(13px, 1.7vh, 15px)",
+                    lineHeight: "clamp(1.45, 2vh, 1.75)",
                     color: "var(--text-secondary)",
-                    margin: "0 0 30px",
+                    margin: "0 0 clamp(14px, 3vh, 30px)",
                   }}
                 >
                   Stay connected with real-time alerts for tasks, mentions,
@@ -287,8 +318,8 @@ export default function PushNotificationPrompt({ prompt }) {
               <div
                 style={{
                   display: "grid",
-                  gap: 14,
-                  marginBottom: 30,
+                  gap: "clamp(8px, 1.4vh, 14px)",
+                  marginBottom: "clamp(14px, 3vh, 30px)",
                 }}
               >
                 {[
@@ -301,17 +332,17 @@ export default function PushNotificationPrompt({ prompt }) {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 14,
-                      padding: "14px 16px",
-                      borderRadius: 18,
+                      gap: "clamp(10px, 1.5vw, 14px)",
+                      padding: "clamp(9px, 1.6vh, 14px) clamp(12px, 2vw, 16px)",
+                      borderRadius: "clamp(12px, 2vh, 18px)",
                       background: "var(--bg-card, rgba(255,255,255,0.7))",
                       border: "1px solid var(--border-primary)",
                     }}
                   >
                     <div
                       style={{
-                        width: 10,
-                        height: 10,
+                        width: "clamp(8px, 1.1vh, 10px)",
+                        height: "clamp(8px, 1.1vh, 10px)",
                         borderRadius: "50%",
                         background: "var(--accent-primary, #2563eb)",
                         flexShrink: 0,
@@ -319,7 +350,7 @@ export default function PushNotificationPrompt({ prompt }) {
                     />
                     <span
                       style={{
-                        fontSize: 14,
+                        fontSize: "clamp(12.5px, 1.6vh, 14px)",
                         fontWeight: 500,
                         color: "var(--text-secondary)",
                       }}
@@ -335,7 +366,7 @@ export default function PushNotificationPrompt({ prompt }) {
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: 12,
+                  gap: "clamp(8px, 1.4vh, 12px)",
                 }}
               >
                 <motion.button
@@ -354,13 +385,13 @@ export default function PushNotificationPrompt({ prompt }) {
                   disabled={prompt.isBusy}
                   style={{
                     width: "100%",
-                    height: 54,
-                    borderRadius: 18,
+                    height: "clamp(42px, 5.5vh, 54px)",
+                    borderRadius: "clamp(13px, 2vh, 18px)",
                     border: "none",
                     background:
                       "linear-gradient(135deg, var(--accent-primary, #2563eb), #7c3aed)",
                     color: "#fff",
-                    fontSize: 15,
+                    fontSize: "clamp(13.5px, 1.7vh, 15px)",
                     fontWeight: 700,
                     cursor: "pointer",
                     display: "flex",
@@ -370,7 +401,7 @@ export default function PushNotificationPrompt({ prompt }) {
                     boxShadow: "0 16px 30px rgba(37,99,235,0.24)",
                   }}
                 >
-                  <Bell size={18} />
+                  <Bell style={{ width: "clamp(15px, 2vh, 18px)", height: "clamp(15px, 2vh, 18px)" }} />
                   {prompt.isBusy
                     ? "Enabling notifications..."
                     : "Enable notifications"}
@@ -381,12 +412,12 @@ export default function PushNotificationPrompt({ prompt }) {
                   disabled={prompt.isBusy}
                   style={{
                     width: "100%",
-                    height: 52,
-                    borderRadius: 18,
+                    height: "clamp(40px, 5.2vh, 52px)",
+                    borderRadius: "clamp(13px, 2vh, 18px)",
                     border: "1px solid var(--border-primary)",
                     background: "var(--bg-button-disabled, rgba(255,255,255,0.65))",
                     color: "var(--text-secondary)",
-                    fontSize: 14,
+                    fontSize: "clamp(13px, 1.6vh, 14px)",
                     fontWeight: 700,
                     cursor: "pointer",
                     backdropFilter: "blur(10px)",

@@ -38,8 +38,8 @@
   /* ── modal shell ── */
   .dl-shell {
     width: 100%;
-    max-width: 460px;
-    max-height: 82vh;
+    max-width: min(90vw, 480px);
+    max-height: min(85dvh, 600px);
     display: flex;
     flex-direction: column;
     border-radius: 20px 20px 16px 16px;

@@ -10,11 +10,14 @@ import {
   UserPlus,
   UserMinus,
   Settings,
+  PauseCircle,
   AlarmClock,
   Smile,
 } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useNotificationStore } from "../../../stores/notificationStore";
+import NotificationSettingsModal from "../../notifications/NotificationSettingsModal";
+import PauseNotificationsDropdown from "../../notifications/PauseNotificationsDropdown";
 import { Avatar } from "../../chat/MemberAvatarGroup";
 import SidebarContainer from "../sidebar/SidebarContainer";
 import {
@@ -634,11 +637,14 @@ export default function ActivityContextSidebar({
   const {
     notifications, unreadCount, isLoading, hasMore,
     fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead,
+    isPaused, fetchPreferences,
   } = useNotificationStore();
 
   const scrollRef                   = useRef(null);
   const [marking, setMarking]       = useState(false);
   const [activeTab, setActiveTab]   = useState("all");
+  const [showSettings, setShowSettings] = useState(false);
+  const [showPauseDropdown, setShowPauseDropdown] = useState(false);
 
   useEffect(() => {
     fetchNotifications(true);
@@ -707,6 +713,18 @@ export default function ActivityContextSidebar({
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
+          {isPaused && (
+            <span
+              className="acs3-pause-badge text-[10px] px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1"
+              style={{
+                background: "var(--status-warning, #f59e0b)",
+                color: "#fff",
+              }}
+            >
+              <PauseCircle size={10} />
+              Paused
+            </span>
+          )}
         </div>
 
         <div className="acs3-title-actions">
@@ -719,6 +737,30 @@ export default function ActivityContextSidebar({
               Mark all read
             </button>
           )}
+          {/* <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              onClick={() => setShowPauseDropdown(!showPauseDropdown)}
+              className="acs3-icon-btn"
+              title="Pause notifications"
+              aria-label="Pause notifications"
+            >
+              <PauseCircle size={15} />
+            </button>
+            {showPauseDropdown && (
+              <PauseNotificationsDropdown
+                onClose={() => setShowPauseDropdown(false)}
+              />
+            )}
+          </div> */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="acs3-icon-btn"
+            title="Notification settings"
+            aria-label="Notification settings"
+            id="notif-settings-btn"
+          >
+            <Settings size={15} />
+          </button>
         </div>
       </div>
 
@@ -808,6 +850,9 @@ export default function ActivityContextSidebar({
           </div>
         )}
       </div>
+    {showSettings && (
+        <NotificationSettingsModal onClose={() => setShowSettings(false)} />
+      )}
     </SidebarContainer>
   );
 }

@@ -1,50 +1,78 @@
+import { useState, useEffect } from 'react';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
-// Avatar component — no hover tooltips by design
-import { usePresenceStore } from '../../stores/presenceStore'
+import { usePresenceStore } from '../../stores/presenceStore';
+import { Bot } from 'lucide-react';
 
 const COLORS = [
   '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
   '#009688', '#4caf50', '#ff9800', '#ff5722', '#795548',
-]
+];
 
 function getColor(name) {
-  if (!name) return COLORS[0]
-  let hash = 0
+  if (!name) return COLORS[0];
+  let hash = 0;
   for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return COLORS[Math.abs(hash) % COLORS.length]
+  return COLORS[Math.abs(hash) % COLORS.length];
 }
 
 function Avatar({ member, size = 28, showStatus = false }) {
   member = useLiveProfileData(member);
-  const safeMember = member || {}
-  
-  // Use presence store if available, fallback to member prop
-  const presenceStoreVal = usePresenceStore((state) => {
-    const p = state.presence
-    return p[safeMember._id || safeMember.userId] || p[safeMember.flowTaskUserId] || p[safeMember.chatUserId]
-  })
-  const effectiveStatus = presenceStoreVal || safeMember.onlineStatus || 'offline'
+  const safeMember = member || {};
+  const [imgError, setImgError] = useState(false);
 
-  const isOnline = effectiveStatus === 'online'
-  const isAway = effectiveStatus === 'away'
+  useEffect(() => {
+    setImgError(false);
+  }, [safeMember.avatar]);
+
+  // Detect FlowTask Bot or automated bot accounts
+  const isBotUser = Boolean(
+    safeMember.isBot ||
+    (safeMember.name && /flowtask\s*bot|flowtask/i.test(safeMember.name))
+  );
+
+  // Presence store status
+  const presenceStoreVal = usePresenceStore((state) => {
+    const p = state.presence;
+    return p[safeMember._id || safeMember.userId] || p[safeMember.flowTaskUserId] || p[safeMember.chatUserId];
+  });
+  const effectiveStatus = presenceStoreVal || safeMember.onlineStatus || 'offline';
+
+  const isOnline = effectiveStatus === 'online';
+  const isAway = effectiveStatus === 'away';
   const isDnd = effectiveStatus === 'dnd' || 
     (safeMember.chatPreferences?.dnd?.enabled && (!safeMember.chatPreferences?.dnd?.endAt || new Date(safeMember.chatPreferences.dnd.endAt).getTime() > Date.now())) ||
     (safeMember.chatPreferences?.endAt && new Date(safeMember.chatPreferences.endAt).getTime() > Date.now());
-  const bgColor = getColor(safeMember.name)
-  const initials = (safeMember.name || '?')[0].toUpperCase()
-  const statusSize = Math.max(8, size * 0.3)
+  const bgColor = getColor(safeMember.name);
+  const initials = (safeMember.name || '?')[0].toUpperCase();
+  const statusSize = Math.max(8, size * 0.3);
+
+  const showImage = Boolean(safeMember.avatar && !imgError);
 
   return (
-    <div className="relative inline-flex shrink-0">
-      {safeMember.avatar ? (
+    <div className="relative inline-flex shrink-0 select-none">
+      {showImage ? (
         <img
           src={safeMember.avatar}
           alt={safeMember.name || 'User avatar'}
           className="rounded-md object-cover"
           style={{ width: size, height: size }}
+          onError={() => setImgError(true)}
         />
+      ) : isBotUser ? (
+        <div
+          className="rounded-md flex items-center justify-center text-white shrink-0"
+          style={{
+            width: size,
+            height: size,
+            background: 'linear-gradient(135deg, #4e7cff 0%, #7c3aed 100%)',
+            boxShadow: '0 2px 6px rgba(78, 124, 255, 0.25)',
+          }}
+          title={safeMember.name || 'FlowTask Bot'}
+        >
+          <Bot size={Math.max(12, Math.round(size * 0.55))} strokeWidth={2.2} />
+        </div>
       ) : (
         <div
           className="rounded flex items-center justify-center font-bold text-white select-none"
@@ -59,7 +87,7 @@ function Avatar({ member, size = 28, showStatus = false }) {
         </div>
       )}
 
-      {showStatus && (isOnline || isAway || isDnd) && (
+      {showStatus && !isBotUser && (isOnline || isAway || isDnd) && (
         <span
           className="absolute rounded-full border-2"
           style={{
@@ -92,28 +120,29 @@ function Avatar({ member, size = 28, showStatus = false }) {
           <span style={{ lineHeight: 1 }}>{safeMember.customStatus.emoji}</span>
         </span>
       )}
-          {showStatus && isDnd && (
-            <span
-              title="Do Not Disturb"
-              className="absolute rounded-full"
-              style={{
-                minWidth: Math.max(14, size * 0.45),
-                height: Math.max(14, size * 0.45),
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: Math.max(10, size * 0.35),
-                background: 'transparent',
-                border: '2px solid var(--bg-primary)',
-                top: -4,
-                right: -4,
-              }}
-            >
-              <span style={{ lineHeight: 1 }}>💤</span>
-            </span>
-          )}
+
+      {showStatus && isDnd && !isBotUser && (
+        <span
+          title="Do Not Disturb"
+          className="absolute rounded-full"
+          style={{
+            minWidth: Math.max(14, size * 0.45),
+            height: Math.max(14, size * 0.45),
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: Math.max(10, size * 0.35),
+            background: 'transparent',
+            border: '2px solid var(--bg-primary)',
+            top: -4,
+            right: -4,
+          }}
+        >
+          <span style={{ lineHeight: 1 }}>💤</span>
+        </span>
+      )}
     </div>
-  )
+  );
 }
 
 export default function MemberAvatarGroup({
@@ -123,8 +152,8 @@ export default function MemberAvatarGroup({
   showStatus = true,
   onShowAll,
 }) {
-  const visibleMembers = members.slice(0, max)
-  const overflowCount = Math.max(0, members.length - max)
+  const visibleMembers = members.slice(0, max);
+  const overflowCount = Math.max(0, members.length - max);
   const onlineCount = usePresenceStore((state) => 
     members.filter((m) => {
       const id = m._id || m.userId;
@@ -132,7 +161,7 @@ export default function MemberAvatarGroup({
       const status = (id ? p[id] : null) || p[m.flowTaskUserId] || p[m.chatUserId] || m.onlineStatus;
       return status === 'online';
     }).length
-  )
+  );
 
   return (
     <div className="flex items-center gap-1">
@@ -164,7 +193,7 @@ export default function MemberAvatarGroup({
               zIndex: 0,
               border: '2px solid var(--bg-primary)',
             }}
-            title={`${overflowCount} more members`}
+            title={overflowCount + ' more members'}
           >
             +{overflowCount}
           </button>
@@ -187,7 +216,7 @@ export default function MemberAvatarGroup({
         </button>
       )}
     </div>
-  )
+  );
 }
 
-export { Avatar, getColor }
+export { Avatar, getColor };

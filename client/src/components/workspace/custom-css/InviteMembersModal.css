@@ -52,8 +52,8 @@
 
   .imm-shell {
       width: 100%;
-      max-width: 560px;
-      max-height: 90vh;
+      max-width: min(92vw, 560px);
+      max-height: min(88dvh, 660px);
       border-radius: 20px;
       overflow: hidden;
       display: flex;

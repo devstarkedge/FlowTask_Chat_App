@@ -227,8 +227,8 @@
   /* ── modal shell ── */
   .wsm-shell {
       width: 100%;
-      max-width: 700px;
-      max-height: 88vh;
+      max-width: min(94vw, 760px);
+      max-height: min(90dvh, 720px);
       border-radius: 22px;
       overflow: hidden;
       display: flex;

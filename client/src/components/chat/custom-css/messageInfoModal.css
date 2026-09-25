@@ -13,7 +13,7 @@
 
 .message-info-container {
   width: 100%;
-  max-width: 440px;
+  max-width: min(92vw, 460px);
   min-height: 320px;
   background: var(--bg-modal);
   border: 1px solid var(--border-primary);
@@ -21,7 +21,7 @@
   box-shadow: var(--shadow-modal);
   display: flex;
   flex-direction: column;
-  max-height: 85vh;
+  max-height: min(88dvh, 640px);
   overflow: hidden;
   box-sizing: border-box;
 }

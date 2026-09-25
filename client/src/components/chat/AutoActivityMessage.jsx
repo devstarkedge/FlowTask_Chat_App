@@ -172,7 +172,7 @@ export default function AutoActivityMessage({ message }) {
               <img
                 src={meta.actorAvatar}
                 alt={meta.actorName || ''}
-                style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             )}
             <span>
@@ -266,7 +266,7 @@ export default function AutoActivityMessage({ message }) {
                 <img
                   src={meta.actorAvatar}
                   alt={meta.actorName || ''}
-                  style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
               )}
               <span>

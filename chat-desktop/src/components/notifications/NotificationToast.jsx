@@ -1,6 +1,6 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useState } from 'react'
-import { X, MessageCircle, AtSign, MessageSquareText, Bell } from 'lucide-react'
+import { X, MessageCircle, AtSign, MessageSquareText, Bell, Bot } from 'lucide-react'
 
 const TOAST_DURATION = 5000
 const TYPE_ICONS = {
@@ -11,20 +11,11 @@ const TYPE_ICONS = {
   default: Bell,
 }
 
-/**
- * In-app toast notification — shown when user is active in app
- * but on a different page from the notification source.
- *
- * @param {object} props
- * @param {object} props.notification - Notification data
- * @param {Function} props.onClick - Click handler (deep-link to message)
- * @param {Function} props.onDismiss - Dismiss handler
- * @param {boolean} props.playSound - Whether to play notification sound
- */
 export default function NotificationToast({ notification, onClick, onDismiss, playSound = true }) {
   notification = useLiveProfileData(notification);
   const [isVisible, setIsVisible] = useState(false)
   const [isLeaving, setIsLeaving] = useState(false)
+  const [imgError, setImgError] = useState(false)
 
   useEffect(() => {
     // Animate in
@@ -65,6 +56,10 @@ export default function NotificationToast({ notification, onClick, onDismiss, pl
   const preview = notification?.messagePreview || notification?.body || ''
   const channelName = notification?.channelName
   const avatarUrl = notification?.senderAvatar
+  const isBotUser = Boolean(
+    notification?.isBot ||
+    (senderName && /flowtasks*bot|flowtask/i.test(senderName))
+  )
 
   return (
     <div
@@ -76,12 +71,25 @@ export default function NotificationToast({ notification, onClick, onDismiss, pl
       <div className="notif-toast__accent" />
 
       <div className="notif-toast__body">
-        {avatarUrl ? (
+        {avatarUrl && !imgError ? (
           <img
             src={avatarUrl}
             alt={senderName}
             className="notif-toast__avatar"
+            onError={() => setImgError(true)}
           />
+        ) : isBotUser ? (
+          <div
+            className="notif-toast__avatar flex items-center justify-center text-white shrink-0"
+            style={{
+              background: 'linear-gradient(135deg, #4e7cff 0%, #7c3aed 100%)',
+              borderRadius: 8,
+              width: 32,
+              height: 32,
+            }}
+          >
+            <Bot size={18} />
+          </div>
         ) : (
           <div className="notif-toast__avatar-fallback">
             <Icon size={16} />

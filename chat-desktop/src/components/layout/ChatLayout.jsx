@@ -2065,21 +2065,7 @@ function GlobalTopBar({
         </div>
 
         <div className="cl-topbar__actions">
-          {onOpenNotifications && (
-            <button
-              className={`cl-topbar__action-btn ${unreadNotifications > 0 ? "has-notif" : ""}`}
-              onClick={onOpenNotifications}
-              title="Notifications"
-              aria-label="Notifications"
-            >
-              <Bell size={16} />
-              {unreadNotifications > 0 && (
-                <span className="cl-notif-badge">
-                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                </span>
-              )}
-            </button>
-          )}
+          /* Bell icon removed from header */
 
           <button
             className="cl-topbar__action-btn cl-topbar__win-btn"

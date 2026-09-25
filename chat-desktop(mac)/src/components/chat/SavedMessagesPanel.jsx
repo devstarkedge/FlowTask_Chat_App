@@ -10,6 +10,9 @@ import { savedMessageAPI } from '../../services/api'
 import toast from 'react-hot-toast'
 import { useDeleteConfirm } from '../../hooks/useDeleteConfirm'
 
+import { KindIcon, getFileKind } from './SlackFileCard'
+import { openPreview } from '../../services/previewService'
+
 /* ─── helpers ─────────────────────────────────────────────────────────── */
 function groupByDate(messages) {
   const groups = {}
@@ -38,6 +41,174 @@ function formatTime(dateStr) {
   return format(d, 'MMM d, h:mm a')
 }
 
+function formatFileSize(bytes) {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function deriveAttachments(msg) {
+  if (!msg) return []
+  if (msg.fileReferences?.length > 0) {
+    return msg.fileReferences
+      .map((ref) => {
+        if (!ref) return null
+        if (ref.fileId && typeof ref.fileId === 'object') {
+          if (ref.fileId.status === 'deleted') return null
+          return {
+            ...ref.fileId,
+            url: ref.fileId.secureUrl || ref.fileId.url,
+            thumbnailUrl: ref.fileId.thumbnailUrl || ref.fileId.secureUrl || ref.fileId.url,
+            originalName: ref.fileId.originalName || ref.fileId.fileName || 'File'
+          }
+        }
+        return ref
+      })
+      .filter(Boolean)
+  }
+  if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+    return msg.attachments.filter((a) => a && a.status !== 'deleted')
+  }
+  if (Array.isArray(msg.files) && msg.files.length > 0) {
+    return msg.files.filter((f) => f && f.status !== 'deleted')
+  }
+  return []
+}
+
+function SavedMessageAttachments({ attachments = [] }) {
+  if (!attachments || attachments.length === 0) return null
+
+  return (
+    <div
+      className="smp-card__attachments"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        marginTop: 8,
+        width: '100%',
+        maxWidth: '100%'
+      }}
+    >
+      {attachments.map((file, idx) => {
+        const mime = file.mimeType || file.type || ''
+        const name = file.originalName || file.fileName || file.name || 'File'
+        const isImg = mime.startsWith('image/')
+        const thumb = file.thumbnailUrl || file.secureUrl || file.url
+        const kind = getFileKind(mime, name)
+        const sizeStr = formatFileSize(file.fileSize || file.size || file.fileSizeBytes)
+
+        if (isImg && thumb && thumb !== '/placeholder-loading') {
+          return (
+            <div
+              key={file._id || file.url || idx}
+              className="smp-attachment-card smp-attachment-card--image"
+              onClick={(e) => {
+                e.stopPropagation()
+                openPreview(file, attachments)
+              }}
+              style={{
+                borderRadius: 8,
+                border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.16))',
+                overflow: 'hidden',
+                maxWidth: '100%',
+                background: 'var(--surface-tertiary, var(--bg-tertiary, rgba(0, 0, 0, 0.2)))',
+                cursor: 'pointer',
+                transition: 'all 160ms ease',
+                position: 'relative'
+              }}
+              title={name}
+            >
+              <img
+                src={thumb}
+                alt={name}
+                style={{
+                  width: '100%',
+                  maxHeight: 160,
+                  objectFit: 'cover',
+                  display: 'block'
+                }}
+                loading="lazy"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                  if (e.target.nextSibling) {
+                    e.target.nextSibling.style.display = 'flex'
+                  }
+                }}
+              />
+              <div
+                style={{
+                  display: 'none',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  background: 'var(--surface-tertiary, var(--bg-tertiary, rgba(255, 255, 255, 0.09)))',
+                  color: 'var(--text-primary, #ffffff)'
+                }}
+              >
+                <KindIcon kind={kind} size={18} />
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{name}</span>
+              </div>
+            </div>
+          )
+        }
+
+        return (
+          <div
+            key={file._id || file.url || idx}
+            className="smp-attachment-card smp-attachment-card--file"
+            onClick={(e) => {
+              e.stopPropagation()
+              openPreview(file, attachments)
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: 'var(--surface-tertiary, var(--bg-tertiary, rgba(255, 255, 255, 0.09)))',
+              border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.16))',
+              maxWidth: '100%',
+              cursor: 'pointer',
+              transition: 'all 160ms ease',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12)'
+            }}
+            title={name}
+          >
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+              <KindIcon kind={kind} size={18} />
+            </div>
+            <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: 'var(--text-primary, #ffffff)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                lineHeight: 1.3
+              }}>
+                {name}
+              </span>
+              {sizeStr && (
+                <span style={{
+                  fontSize: 10.5,
+                  color: 'var(--text-muted, rgba(255, 255, 255, 0.65))',
+                  lineHeight: 1.2
+                }}>
+                  {sizeStr}
+                </span>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ─── Sub-components ──────────────────────────────────────────────────── */
 function MessageCard({ saved, index, onJump, onUnsave, unsaving }) {
   saved = useLiveProfileData(saved);
@@ -46,6 +217,7 @@ function MessageCard({ saved, index, onJump, onUnsave, unsaving }) {
   if (!msg) return null
   const author = (msg.authorId?.name ? msg.authorId : msg.senderSnapshot) || {}
   const [hovered, setHovered] = useState(false)
+  const attachments = deriveAttachments(msg);
 
   return (
     <div
@@ -95,9 +267,16 @@ function MessageCard({ saved, index, onJump, onUnsave, unsaving }) {
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMentions(msg.htmlContent)) }}
             />
           ) : (
-            <p className="smp-card__text">{msg.content || 'Attachment'}</p>
+            msg.content ? (
+              <p className="smp-card__text">{msg.content}</p>
+            ) : (
+              attachments.length === 0 && <p className="smp-card__text"><em>Attachment</em></p>
+            )
           )}
         </div>
+
+        {/* Attachments rendering */}
+        <SavedMessageAttachments attachments={attachments} />
 
         <div className="smp-card__footer">
           <span className="smp-card__jump-hint">

@@ -405,38 +405,43 @@ export default function ChatHeader({
           />
 
         {showMoreActions && (
-  <div
-    className="chat-header__menu absolute z-50 animate-fade-in-up"
-    style={{
-      top: "calc(100% + 6px)",
-      right: 0,
-      minWidth: 228,
-      borderRadius: "var(--radius-lg)",
-      overflow: "hidden",
-    }}
-  >
-    {/* ── Conversation section ── */}
-    <div style={{ padding: "6px 0" }}>
-      <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", padding: "6px 14px 4px" }}>
-        Conversation
-      </p>
-      <DropItem icon={Search}   iconColor="purple" label="Search messages"   onClick={() => { onToggleSearch(); setShowMoreActions(false); }} />
-      <DropItem icon={Pin}      iconColor="amber"  label="Pinned messages"   sublabel={pinCount > 0 ? `${pinCount} pinned` : undefined} onClick={() => { onTogglePins(); setShowMoreActions(false); }} />
-      <DropItem icon={Headphones} iconColor="teal" label="Start a huddle"    onClick={() => { logger.log("Huddle", channel?._id); setShowMoreActions(false); }} className="md:hidden" />
-    </div>
+          <div
+            className="chat-header__menu absolute z-50 animate-fade-in-up"
+            style={{
+              top: "calc(100% + 8px)",
+              right: 0,
+              width: 256,
+              padding: 6,
+              borderRadius: 14,
+              background: "var(--bg-primary, #ffffff)",
+              border: "1px solid var(--border-primary, rgba(0,0,0,0.08))",
+              boxShadow: "0 16px 36px -8px rgba(0,0,0,0.18), 0 6px 16px -4px rgba(0,0,0,0.08)",
+              backdropFilter: "blur(12px)",
+              overflow: "hidden",
+            }}
+          >
+            {/* ── Conversation section ── */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", padding: "6px 10px 4px" }}>
+                Conversation
+              </p>
+              <DropItem icon={Search}   iconColor="purple" label="Search messages"   onClick={() => { onToggleSearch(); setShowMoreActions(false); }} />
+              <DropItem icon={Pin}      iconColor="amber"  label="Pinned messages"   sublabel={pinCount > 0 ? `${pinCount} pinned` : undefined} onClick={() => { onTogglePins(); setShowMoreActions(false); }} />
+              <DropItem icon={Headphones} iconColor="teal" label="Start a huddle"    onClick={() => { logger.log("Huddle", channel?._id); setShowMoreActions(false); }} className="md:hidden" />
+            </div>
 
-    {/* ── Divider ── */}
-    <div style={{ height: 1, background: "var(--border-primary)" }} />
+            {/* ── Divider ── */}
+            <div style={{ height: 1, background: "var(--border-primary, rgba(0,0,0,0.06))", margin: "4px 6px" }} />
 
-    {/* ── Channel section ── */}
-    <div style={{ padding: "6px 0" }}>
-      <p style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", padding: "6px 14px 4px" }}>
-        Channel
-      </p>
-      <DropItem icon={Info}        iconColor="blue" label="Channel details"  sublabel="Settings, members & more" onClick={() => { toggleInfoPanel(); setShowMoreActions(false); }} />
-    </div>
-  </div>
-)}
+            {/* ── Channel section ── */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", padding: "6px 10px 4px" }}>
+                Channel
+              </p>
+              <DropItem icon={Info}        iconColor="blue" label="Channel details"  sublabel="Settings, members & more" onClick={() => { toggleInfoPanel(); setShowMoreActions(false); }} />
+            </div>
+          </div>
+        )}
         </div>
       </div>
 
@@ -727,26 +732,26 @@ function HdrBtn({ icon: Icon, title, label, onClick, className = "", size = 14 }
 /* ── DropItem ────────────────────────────────────────────────────────────── */
 function DropItem({ icon: Icon, iconColor = "gray", label, sublabel, onClick, className = "" }) {
   const colorMap = {
-    purple: { bg: "rgba(206,203,246,0.25)", color: "#534AB7" },
-    teal:   { bg: "rgba(29,158,117,0.12)",  color: "#0F6E56" },
-    blue:   { bg: "rgba(53,138,221,0.12)",  color: "#185FA5" },
-    amber:  { bg: "rgba(239,159,39,0.15)",  color: "#854F0B" },
-    red:    { bg: "rgba(226,75,74,0.12)",   color: "#A32D2D" },
-    gray:   { bg: "var(--bg-hover)",        color: "var(--text-muted)" },
+    purple: { bg: "rgba(147, 51, 234, 0.1)",  color: "var(--accent-purple, #9333ea)" },
+    teal:   { bg: "rgba(13, 148, 136, 0.12)", color: "#0d9488" },
+    blue:   { bg: "rgba(37, 99, 235, 0.12)",  color: "var(--accent-primary, #2563eb)" },
+    amber:  { bg: "rgba(217, 119, 6, 0.12)",  color: "#d97706" },
+    red:    { bg: "rgba(225, 29, 72, 0.12)",  color: "#e11d48" },
+    gray:   { bg: "var(--bg-hover, rgba(0,0,0,0.05))", color: "var(--text-muted)" },
   };
   const { bg, color } = colorMap[iconColor] ?? colorMap.gray;
 
   return (
     <button
       onClick={onClick}
-      className={["chat-header__menu-item w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors", className].join(" ")}
+      className={["chat-header__menu-item w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-all duration-150 hover:bg-[var(--bg-hover)]", className].join(" ")}
     >
-      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, background: bg, color, flexShrink: 0 }}>
-        <Icon size={15} />
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: bg, color, flexShrink: 0 }}>
+        <Icon size={16} />
       </span>
       <span className="flex flex-col min-w-0">
-        <span className="font-semibold truncate" style={{ fontSize: 13.5, color: "var(--text-primary)" }}>{label}</span>
-        {sublabel && <span style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 1 }}>{sublabel}</span>}
+        <span className="font-semibold truncate" style={{ fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.2 }}>{label}</span>
+        {sublabel && <span style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.2 }}>{sublabel}</span>}
       </span>
     </button>
   );

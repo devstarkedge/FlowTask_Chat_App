@@ -74,7 +74,7 @@ const SidebarItem = memo(function SidebarItem({
               style={{
                 background: "transparent",
                 border: "none",
-                color: "var(--text-muted)",
+                color: "var(--sidebar-text-dim, var(--text-timestamp))",
                 cursor: "pointer",
                 padding: "2px",
                 marginLeft: "4px",

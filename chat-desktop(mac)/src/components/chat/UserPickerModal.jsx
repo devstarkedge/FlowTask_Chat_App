@@ -1,52 +1,76 @@
+/* eslint-disable react/prop-types */
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
-import { useChatStore } from '../../stores/chatStore'
 import { usePresenceStore } from '../../stores/presenceStore'
 import { userAPI } from '../../services/api'
 import { joinChannel } from '../../services/socket'
 import { X, Search, MessageCircle, User, Zap } from 'lucide-react';
-import Loader from '../shared/Loader';
 import { Avatar } from './MemberAvatarGroup'
 import toast from 'react-hot-toast'
 import logger from '../../utils/logger'
 
-/**
- * UserPickerModal — modal for selecting a user to start a DM conversation.
- * Enhanced UI with:
- *  - Frosted glass overlay
- *  - Animated entrance
- *  - Category headers (Online / Offline)
- *  - Smooth keyboard navigation highlight
- *  - 400ms debounced search
- *  - Double-click protection
- */
+// Global in-memory cache for workspace DM contacts so modal opens instantly on 2nd+ open
+const dmContactsCacheByWorkspace = new Map();
+const DM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+
 export default function UserPickerModal({ onClose, onSelect }) {
   const { user } = useAuthStore()
   const { channels, createDM } = useChannelStore()
+  
+  // Get active workspace ID to scope cache
+  const activeWorkspaceId = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('chat_active_workspace_id');
+      if (stored) return stored;
+    } catch (e) {
+      /* ignore */
+    }
+    return 'default';
+  }, []);
+
+  // Retrieve cached contacts for this workspace
+  const cachedEntry = dmContactsCacheByWorkspace.get(activeWorkspaceId);
+  const initialUsers = (cachedEntry && (Date.now() - cachedEntry.timestamp < DM_CACHE_TTL_MS))
+    ? cachedEntry.contacts
+    : [];
+
   const [searchQuery, setSearchQuery] = useState('')
-  const [storedUsers, setUsers] = useState([]);
-  const users = useLiveProfileData(storedUsers);
-  const [isLoading, setIsLoading] = useState(false)
+  const [storedUsers, setUsers] = useState(initialUsers)
+  const users = useLiveProfileData(storedUsers)
+  
+  // If we already have cached contacts, start with isLoading = false so it renders instantly
+  const [isLoading, setIsLoading] = useState(initialUsers.length === 0)
   const [isCreating, setIsCreating] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [flowTaskFetchFailed, setFlowTaskFetchFailed] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  
   const searchInputRef = useRef(null)
   const listRef = useRef(null)
   const debounceRef = useRef(null)
+  const isMountedRef = useRef(true)
+  const hasFetchedRef = useRef(initialUsers.length > 0)
 
   useEffect(() => {
+    isMountedRef.current = true
     const handleOnline = () => setIsOffline(false)
     const handleOffline = () => setIsOffline(true)
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
     return () => {
+      isMountedRef.current = false
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
     }
+  }, [])
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (isMountedRef.current) searchInputRef.current?.focus()
+    })
   }, [])
 
   const dmMatchesTarget = useCallback((channel, target) => {
@@ -60,45 +84,72 @@ export default function UserPickerModal({ onClose, onSelect }) {
     return ids.has(target?.toString?.() || String(target))
   }, [])
 
-  useEffect(() => {
-    requestAnimationFrame(() => setMounted(true))
-    searchInputRef.current?.focus()
-  }, [])
+  const fetchUsers = useCallback(async (query, isBackgroundRefresh = false) => {
+    if (!isBackgroundRefresh && storedUsers.length === 0) {
+      setIsLoading(true)
+    }
+
+    try {
+      const { data } = await userAPI.getDMContacts(query)
+      if (!isMountedRef.current) return
+
+      const contacts = data.data?.contacts || []
+      setFlowTaskFetchFailed(Boolean(data.data?.meta?.flowTaskFetchFailed))
+
+      // Hydrate presence store
+      usePresenceStore.getState().updateFromUsers(contacts)
+
+      setUsers(contacts)
+      setSelectedIndex(0)
+
+      // Cache empty-query results for instant subsequent opens
+      if (!query.trim() && contacts.length > 0) {
+        dmContactsCacheByWorkspace.set(activeWorkspaceId, {
+          contacts,
+          timestamp: Date.now(),
+        })
+      }
+      hasFetchedRef.current = true
+    } catch (error) {
+      logger.error('Failed to fetch DM contacts:', error)
+      if (isMountedRef.current) {
+        setFlowTaskFetchFailed(false)
+        if (!hasFetchedRef.current) {
+          setUsers([])
+        }
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsLoading(false)
+      }
+    }
+  }, [activeWorkspaceId, storedUsers.length])
 
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
     if (isOffline) {
       setIsLoading(false)
       return
     }
-    if (!searchQuery.trim()) {
-      debounceRef.current = setTimeout(() => fetchUsers(''), 100)
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    const query = searchQuery.trim()
+    if (!query) {
+      const isBackground = initialUsers.length > 0
+      debounceRef.current = setTimeout(() => {
+        fetchUsers('', isBackground)
+      }, 50)
       return
     }
-    debounceRef.current = setTimeout(() => fetchUsers(searchQuery.trim()), 400)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [searchQuery, isOffline])
 
-  const fetchUsers = async (query) => {
-    setIsLoading(true)
-    try {
-      const { data } = await userAPI.getDMContacts(query)
-      const contacts = data.data?.contacts || []
-      setFlowTaskFetchFailed(Boolean(data.data?.meta?.flowTaskFetchFailed))
-      
-      // Hydrate presence store
-      usePresenceStore.getState().updateFromUsers(contacts)
-      
-      setUsers(contacts)
-      setSelectedIndex(0)
-    } catch (error) {
-      logger.error('Failed to fetch DM contacts:', error)
-      setFlowTaskFetchFailed(false)
-      setUsers([])
-    } finally {
-      setIsLoading(false)
+    debounceRef.current = setTimeout(() => {
+      fetchUsers(query, false)
+    }, 250)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }
+  }, [searchQuery, isOffline, fetchUsers, initialUsers.length])
 
   const handleSelectUser = useCallback(async (targetUser) => {
     if (isCreating) return
@@ -132,38 +183,39 @@ export default function UserPickerModal({ onClose, onSelect }) {
       toast.error(error.response?.data?.error?.message || 'Failed to start conversation')
       setIsCreating(false)
     }
-  }, [isCreating, channels, createDM, onSelect])
+  }, [isCreating, channels, createDM, onSelect, user])
+
+  // Local filtering for instant search results
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim()
+    if (!q) return users
+    return users.filter((u) => {
+      const name = (u.name || '').toLowerCase()
+      const email = (u.email || '').toLowerCase()
+      const role = (u.role || '').toLowerCase()
+      const title = (u.title || '').toLowerCase()
+      return name.includes(q) || email.includes(q) || role.includes(q) || title.includes(q)
+    })
+  }, [users, searchQuery])
 
   const presenceMap = usePresenceStore((state) => state.presence)
-  const isUserOnline = (u) => {
+  const isUserOnline = useCallback((u) => {
     const status = presenceMap[u.chatUserId] || presenceMap[u.flowTaskUserId] || presenceMap[u._id]
     return status === 'online'
-  }
+  }, [presenceMap])
 
-  const onlineList = users.filter(isUserOnline)
-  const offlineList = users.filter(u => !isUserOnline(u))
+  const onlineList = useMemo(() => filteredUsers.filter(isUserOnline), [filteredUsers, isUserOnline])
+  const offlineList = useMemo(() => filteredUsers.filter(u => !isUserOnline(u)), [filteredUsers, isUserOnline])
 
-  // Cached Channels & DMs when offline/fetch fails
-  const showCached = isOffline || (users.length === 0 && !isLoading)
+  const flatItems = useMemo(() => [...onlineList, ...offlineList], [onlineList, offlineList])
 
-  const cachedChannels = useMemo(() => {
-    return channels.filter(c => c.type !== 'dm' && c.type !== 'self' && !c.isArchived)
-  }, [channels])
-
+  // Fallback cached DMs when offline and no users available
   const cachedDMs = useMemo(() => {
-    return channels.filter(c => c.type === 'dm' || c.type === 'self')
-  }, [channels])
-
-  const filteredCachedChannels = useMemo(() => {
+    if (!isOffline && users.length > 0) return []
     const q = searchQuery.toLowerCase().trim()
-    if (!q) return cachedChannels
-    return cachedChannels.filter(c => c.name && c.name.toLowerCase().includes(q))
-  }, [cachedChannels, searchQuery])
-
-  const filteredCachedDMs = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim()
-    if (!q) return cachedDMs
-    return cachedDMs.filter(c => {
+    const dms = channels.filter(c => c.type === 'dm' || c.type === 'self')
+    if (!q) return dms
+    return dms.filter(c => {
       const nameMatch = c.name && c.name.toLowerCase().includes(q)
       if (nameMatch) return true
       if (c.dmParticipantNames && Array.isArray(c.dmParticipantNames)) {
@@ -171,19 +223,14 @@ export default function UserPickerModal({ onClose, onSelect }) {
       }
       return false
     })
-  }, [cachedDMs, searchQuery])
-
-  const flatItems = showCached ? [...filteredCachedChannels, ...filteredCachedDMs] : [...onlineList, ...offlineList]
-
-  const handleSelectCachedChannel = useCallback((channel) => {
-    onSelect(channel._id)
-  }, [onSelect])
+  }, [channels, isOffline, users.length, searchQuery])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') { onClose(); return }
+    const items = flatItems.length > 0 ? flatItems : cachedDMs
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      const next = Math.min(selectedIndex + 1, flatItems.length - 1)
+      const next = Math.min(selectedIndex + 1, items.length - 1)
       setSelectedIndex(next)
       scrollToSelected(next)
     }
@@ -193,12 +240,12 @@ export default function UserPickerModal({ onClose, onSelect }) {
       setSelectedIndex(prev)
       scrollToSelected(prev)
     }
-    if (e.key === 'Enter' && flatItems[selectedIndex]) {
+    if (e.key === 'Enter' && items[selectedIndex]) {
       e.preventDefault()
-      if (showCached) {
-        handleSelectCachedChannel(flatItems[selectedIndex])
-      } else {
+      if (flatItems[selectedIndex]) {
         handleSelectUser(flatItems[selectedIndex])
+      } else if (cachedDMs[selectedIndex]) {
+        onSelect(cachedDMs[selectedIndex]._id)
       }
     }
   }
@@ -219,6 +266,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
           to   { opacity: 1; transform: translateY(0)   scale(1) }
         }
         @keyframes upm-spin { to { transform: rotate(360deg) } }
+        @keyframes upm-pulse { 0%, 100% { opacity: 0.35 } 50% { opacity: 0.75 } }
         .upm-overlay {
           position: fixed; inset: 0; z-index: 9999;
           display: flex; align-items: center; justify-content: center;
@@ -335,7 +383,6 @@ export default function UserPickerModal({ onClose, onSelect }) {
         .upm-user-name {
           font-size: 13px; font-weight: 600;
           color: var(--text-white, #f1f1f1);
-          truncate: clip;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           max-width: 180px;
         }
@@ -373,6 +420,30 @@ export default function UserPickerModal({ onClose, onSelect }) {
         }
         .upm-empty-title { font-size: 13px; font-weight: 600; color: var(--text-secondary, #aaa); }
         .upm-empty-sub { font-size: 12px; color: var(--text-muted, #666); }
+        
+        /* Skeleton loading styles */
+        .upm-skeleton-list {
+          padding: 4px 0;
+          display: flex; flex-direction: column; gap: 4px;
+        }
+        .upm-skeleton-row {
+          display: flex; align-items: center; gap: 11px;
+          padding: 7px 16px;
+        }
+        .upm-skeleton-avatar {
+          width: 34px; height: 34px; border-radius: 50%;
+          background: rgba(255,255,255,0.08); flex-shrink: 0;
+          animation: upm-pulse 1.4s infinite ease-in-out;
+        }
+        .upm-skeleton-text-wrap {
+          flex: 1; display: flex; flex-direction: column; gap: 6px;
+        }
+        .upm-skeleton-bar {
+          border-radius: 4px;
+          background: rgba(255,255,255,0.08);
+          animation: upm-pulse 1.4s infinite ease-in-out;
+        }
+        
         .upm-footer {
           display: flex; align-items: center; justify-content: center; gap: 8px;
           padding: 12px 20px;
@@ -386,15 +457,6 @@ export default function UserPickerModal({ onClose, onSelect }) {
           border-top-color: var(--accent-primary, #5865f2);
           animation: upm-spin 0.7s linear infinite;
           flex-shrink: 0;
-        }
-        .upm-kbd {
-          display: inline-flex; align-items: center; justify-content: center;
-          font-size: 9px; font-weight: 600;
-          padding: 1px 5px; border-radius: 4px;
-          background: rgba(255,255,255,0.07);
-          border: 1px solid rgba(255,255,255,0.1);
-          color: var(--text-muted, #666);
-          font-family: monospace;
         }
       `}</style>
 
@@ -442,87 +504,58 @@ export default function UserPickerModal({ onClose, onSelect }) {
             </div>
           </div>
 
-          {/* ── User/Channel list ── */}
+          {/* ── User list ── */}
           <div className="upm-list" ref={listRef}>
 
-            {/* Loading skeleton */}
+            {/* Stable Skeleton loading state */}
             {isLoading && users.length === 0 && (
-              <div className="upm-empty">
-                <div className="upm-spinner" style={{ width: 22, height: 22 }} />
+              <div className="upm-skeleton-list">
+                <div className="upm-section-label">
+                  <span className="upm-skeleton-bar" style={{ width: 70, height: 10 }} />
+                </div>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="upm-skeleton-row">
+                    <div className="upm-skeleton-avatar" />
+                    <div className="upm-skeleton-text-wrap">
+                      <div className="upm-skeleton-bar" style={{ width: `${50 + (i % 3) * 15}%`, height: 13 }} />
+                      <div className="upm-skeleton-bar" style={{ width: `${35 + (i % 2) * 20}%`, height: 10 }} />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* Cached content when offline/fallback */}
-            {showCached && (
+            {/* Offline fallback (cached DMs) */}
+            {isOffline && users.length === 0 && cachedDMs.length > 0 && (
               <>
-                {/* Channels section */}
-                {filteredCachedChannels.length > 0 && (
-                  <>
-                    <div className="upm-section-label">
-                      Channels — {filteredCachedChannels.length}
+                <div className="upm-section-label">
+                  Recent Direct Messages — {cachedDMs.length}
+                </div>
+                {cachedDMs.map((c, idx) => (
+                  <button
+                    key={c._id}
+                    className={`upm-user-btn${idx === selectedIndex ? ' is-selected' : ''}`}
+                    onClick={() => onSelect(c._id)}
+                    disabled={isCreating}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                  >
+                    <div className="upm-avatar-wrap">
+                      <Avatar member={{ name: c.name, avatar: c.avatar }} size={34} showStatus={false} />
                     </div>
-                    {filteredCachedChannels.map((c) => {
-                      const flatIdx = flatItems.indexOf(c)
-                      return (
-                        <CachedItemRow
-                          key={c._id}
-                          item={c}
-                          isSelected={flatIdx === selectedIndex}
-                          isCreating={isCreating}
-                          onSelect={() => handleSelectCachedChannel(c)}
-                          onHover={() => setSelectedIndex(flatIdx)}
-                        />
-                      )
-                    })}
-                  </>
-                )}
-
-                {/* Divider between sections */}
-                {filteredCachedChannels.length > 0 && filteredCachedDMs.length > 0 && (
-                  <div className="upm-section-divider" />
-                )}
-
-                {/* DMs section */}
-                {filteredCachedDMs.length > 0 && (
-                  <>
-                    <div className="upm-section-label">
-                      Direct Messages — {filteredCachedDMs.length}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span className="upm-user-name">{c.name}</span>
+                      {c.lastMessagePreview && <span className="upm-user-sub">{c.lastMessagePreview}</span>}
                     </div>
-                    {filteredCachedDMs.map((c) => {
-                      const flatIdx = flatItems.indexOf(c)
-                      return (
-                        <CachedItemRow
-                          key={c._id}
-                          item={c}
-                          isSelected={flatIdx === selectedIndex}
-                          isCreating={isCreating}
-                          onSelect={() => handleSelectCachedChannel(c)}
-                          onHover={() => setSelectedIndex(flatIdx)}
-                        />
-                      )
-                    })}
-                  </>
-                )}
-
-                {/* Empty State for cached list */}
-                {filteredCachedChannels.length === 0 && filteredCachedDMs.length === 0 && (
-                  <div className="upm-empty">
-                    <div className="upm-empty-icon">
-                      <User size={20} style={{ color: 'var(--text-muted, #666)' }} />
-                    </div>
-                    <p className="upm-empty-title">
-                      {searchQuery ? 'No matching channels or DMs' : 'No conversations cached'}
-                    </p>
-                  </div>
-                )}
+                  </button>
+                ))}
               </>
             )}
 
-            {/* Online/Offline list when online (showCached is false) */}
-            {!showCached && (
+            {/* Online/Offline Member list */}
+            {!isLoading || users.length > 0 ? (
               <>
                 {/* Empty state */}
-                {!isLoading && users.length === 0 && (
+                {!isLoading && flatItems.length === 0 && cachedDMs.length === 0 && (
                   <div className="upm-empty">
                     <div className="upm-empty-icon">
                       <User size={20} style={{ color: 'var(--text-muted, #666)' }} />
@@ -549,7 +582,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
                       const existingDM = channels.find((c) => dmMatchesTarget(c, uId))
                       return (
                         <UserRow
-                          key={u.chatUserId || u.flowTaskUserId || u.email}
+                          key={u.chatUserId || u.flowTaskUserId || u.email || flatIdx}
                           u={u}
                           isSelected={flatIdx === selectedIndex}
                           isOnline
@@ -563,7 +596,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
                   </>
                 )}
 
-                {/* Divider between sections */}
+                {/* Divider between online and offline sections */}
                 {onlineList.length > 0 && offlineList.length > 0 && (
                   <div className="upm-section-divider" />
                 )}
@@ -581,7 +614,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
                       const existingDM = channels.find((c) => dmMatchesTarget(c, uId))
                       return (
                         <UserRow
-                          key={u.chatUserId || u.flowTaskUserId || u.email}
+                          key={u.chatUserId || u.flowTaskUserId || u.email || flatIdx}
                           u={u}
                           isSelected={flatIdx === selectedIndex}
                           isOnline={false}
@@ -595,17 +628,14 @@ export default function UserPickerModal({ onClose, onSelect }) {
                   </>
                 )}
               </>
-            )}
+            ) : null}
           </div>
 
           {/* ── Creating footer ── */}
-          {isCreating ? (
+          {isCreating && (
             <div className="upm-footer">
               <div className="upm-spinner" />
               Starting conversation…
-            </div>
-          ) : (flatItems.length > 0 || users.length > 0) && (
-            <div className="upm-footer" style={{ gap: 6 }}>
             </div>
           )}
         </div>
@@ -614,7 +644,7 @@ export default function UserPickerModal({ onClose, onSelect }) {
   )
 }
 
-/* ─── Extracted row component for cleanliness ─── */
+/* ─── User row sub-component ─── */
 function UserRow({ u, isSelected, isOnline, existingDM, isCreating, onSelect, onHover }) {
   u = useLiveProfileData(u);
   return (
@@ -652,50 +682,6 @@ function UserRow({ u, isSelected, isOnline, existingDM, isCreating, onSelect, on
           Existing
         </span>
       )}
-    </button>
-  )
-}
-
-/* ─── Extracted row component for cached channel/DM ─── */
-function CachedItemRow({ item, isSelected, isCreating, onSelect, onHover }) {
-  item = useLiveProfileData(item);
-  const isDM = item.type === 'dm' || item.type === 'self'
-  return (
-    <button
-      className={`upm-user-btn${isSelected ? ' is-selected' : ''}`}
-      onClick={onSelect}
-      disabled={isCreating}
-      onMouseEnter={onHover}
-    >
-      {/* Icon or Avatar */}
-      <div className="upm-avatar-wrap">
-        {isDM ? (
-          <Avatar
-            member={{ name: item.name, avatar: item.avatar }}
-            size={34}
-            showStatus={false}
-          />
-        ) : (
-          <div style={{
-            width: 34, height: 34, borderRadius: '8px',
-            background: 'rgba(255,255,255,0.05)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px solid rgba(255,255,255,0.08)'
-          }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-muted, #888)' }}>#</span>
-          </div>
-        )}
-      </div>
-
-      {/* Info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="upm-user-name">{item.name}</span>
-        </div>
-        {item.lastMessagePreview && (
-          <span className="upm-user-sub">{item.lastMessagePreview}</span>
-        )}
-      </div>
     </button>
   )
 }

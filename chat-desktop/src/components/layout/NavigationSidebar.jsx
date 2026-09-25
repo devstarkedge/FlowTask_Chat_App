@@ -1050,7 +1050,7 @@ function SavedMessagesItem({
           <span
             className="text-[11px]"
             style={{
-              color: isActive ? "rgba(255,255,255,0.7)" : "var(--text-muted)",
+              color: isActive ? "rgba(255,255,255,0.9)" : "var(--sidebar-text-dim, var(--text-timestamp))",
             }}
           >
             {timeAgo}
@@ -1135,7 +1135,7 @@ function DMListItem({
           <span
             className="text-[11px]"
             style={{
-              color: isActive ? "rgba(255,255,255,0.7)" : "var(--text-muted)",
+              color: isActive ? "rgba(255,255,255,0.9)" : "var(--sidebar-text-dim, var(--text-timestamp))",
             }}
           >
             {timeAgo}

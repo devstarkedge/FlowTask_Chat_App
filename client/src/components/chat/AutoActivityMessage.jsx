@@ -163,7 +163,7 @@ export default function AutoActivityMessage({ message }) {
             <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}>
               {titleText}
             </span>
-            <span className="activity-timestamp" style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+            <span className="activity-timestamp" style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-timestamp)' }}>
               {formatTime(message.createdAt)}
             </span>
           </div>

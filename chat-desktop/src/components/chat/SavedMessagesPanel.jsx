@@ -557,7 +557,7 @@ export default function SavedMessagesPanel({ onClose, onJumpToMessage }) {
           align-items: center;
           gap: 3px;
           font-size: 11px;
-          color: var(--text-muted);
+          color: var(--text-timestamp, var(--text-muted));
           white-space: nowrap;
         }
 

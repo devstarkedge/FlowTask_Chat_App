@@ -296,7 +296,7 @@ export default function PinnedMessagesPanel({ channelId, onClose }) {
         }
         .pm-author-time {
           font-size: 11px;
-          color: var(--text-muted);
+          color: var(--text-timestamp, var(--text-muted));
           white-space: nowrap;
           flex-shrink: 0;
         }

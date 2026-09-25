@@ -733,9 +733,10 @@ const MessageItem = memo(
       return (
         <div
           className="flex items-center justify-end gap-0.5 mt-1"
-          style={{ opacity: 0.75, minHeight: 14 }}
+          className="flex items-center justify-end gap-0.5 mt-1 message-bubble-status"
+          style={{ opacity: 0.9, minHeight: 14 }}
         >
-          <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+          <span className="message-timestamp" style={{ fontSize: 10, color: "var(--text-timestamp)" }}>
             {time}
           </span>
           {renderDeliveryStatus()}
@@ -998,7 +999,7 @@ const MessageItem = memo(
             ) : (
               <span
                 className="flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: "var(--text-muted)", height: 36, fontSize: 10 }}
+                style={{ color: "var(--text-timestamp)", height: 36, fontSize: 10 }}
               >
                 {format(new Date(message.createdAt), "h:mm")}
               </span>

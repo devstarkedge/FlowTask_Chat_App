@@ -6734,97 +6734,230 @@ body {
 
 /* Status modal styles */
 
+/* Status modal styles */
 .status-modal {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-modal);
-  width: 520px;
-  max-width: calc(100% - 48px);
-  max-height: 60vh;
+  border-radius: var(--radius-xl, 16px);
+  box-shadow: var(--shadow-modal, 0 20px 50px rgba(0,0,0,0.3));
+  width: min(92vw, 440px);
+  max-width: 440px;
+  max-height: min(90vh, 640px);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   height: auto !important;
 }
 
 .status-modal .panel-header {
-  padding: 12px 16px;
+  padding: 18px 20px 12px;
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 56px;
+  border-bottom: 1px solid transparent;
   flex: 0 0 auto;
 }
 
 .status-modal .panel-body {
-  padding: 12px 16px;
+  padding: 4px 20px 20px;
   overflow-y: auto;
-  /* reserve space for header and footer (approx) */
-  max-height: calc(60vh - 56px - 64px);
-  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1 1 auto;
 }
 
 .status-modal .status-input {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
-  padding: 8px;
-  min-height: 40px;
+  border-radius: var(--radius-lg, 10px);
+  padding: 4px 10px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: border-color var(--transition-fast, 0.15s), box-shadow var(--transition-fast, 0.15s);
+}
+
+.status-modal .status-input:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 20%, transparent);
 }
 
 .status-modal .status-input .emoji-btn {
-  background: var(--bg-hover);
+  background: transparent;
   border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.status-modal .status-input .emoji-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .status-modal .status-input .status-input-field {
-  color: var(--text-white);
-}
-
-.status-modal .status-input .status-input-field:focus {
+  color: var(--text-white, var(--text-primary));
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
   outline: none;
-  box-shadow: 0 0 0 4px rgba(78, 124, 255, 0.08);
-  border-color: var(--border-focus);
+  font-size: 14px;
 }
 
 .status-modal .panel-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
 }
 
 .status-modal .preset-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 6px;
+  gap: 12px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: var(--radius-md, 8px);
   background: transparent;
   border: none;
   text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s ease;
+}
+
+.status-modal .preset-item:hover {
+  background: var(--bg-hover);
+}
+
+.status-modal .preset-emoji {
+  width: 24px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.status-modal .preset-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.status-modal .preset-item:hover .preset-text {
+  color: var(--text-primary);
 }
 
 .status-modal .duration-option {
-  padding: 6px 10px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: 9999px;
-  font-size: 12px;
-  border: 1px solid var(--border-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border-secondary, var(--border-primary));
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.status-modal .duration-option:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-primary);
 }
 
 .status-modal .duration-option.selected {
   background: var(--accent-primary);
-  color: white;
+  color: #ffffff;
   border-color: var(--accent-primary);
+  font-weight: 600;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-primary) 30%, transparent);
 }
 
 .status-modal .panel-footer {
-  padding: 12px 16px;
+  padding: 14px 20px;
   border-top: 1px solid var(--border-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex: 0 0 auto;
+}
+
+.status-modal .clear-btn {
+  color: var(--status-error, #ef4444);
+  background: transparent;
+  border: none;
+  padding: 6px 0;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.status-modal .clear-btn:hover {
+  opacity: 0.8;
+}
+
+.status-modal .clear-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status-modal .action-btn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-md, 8px);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.status-modal .cancel-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+.status-modal .cancel-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.status-modal .save-btn {
+  background: var(--accent-primary);
+  color: white;
+  padding: 0 20px;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+.status-modal .save-btn:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.status-modal .save-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* Responsive: compact modal on small screens */
@@ -6833,70 +6966,19 @@ body {
     width: calc(100% - 24px);
     max-width: calc(100% - 24px);
     max-height: calc(100vh - 24px);
-    border-radius: 10px;
   }
 
   .status-modal .panel-body {
-    max-height: calc(100vh - 56px - 64px - 24px);
-    padding: 10px 12px;
+    padding: 4px 14px 16px;
   }
 
   .status-modal .panel-footer {
-    padding: 10px 12px;
-  }
-
-  .status-modal .preset-item {
-    padding: 8px 10px;
+    padding: 12px 14px;
   }
 }
 
-/* Overlay adjustments for mobile to pin modal near top */
 .status-modal-overlay {
   padding: 12px;
-}
-
-@media (max-width: 640px) {
-  .status-modal-overlay {
-    align-items: flex-start;
-    padding-top: 12px;
-    overflow-y: auto;
-  }
-}
-
-.status-modal .clear-btn {
-  color: var(--status-error);
-  background: transparent;
-  border: none;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.status-modal .clear-btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.status-modal .action-btn {
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-}
-
-.status-modal .cancel-btn {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-}
-
-.status-modal .save-btn {
-  background: var(--accent-primary);
-  color: white;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 
 /* Page tab bar (used on Later and similar pages) */

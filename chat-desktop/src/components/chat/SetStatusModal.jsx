@@ -55,14 +55,12 @@ export default function SetStatusModal({ onClose }) {
     if (saving) return
 
     if (!emoji && !text.trim()) {
-      // Reuse clear flow which handles saving state, toast, fetch and close
       await handleClear()
       return
     }
 
     setSaving(true)
     try {
-      // Convert 'today' preset into minutes until end of day for the API
       const computeDuration = () => {
         if (!duration) return undefined
         if (duration === 'today') {
@@ -118,151 +116,153 @@ export default function SetStatusModal({ onClose }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center status-modal-overlay"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
+      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md rounded-xl shadow-2xl flex flex-col panel status-modal">
-          {/* Header */}
-          <div className="panel-header">
-            <h2 className="text-base font-semibold" style={{ color: 'var(--text-white)' }}>
-              Set a status
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg transition-colors cursor-pointer"
-              style={{ color: 'var(--text-muted)' }}
-              title="Close"
-            >
-              <X size={18} />
-            </button>
-          </div>
+      <div className="w-full max-w-md rounded-2xl shadow-2xl flex flex-col panel status-modal">
+        {/* Header */}
+        <div className="panel-header flex items-center justify-between">
+          <h2 className="text-base font-bold" style={{ color: 'var(--text-white)' }}>
+            Set a status
+          </h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer hover:bg-[var(--bg-hover)]"
+            style={{ color: 'var(--text-muted)' }}
+            title="Close"
+            aria-label="Close modal"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
+        {/* Modal Body */}
+        <div className="panel-body">
           {/* Status Input */}
-          <div className="panel-body space-y-4">
-            <div className="status-input flex items-center gap-2 px-3 py-2.5 rounded-lg">
-              <div className="relative">
-                <button
-                  onClick={() => setShowEmojiPicker((s) => !s)}
-                  type="button"
-                  className="emoji-btn w-8 h-8 flex items-center justify-center rounded-md transition-colors cursor-pointer"
-                  title="Pick emoji"
-                >
-                  {emoji ? (
-                    <span className="text-lg">{emoji}</span>
-                  ) : (
-                    <Smile size={18} style={{ color: 'var(--text-muted)' }} />
-                  )}
-                </button>
-                {showEmojiPicker && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: 4 }}>
-                    <EmojiPicker
-                      onSelect={(e) => { setEmoji(e); setShowEmojiPicker(false) }}
-                      onClose={() => setShowEmojiPicker(false)}
-                      position="bottom"
-                    />
-                  </div>
+          <div className="status-input">
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setShowEmojiPicker((s) => !s)}
+                type="button"
+                className="emoji-btn"
+                title="Pick emoji"
+              >
+                {emoji ? (
+                  <span className="text-lg leading-none">{emoji}</span>
+                ) : (
+                  <Smile size={18} style={{ color: 'var(--text-muted)' }} />
                 )}
-              </div>
-              <input
-                ref={textRef}
-                type="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="What's your status?"
-                maxLength={100}
-                className="status-input-field flex-1 bg-transparent border-none outline-none text-sm"
-                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              />
-              {(emoji || text) && (
-                <button
-                  onClick={() => { setEmoji(''); setText('') }}
-                  type="button"
-                  className="p-1 rounded cursor-pointer"
-                  style={{ color: 'var(--text-muted)' }}
-                  title="Clear"
-                >
-                  <X size={14} />
-                </button>
+              </button>
+              {showEmojiPicker && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: 4 }}>
+                  <EmojiPicker
+                    onSelect={(e) => { setEmoji(e); setShowEmojiPicker(false) }}
+                    onClose={() => setShowEmojiPicker(false)}
+                    position="bottom"
+                  />
+                </div>
               )}
             </div>
+            <input
+              ref={textRef}
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="What's your status?"
+              maxLength={100}
+              className="status-input-field"
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            />
+            {(emoji || text) && (
+              <button
+                onClick={() => { setEmoji(''); setText('') }}
+                type="button"
+                className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[var(--bg-hover)] cursor-pointer shrink-0 transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                title="Clear input"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
-            {/* Presets */}
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
-                Suggestions
-              </p>
-              <div className="panel-list">
-                {PRESET_STATUSES.map((preset) => (
-                  <button
-                    key={preset.text}
-                    onClick={() => selectPreset(preset)}
-                    type="button"
-                    className="preset-item panel-item"
-                  >
-                    <span className="text-base">{preset.emoji}</span>
-                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{preset.text}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Duration */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-2">
-                <Clock size={12} style={{ color: 'var(--text-muted)' }} />
-                <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                  Clear after
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {DURATION_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.label}
-                    onClick={() => setDuration(opt.value)}
-                    type="button"
-                    className={`duration-option ${duration === opt.value ? 'selected' : ''}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+          {/* Suggestions */}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider mb-2.5" style={{ color: 'var(--text-muted)' }}>
+              Suggestions
+            </p>
+            <div className="panel-list">
+              {PRESET_STATUSES.map((preset) => (
+                <button
+                  key={preset.text}
+                  onClick={() => selectPreset(preset)}
+                  type="button"
+                  className="preset-item"
+                >
+                  <span className="preset-emoji">{preset.emoji}</span>
+                  <span className="preset-text">{preset.text}</span>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="panel-footer">
-            <div>
-              {hasExistingStatus && (
-                <button
-                  onClick={handleClear}
-                  disabled={saving}
-                  type="button"
-                  className="clear-btn"
-                >
-                  Clear status
-                </button>
-              )}
+          {/* Clear After Duration */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <Clock size={13} style={{ color: 'var(--text-muted)' }} />
+              <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                Clear after
+              </p>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={onClose}
-                type="button"
-                className="action-btn cancel-btn"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                type="button"
-                className="action-btn save-btn"
-              >
-                {saving && <Loader size={14} />}
-                <span>Save</span>
-              </button>
+            <div className="flex flex-wrap gap-2">
+              {DURATION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => setDuration(opt.value)}
+                  type="button"
+                  className={`duration-option ${duration === opt.value ? 'selected' : ''}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <div className="panel-footer">
+          <div>
+            {hasExistingStatus && (
+              <button
+                onClick={handleClear}
+                disabled={saving}
+                type="button"
+                className="clear-btn"
+              >
+                Clear status
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={onClose}
+              type="button"
+              className="action-btn cancel-btn"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              type="button"
+              className="action-btn save-btn"
+            >
+              {saving && <Loader size={14} />}
+              <span>Save</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

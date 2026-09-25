@@ -241,12 +241,6 @@ export default function UserProfileMenu({
           </p>
           <div className="flex items-center gap-1.5">
             <span
-              className="w-2 h-2 rounded-full"
-              style={{
-                background: STATUS_COLORS[userStatus] || "var(--status-online)",
-              }}
-            />
-            <span
               className="text-xs"
               style={{ color: "var(--text-secondary)" }}
             >

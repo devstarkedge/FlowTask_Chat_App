@@ -2068,8 +2068,6 @@ function GlobalTopBar({
         </div>
 
         <div className="cl-topbar__actions">
-          /* Bell icon removed from header */
-
           <button
             className="cl-topbar__action-btn cl-topbar__win-btn"
             onClick={onOpenHelp}

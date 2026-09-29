@@ -299,19 +299,39 @@ export default function ChatPanel({
       {showConnectionBanner && connectionStatus === "connecting" && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: "var(--warning-color)", color: "var(--text-inverse)" }}
+          style={{ background: "var(--warning-color, #f59e0b)", color: "#000" }}
         >
-          <Loader size={12} />
+          <Loader size={12} className="animate-spin" />
           Reconnecting…
         </div>
       )}
-      {showConnectionBanner && connectionStatus === "disconnected" && (
+      {showConnectionBanner && (connectionStatus === "disconnected" || connectionStatus === "offline") && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: "var(--danger-color)", color: "var(--text-white)" }}
+          style={{ background: "var(--danger-color, #ef4444)", color: "#fff" }}
         >
           <WifiOff size={12} />
           Connection lost. Trying to reconnect…
+        </div>
+      )}
+      {connectionStatus === "recovery_required" && (
+        <div
+          className="flex items-center justify-between px-4 py-2 text-xs font-medium animate-fade-in shadow-sm"
+          style={{ background: "#f59e0b", color: "#000" }}
+        >
+          <div className="flex items-center gap-2">
+            <WifiOff size={14} />
+            <span className="font-semibold">Connection restored. Please refresh your application to continue.</span>
+          </div>
+          <button
+            onClick={() => {
+              console.warn('[REFRESH] window.location.reload triggered by manual recovery button click');
+              window.location.reload();
+            }}
+            className="px-3 py-1 rounded bg-black text-white hover:bg-gray-800 text-xs font-semibold cursor-pointer transition-colors"
+          >
+            Refresh
+          </button>
         </div>
       )}
 

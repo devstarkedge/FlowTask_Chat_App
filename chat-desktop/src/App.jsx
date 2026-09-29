@@ -2,6 +2,7 @@ import { useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
+import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
 
 // Eager load workspace layout (most common route)
@@ -32,8 +33,41 @@ function PageFallback() {
 }
 
 /**
+ * Smart redirect component for authenticated users navigating to root '/' or catch-all '*'.
+ * Automatically restores last active workspace if valid, or opens Workspace Selector.
+ * Displays loading fallback during auth & workspace state restoration to avoid UI flicker.
+ */
+function AuthenticatedDefaultRedirect() {
+  const { user } = useAuthStore()
+  const { activeWorkspaceId, workspaces, isLoading, isWorkspacesLoaded } = useWorkspaceStore()
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  // Show splash loader while workspaces are being restored
+  if (isLoading || !isWorkspacesLoaded) {
+    return <PageFallback />
+  }
+
+  const savedId = getSavedWorkspaceId(user._id)
+  const targetId = activeWorkspaceId || savedId
+  const validWorkspace = targetId && workspaces.find((w) => w._id === targetId)
+
+  if (validWorkspace) {
+    return <Navigate to={`/workspace/${validWorkspace._id}`} replace />
+  }
+
+  if (workspaces.length === 1) {
+    return <Navigate to={`/workspace/${workspaces[0]._id}`} replace />
+  }
+
+  return <Navigate to="/select-workspace" replace />
+}
+
+/**
  * Smart redirect for authenticated users landing on auth pages (login, register, etc.).
- * Checks for pending invite or explicit redirect param before falling back to workspace selector.
+ * Checks for pending invite or explicit redirect param before falling back to default redirect.
  */
 function SmartAuthRedirect() {
   const [searchParams] = useSearchParams()
@@ -47,7 +81,7 @@ function SmartAuthRedirect() {
   if (redirectTo) {
     return <Navigate to={redirectTo} replace />
   }
-  return <Navigate to="/select-workspace" replace />
+  return <AuthenticatedDefaultRedirect />
 }
 
 function App() {
@@ -85,10 +119,10 @@ function App() {
     <Suspense fallback={<PageFallback />}>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={!user ? <LandingPage /> : <Navigate to="/select-workspace" />} />
+        <Route path="/" element={!user ? <LandingPage /> : <AuthenticatedDefaultRedirect />} />
         <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/login" element={!user ? <LoginPage /> : <AuthenticatedDefaultRedirect />} />
+        <Route path="/register" element={!user ? <RegisterPage /> : <AuthenticatedDefaultRedirect />} />
         <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <SmartAuthRedirect />} />
         <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <SmartAuthRedirect />} />
         <Route path="/delete-account" element={<AccountDeletionPage />} />
@@ -104,8 +138,8 @@ function App() {
         <Route path="/workspace/:workspaceId/setup" element={user ? <WorkspaceSetupWizard /> : <Navigate to="/login" />} />
         <Route path="/workspace/:workspaceId/*" element={user ? <WorkspaceLayout /> : <Navigate to="/login" />} />
 
-        {/* Legacy /chat redirect → workspace selector */}
-        <Route path="/chat/*" element={user ? <Navigate to="/select-workspace" /> : <Navigate to="/login" />} />
+        {/* Legacy /chat redirect */}
+        <Route path="/chat/*" element={user ? <AuthenticatedDefaultRedirect /> : <Navigate to="/login" />} />
 
         {/* Canvas deep-link — loads canvas and redirects to workspace layout */}
         <Route path="/canvas/:canvasId" element={user ? <CanvasDeepLink /> : <Navigate to="/login" />} />
@@ -114,7 +148,7 @@ function App() {
         {import.meta.env.DEV && (
           <Route path="/dev/template" element={<DevTemplateSelector />} />
         )}
-        <Route path="*" element={<Navigate to={user ? '/select-workspace' : '/'} />} />
+        <Route path="*" element={!user ? <LandingPage /> : <AuthenticatedDefaultRedirect />} />
       </Routes>
     </Suspense>
   )

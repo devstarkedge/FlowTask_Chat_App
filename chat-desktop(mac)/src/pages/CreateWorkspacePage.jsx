@@ -4,6 +4,7 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import {
   MessageSquare,
   ArrowRight,
+  ArrowLeft,
   Check,
   Sparkles,
   Layers,
@@ -202,16 +203,27 @@ export default function CreateWorkspacePage() {
         {/* ════ NAV ════ */}
         <nav className="cwp-nav">
           <div className="cwp-nav-inner">
-            <Link to="/" className="cwp-logo">
-              <div>
-                <img
-                  src="./logo.png"
-                  alt="TaskChat Logo"
-                  style={{ width: 27, height: 27 }}
-                />
-              </div>
-              <span className="cwp-logo-name">TaskChat</span>
-            </Link>
+            <div className="cwp-nav-left">
+              <Link
+                to="/select-workspace"
+                className="cwp-back-btn"
+                title="Back to workspace selection"
+              >
+                <ArrowLeft size={16} strokeWidth={2.2} />
+                <span>Back</span>
+              </Link>
+              <div className="cwp-nav-divider" />
+              <Link to="/select-workspace" className="cwp-logo">
+                <div>
+                  <img
+                    src="./logo.png"
+                    alt="TaskChat Logo"
+                    style={{ width: 27, height: 27 }}
+                  />
+                </div>
+                <span className="cwp-logo-name">TaskChat</span>
+              </Link>
+            </div>
 
             <div className="cwp-steps">
               <span className="cwp-step-item active">
@@ -234,6 +246,13 @@ export default function CreateWorkspacePage() {
             initial="hidden"
             animate="visible"
           >
+            <motion.div variants={fadeUp} className="cwp-back-link-wrapper">
+              <Link to="/select-workspace" className="cwp-back-link">
+                <ArrowLeft size={14} strokeWidth={2.2} />
+                <span>Back to Select Workspace</span>
+              </Link>
+            </motion.div>
+
             <motion.h1 variants={fadeUp} className="cwp-title">
               Create your
               <br />

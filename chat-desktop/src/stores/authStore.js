@@ -188,6 +188,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   logout: () => {
+    const user = get().user
     const refreshToken = get().refreshToken
     // Fire-and-forget server logout
     if (refreshToken) {
@@ -195,8 +196,11 @@ export const useAuthStore = create((set, get) => ({
     }
     localStorage.removeItem('chat_access_token')
     localStorage.removeItem('chat_refresh_token')
-    // Also clear legacy token if exists
     localStorage.removeItem('flowtask_token')
+    if (user?._id) {
+      localStorage.removeItem(`taskchat_active_workspace_${user._id}`)
+    }
+    localStorage.removeItem('flowtask_last_active_workspace_id')
     disconnectSocket()
     useWorkspaceStore.getState().clearWorkspaceState()
     flowTaskLoginInFlight = null

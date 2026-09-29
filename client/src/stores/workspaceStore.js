@@ -9,6 +9,50 @@ import { useDraftStore } from './draftStore'
 import { reconnectWithWorkspace, disconnectSocket } from '../services/socket'
 import logger from '../utils/logger'
 
+// Helper for user-scoped active workspace persistence
+export const getSavedWorkspaceId = (userId) => {
+  try {
+    if (userId) {
+      const userKey = `taskchat_active_workspace_${userId}`
+      const userVal = localStorage.getItem(userKey)
+      if (userVal) return userVal
+    }
+    return localStorage.getItem('flowtask_last_active_workspace_id') || null
+  } catch (e) {
+    logger.warn('Failed to read saved workspace ID:', e)
+    return null
+  }
+}
+
+export const saveActiveWorkspaceId = (userId, workspaceId) => {
+  try {
+    if (workspaceId) {
+      localStorage.setItem('flowtask_last_active_workspace_id', workspaceId)
+      if (userId) {
+        localStorage.setItem(`taskchat_active_workspace_${userId}`, workspaceId)
+      }
+    } else {
+      localStorage.removeItem('flowtask_last_active_workspace_id')
+      if (userId) {
+        localStorage.removeItem(`taskchat_active_workspace_${userId}`)
+      }
+    }
+  } catch (e) {
+    logger.warn('Failed to save workspace ID:', e)
+  }
+}
+
+export const clearSavedWorkspaceId = (userId) => {
+  try {
+    localStorage.removeItem('flowtask_last_active_workspace_id')
+    if (userId) {
+      localStorage.removeItem(`taskchat_active_workspace_${userId}`)
+    }
+  } catch (e) {
+    logger.warn('Failed to clear saved workspace ID:', e)
+  }
+}
+
 /**
  * Workspace Store — manages workspace state for multi-tenant isolation.
  *
@@ -26,6 +70,7 @@ export const useWorkspaceStore = create(
       activeWorkspace: null,
       members: [],
       isLoading: false,
+      isWorkspacesLoaded: false,
       isSwitching: false,
       error: null,
 
@@ -35,39 +80,57 @@ export const useWorkspaceStore = create(
         try {
           const { data } = await api.get('/workspaces/mine')
           const workspaces = data.data?.workspaces || []
-          set({ workspaces, isLoading: false })
 
-          // Auto-select if no active workspace or current one is invalid
+          let userId = null
+          try {
+            const authStoreModule = await import('./authStore')
+            userId = authStoreModule.useAuthStore.getState()?.user?._id
+          } catch (e) {}
+
+          const savedId = getSavedWorkspaceId(userId)
+
           const { activeWorkspaceId } = get()
-          if (!activeWorkspaceId || !workspaces.find((w) => w._id === activeWorkspaceId)) {
-            if (workspaces.length > 0) {
-              if (!skipAutoSelect) {
-                set({
-                  activeWorkspaceId: workspaces[0]._id,
-                  activeWorkspace: workspaces[0],
-                })
-              } else {
-                set({
-                  activeWorkspaceId: null,
-                  activeWorkspace: null,
-                })
-              }
-            } else {
-              set({
-                activeWorkspaceId: null,
-                activeWorkspace: null,
-              })
-            }
+          let targetWorkspace = null
+
+          // Priority 1: In-memory activeWorkspaceId if still valid
+          if (activeWorkspaceId && workspaces.some((w) => w._id === activeWorkspaceId)) {
+            targetWorkspace = workspaces.find((w) => w._id === activeWorkspaceId)
+          } 
+          // Priority 2: User-scoped persisted workspace ID if valid
+          else if (savedId && workspaces.some((w) => w._id === savedId)) {
+            targetWorkspace = workspaces.find((w) => w._id === savedId)
+          } 
+          // Priority 3: Fallback auto-select single workspace if requested
+          else if (!skipAutoSelect && workspaces.length === 1) {
+            targetWorkspace = workspaces[0]
+          }
+
+          if (targetWorkspace) {
+            set({
+              workspaces,
+              activeWorkspaceId: targetWorkspace._id,
+              activeWorkspace: targetWorkspace,
+              isLoading: false,
+              isWorkspacesLoaded: true,
+            })
+            saveActiveWorkspaceId(userId, targetWorkspace._id)
           } else {
-            // Refresh active workspace data
-            const active = workspaces.find((w) => w._id === activeWorkspaceId)
-            if (active) set({ activeWorkspace: active })
+            set({
+              workspaces,
+              activeWorkspaceId: null,
+              activeWorkspace: null,
+              isLoading: false,
+              isWorkspacesLoaded: true,
+            })
+            if (savedId && !workspaces.some((w) => w._id === savedId)) {
+              clearSavedWorkspaceId(userId)
+            }
           }
 
           return workspaces
         } catch (error) {
           const msg = error.response?.data?.error?.message || 'Failed to fetch workspaces'
-          set({ isLoading: false, error: msg })
+          set({ isLoading: false, isWorkspacesLoaded: true, error: msg })
           logger.error('Failed to fetch workspaces:', error)
           return []
         }
@@ -134,6 +197,12 @@ export const useWorkspaceStore = create(
             activeWorkspace: workspace,
             members: [],
           })
+
+          // Persist active workspace ID immediately for renderer reload / Electron restart survival
+          try {
+            const authStoreModule = await import('./authStore')
+            saveActiveWorkspaceId(authStoreModule.useAuthStore.getState()?.user?._id, workspaceId)
+          } catch (e) {}
 
           // 6. Reconnect socket with new workspace context
           // (handles disconnect, reconnect, fetchChannels, fetchNotifications)
@@ -426,12 +495,17 @@ export const useWorkspaceStore = create(
       getActiveWorkspaceId: () => get().activeWorkspaceId,
 
       clearWorkspaceState: () => {
+        try {
+          const userId = localStorage.getItem('chat_access_token') ? null : null
+          clearSavedWorkspaceId(userId)
+        } catch (e) {}
         set({
           workspaces: [],
           activeWorkspaceId: null,
           activeWorkspace: null,
           members: [],
           error: null,
+          isWorkspacesLoaded: false,
         })
       },
 

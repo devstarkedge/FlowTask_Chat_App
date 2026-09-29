@@ -155,6 +155,9 @@
   .cw-shell {
     width: 100%;
     max-width: 500px;
+    max-height: calc(100dvh - 32px);
+    display: flex;
+    flex-direction: column;
     border-radius: 24px;
     overflow: hidden;
     background: var(--bg-modal);
@@ -169,6 +172,7 @@
     position: relative;
     overflow: hidden;
     padding: 26px 28px 24px;
+    flex-shrink: 0;
     background: linear-gradient(135deg,
         var(--bg-active),
         var(--bg-hover),
@@ -283,6 +287,9 @@
     display: flex;
     flex-direction: column;
     gap: 24px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   /* ── field group ── */
@@ -322,6 +329,12 @@
     outline: none;
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
     transition: border-color .16s, box-shadow .16s;
+  }
+
+  textarea.cw-input {
+    min-height: 72px;
+    max-height: 120px;
+    resize: vertical;
   }
 
   .cw-input::placeholder {
@@ -402,6 +415,7 @@
     justify-content: flex-end;
     gap: 10px;
     padding: 18px 28px 24px;
+    flex-shrink: 0;
     background: var(--bg-modal);
     border-top: 1px solid var(--border-secondary);
   }

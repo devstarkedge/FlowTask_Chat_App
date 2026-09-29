@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuthStore } from "../stores/authStore";
+import { useWorkspaceStore, getSavedWorkspaceId } from "../stores/workspaceStore";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import {
   Eye,
@@ -152,7 +153,14 @@ export default function LoginPage() {
     } else if (redirectTo) {
       navigate(redirectTo, { replace: true });
     } else {
-      navigate("/select-workspace", { replace: true });
+      const activeId = useWorkspaceStore.getState().activeWorkspaceId;
+      const savedId = getSavedWorkspaceId(user._id);
+      const targetId = activeId || savedId;
+      if (targetId) {
+        navigate(`/workspace/${targetId}`, { replace: true });
+      } else {
+        navigate("/select-workspace", { replace: true });
+      }
     }
   }, [user, navigate, redirectTo, ssoLoading]);
 

@@ -140,13 +140,28 @@
   }
 
   /* ═══ PAGE SHELL ═══════════════════════════════════════════════════ */
-  .cwp-page {
-      min-height: 100vh;
-      background: #f5f4f0;
-      position: relative;
-      overflow: hidden;
+  .cwp {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+      position: relative;
+  }
+
+  .cwp-page {
+      height: 100%;
+      max-height: 100vh;
+      max-height: 100dvh;
+      background: #f5f4f0;
+      position: relative;
+      overflow-x: hidden;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
   }
 
   /* ── mesh bg (pastel blobs on light) ── */
@@ -211,6 +226,71 @@
       align-items: center;
       justify-content: space-between;
       height: 64px;
+  }
+
+  .cwp-nav-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+  }
+
+  .cwp-nav-divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(0, 0, 0, .1);
+  }
+
+  .cwp-back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 99px;
+      border: 1px solid rgba(0, 0, 0, .1);
+      background: rgba(255, 255, 255, .8);
+      color: #3f3f46;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all .18s ease;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
+  }
+
+  .cwp-back-btn:hover {
+      background: #ffffff;
+      color: #6366f1;
+      border-color: rgba(99, 102, 241, .35);
+      box-shadow: 0 3px 10px rgba(99, 102, 241, .15);
+      transform: translateX(-2px);
+  }
+
+  .cwp-back-btn:active {
+      transform: translateX(0);
+  }
+
+  .cwp-back-link-wrapper {
+      margin-bottom: 12px;
+  }
+
+  .cwp-back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6366f1;
+      text-decoration: none;
+      transition: all .15s ease;
+      padding: 4px 8px;
+      margin-left: -8px;
+      border-radius: 6px;
+  }
+
+  .cwp-back-link:hover {
+      background: rgba(99, 102, 241, .08);
+      color: #4f46e5;
+      transform: translateX(-2px);
   }
 
   .cwp-logo {
@@ -286,30 +366,19 @@
       position: relative;
       z-index: 1;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       max-width: 1060px;
       margin: 0 auto;
       width: 100%;
-      padding: 64px 28px 96px;
-      gap: 68px;
+      padding: clamp(24px, 4vw, 64px) clamp(16px, 3vw, 28px) clamp(48px, 6vw, 96px);
+      gap: clamp(24px, 5vw, 68px);
       align-items: start;
-  }
-
-  @media(max-width:860px) {
-      .cwp-layout {
-          grid-template-columns: 1fr;
-          gap: 44px;
-          padding: 44px 20px 72px;
-      }
-
-      .cwp-right {
-          display: none;
-      }
   }
 
   /* ═══ LEFT — FORM COLUMN ════════════════════════════════════════════ */
   .cwp-left {
-      max-width: 460px;
+      width: 100%;
+      max-width: 100%;
   }
 
   /* eyebrow */
@@ -330,12 +399,12 @@
 
   /* headings — dark on light */
   .cwp-title {
-      font-size: 42px;
+      font-size: clamp(26px, 4vw, 42px);
       font-weight: 900;
       color: #18181b;
-      line-height: 1.07;
-      letter-spacing: -.05em;
-      margin-bottom: 14px;
+      line-height: 1.1;
+      letter-spacing: -.04em;
+      margin-bottom: clamp(8px, 1.5vw, 14px);
   }
 
   .cwp-title-grad {
@@ -346,10 +415,10 @@
   }
 
   .cwp-subtitle {
-      font-size: 15px;
+      font-size: clamp(13px, 1.4vw, 15px);
       color: #71717a;
-      line-height: 1.75;
-      margin-bottom: 32px;
+      line-height: 1.6;
+      margin-bottom: clamp(16px, 2.5vw, 32px);
   }
 
   /* ── card (white) ── */
@@ -357,7 +426,7 @@
       background: #ffffff;
       border: 1px solid rgba(0, 0, 0, .07);
       border-radius: 22px;
-      padding: 32px;
+      padding: clamp(18px, 3vw, 32px);
       position: relative;
       overflow: hidden;
       box-shadow:
@@ -453,6 +522,12 @@
       transition: border-color .18s, box-shadow .18s, background .18s;
   }
 
+  textarea.cwp-input {
+      min-height: 72px;
+      max-height: 120px;
+      resize: vertical;
+  }
+
   .cwp-input::placeholder {
       color: #d4d4d8;
       font-weight: 400;
@@ -545,6 +620,7 @@
   /* ═══ RIGHT COLUMN ══════════════════════════════════════════════════ */
   .cwp-right {
       padding-top: 4px;
+      width: 100%;
   }
 
   /* live preview card */
@@ -602,26 +678,31 @@
 
   /* preview text — dark on white */
   .cwp-preview-name {
-      font-size: 20px;
+      font-size: clamp(17px, 2vw, 20px);
       font-weight: 800;
       color: #18181b;
       letter-spacing: -.02em;
       margin-bottom: 6px;
       min-height: 28px;
-      line-height: 1.2;
+      line-height: 1.25;
+      word-break: break-word;
+      overflow-wrap: anywhere;
   }
 
   .cwp-preview-desc {
       font-size: 13px;
       color: #71717a;
-      line-height: 1.65;
-      min-height: 40px;
+      line-height: 1.6;
+      min-height: 36px;
+      word-break: break-word;
+      overflow-wrap: anywhere;
   }
 
   .cwp-preview-footer {
       display: flex;
       align-items: center;
-      gap: 16px;
+      flex-wrap: wrap;
+      gap: 8px 16px;
       margin-top: 18px;
       padding-top: 16px;
       border-top: 1px solid rgba(0, 0, 0, .06);
@@ -715,12 +796,42 @@
       animation: cwpSuccessRing .45s cubic-bezier(.22, 1, .36, 1) both;
   }
 
-  @media(max-width:480px) {
-      .cwp-title {
-          font-size: 30px;
+  /* ═══ RESPONSIVE BREAKPOINTS ══════════════════════════════════════════ */
+  @media (max-width: 860px) {
+      .cwp-layout {
+          grid-template-columns: 1fr;
+          gap: 32px;
+          padding: 28px 20px 56px;
       }
 
-      .cwp-card {
-          padding: 22px;
+      .cwp-left {
+          max-width: 100%;
+      }
+
+      .cwp-right {
+          display: block; /* Live Preview stays visible, stacked below form */
+          width: 100%;
+          max-width: 100%;
+      }
+  }
+
+  @media (max-height: 700px) {
+      .cwp-layout {
+          padding-top: 20px;
+          padding-bottom: 36px;
+          gap: 24px;
+      }
+
+      .cwp-eyebrow {
+          margin-bottom: 10px;
+      }
+
+      .cwp-field {
+          margin-bottom: 14px;
+      }
+
+      .cwp-plan-badge {
+          margin-bottom: 16px;
+          padding: 8px 12px;
       }
   }

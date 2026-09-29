@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { useWorkspaceStore, getSavedWorkspaceId } from '../../stores/workspaceStore'
+import { useAuthStore } from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useLaterStore } from '../../stores/laterStore'
 import { useCanvasStore } from '../../stores/canvasStore'
@@ -50,7 +51,10 @@ export default function WorkspaceLayout() {
       const valid = workspaces.find((w) => w._id === workspaceId)
       if (!valid) {
         if (workspaces.length > 0) {
-          navigate(`/workspace/${workspaces[0]._id}`, { replace: true })
+          const user = useAuthStore.getState().user
+          const savedId = getSavedWorkspaceId(user?._id)
+          const fallback = workspaces.find((w) => w._id === savedId) || workspaces[0]
+          navigate(`/workspace/${fallback._id}`, { replace: true })
         } else {
           navigate('/select-workspace', { replace: true })
         }

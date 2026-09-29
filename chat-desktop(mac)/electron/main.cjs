@@ -1,8 +1,11 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification } = require('electron');
 const path = require('path');
-const { createDynamicTrayImage } = require('./trayGenerator.cjs');
+const fs = require('fs');
+
+const startTime = performance.now();
 const isDev = !app.isPackaged;
 const isMac = process.platform === 'darwin';
+const BUNDLE_ID = isDev ? 'com.taskchat.dev' : 'com.taskchat.app';
 
 if (isDev) {
   // Vite requires unsafe-eval for HMR. We disable the warning in dev mode.
@@ -12,13 +15,16 @@ if (isDev) {
 }
 
 // Set the App ID for all platforms (Windows, Mac, Linux) to ensure OS-level integrations work
-app.setAppUserModelId(isDev ? 'com.taskchat.dev' : 'com.taskchat.app');
+app.setAppUserModelId(BUNDLE_ID);
 
 let mainWindow;
 let tray = null;
 let isQuitting = false;
 const hasTitleBarOverlay = process.platform === 'win32' || process.platform === 'linux';
 const overlayWindows = new WeakSet();
+
+// Persistent Set to retain Notification instances and prevent V8 garbage collection on macOS
+const activeNotifications = new Set();
 
 function setupMacApplicationMenu() {
   if (!isMac) return;
@@ -88,13 +94,18 @@ function setupMacApplicationMenu() {
 }
 
 function createWindow() {
+  const winStart = performance.now();
+  console.log(`[Startup] createWindow start after ${(winStart - startTime).toFixed(2)}ms`);
+
+  const iconPath = path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png');
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 600,
     minHeight: 500,
     title: 'TaskChat',
-    icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     trafficLightPosition: isMac ? { x: 14, y: 14 } : undefined,
     ...(hasTitleBarOverlay ? {
@@ -109,14 +120,19 @@ function createWindow() {
   });
   if (hasTitleBarOverlay) overlayWindows.add(mainWindow);
 
+  const loadStart = performance.now();
   if (isDev) {
-    // In development, load the Vite dev server
+    console.log(`[Startup] renderer loadURL start after ${(loadStart - startTime).toFixed(2)}ms`);
     mainWindow.loadURL('http://localhost:5174');
     mainWindow.webContents.openDevTools();
   } else {
-    // In production, load the built React app
+    console.log(`[Startup] renderer loadFile start after ${(loadStart - startTime).toFixed(2)}ms`);
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log(`[Startup] renderer did-finish-load at ${(performance.now() - startTime).toFixed(2)}ms`);
+  });
 
   // Notify renderer when window maximize state changes
   mainWindow.on('maximize', () => {
@@ -148,6 +164,8 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  console.log(`[Startup] createWindow complete after ${(performance.now() - winStart).toFixed(2)}ms`);
 }
 
 // IPC handlers for window control buttons
@@ -177,61 +195,105 @@ ipcMain.handle('window-is-maximized', (event) => {
   return win ? win.isMaximized() : false;
 });
 
+// IPC handler for notification diagnostics
+ipcMain.handle('get-notification-status', () => {
+  const isSupported = Notification.isSupported();
+  return {
+    platform: process.platform,
+    isMac: isMac,
+    supported: isSupported,
+    appUserModelId: BUNDLE_ID,
+    activeCount: activeNotifications.size,
+    initialized: true,
+  };
+});
+
 app.whenReady().then(() => {
+  console.log(`[Startup] app.whenReady after ${(performance.now() - startTime).toFixed(2)}ms`);
   setupMacApplicationMenu();
 
-  // Set Dock icon for macOS explicitly
-  const logoPath = path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png');
-  if (isMac && app.dock) {
-    try {
-      const dockImage = nativeImage.createFromPath(logoPath);
-      if (!dockImage.isEmpty()) {
-        app.dock.setIcon(dockImage);
-      }
-    } catch (e) {
-      console.error('[TaskChat] Failed to set dock icon:', e);
-    }
-  }
-
+  // Create BrowserWindow immediately so renderer boots as early as possible
   createWindow();
 
-  // Create System Tray dynamically from logoPath at runtime
-  const trayImage = createDynamicTrayImage(logoPath, isMac);
-  tray = new Tray(trayImage);
-  
-  const contextMenu = Menu.buildFromTemplate([
-    { 
-      label: 'Open TaskChat', 
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          if (isMac && app.dock) app.dock.show();
+  // Defer non-critical OS integrations (dock icon and tray) so they do not block startup
+  setImmediate(() => {
+    // Set Dock icon for macOS if needed
+    if (isMac && app.dock) {
+      try {
+        const logoPath = path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png');
+        if (fs.existsSync(logoPath)) {
+          const dockImage = nativeImage.createFromPath(logoPath);
+          if (!dockImage.isEmpty()) {
+            app.dock.setIcon(dockImage);
+          }
         }
-      } 
-    },
-    { type: 'separator' },
-    { 
-      label: 'Quit', 
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      } 
-    }
-  ]);
-  
-  tray.setToolTip('TaskChat');
-  tray.setContextMenu(contextMenu);
-  
-  // Left click on tray icon opens the app
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.focus();
-      } else {
-        mainWindow.show();
-        if (isMac && app.dock) app.dock.show();
+      } catch (e) {
+        console.error('[TaskChat] Failed to set dock icon:', e);
       }
     }
+
+    // System Tray initialization
+    const trayStart = performance.now();
+    try {
+      const trayIconPath = path.join(
+        __dirname,
+        isDev ? '../public/tray-icon.png' : '../dist/tray-icon.png'
+      );
+      const logoPath = path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png');
+      const targetTrayPath = fs.existsSync(trayIconPath) ? trayIconPath : logoPath;
+
+      let trayImage = nativeImage.createFromPath(targetTrayPath);
+      if (!trayImage.isEmpty()) {
+        const size = trayImage.getSize();
+        if (size.height > 22) {
+          const aspectRatio = size.width / size.height;
+          const targetWidth = Math.round(22 * aspectRatio);
+          trayImage = trayImage.resize({ width: targetWidth, height: 22, quality: 'best' });
+        }
+        if (isMac) {
+          trayImage.setTemplateImage(true);
+        }
+      }
+
+      if (!trayImage.isEmpty()) {
+        tray = new Tray(trayImage);
+        const contextMenu = Menu.buildFromTemplate([
+          {
+            label: 'Open TaskChat',
+            click: () => {
+              if (mainWindow) {
+                mainWindow.show();
+                if (isMac && app.dock) app.dock.show();
+              }
+            },
+          },
+          { type: 'separator' },
+          {
+            label: 'Quit',
+            click: () => {
+              isQuitting = true;
+              app.quit();
+            },
+          },
+        ]);
+        tray.setToolTip('TaskChat');
+        tray.setContextMenu(contextMenu);
+
+        tray.on('click', () => {
+          if (mainWindow) {
+            if (mainWindow.isVisible()) {
+              mainWindow.focus();
+            } else {
+              mainWindow.show();
+              if (isMac && app.dock) app.dock.show();
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error('[TaskChat] Failed to initialize system tray:', err);
+    }
+    console.log(`[Startup] tray initialization complete after ${(performance.now() - trayStart).toFixed(2)}ms`);
   });
 
   app.on('activate', () => {
@@ -243,6 +305,9 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+
+  const isSupported = Notification.isSupported();
+  console.log(`[Notifications] platform: ${process.platform} | appUserModelId: ${BUNDLE_ID} | supported: ${isSupported} | notificationInitialized: true`);
 });
 
 app.on('window-all-closed', () => {
@@ -251,28 +316,58 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC handler for notifications
+// GC-safe IPC handler for native notifications
 ipcMain.on('show-notification', (event, { title, body, data }) => {
-  const { Notification } = require('electron');
-  const notification = new Notification({
-    title,
-    body,
-    icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
-  });
-
-  notification.on('click', () => {
-    if (mainWindow) {
-      if (!mainWindow.isVisible()) {
-        mainWindow.show();
-        if (isMac && app.dock) app.dock.show();
-      }
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-      mainWindow.webContents.send('notification-clicked', data);
+  try {
+    if (!Notification.isSupported()) {
+      console.warn('[Notifications] Electron Notification API is not supported on this platform');
+      return;
     }
-  });
 
-  notification.show();
+    const iconPath = path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png');
+    const hasIcon = fs.existsSync(iconPath);
+
+    const notificationOptions = {
+      title: title || 'TaskChat',
+      body: body || '',
+    };
+    if (hasIcon) {
+      notificationOptions.icon = iconPath;
+    }
+
+    const notification = new Notification(notificationOptions);
+
+    // Add to active set to prevent V8 GC from garbage collecting the notification before display/click
+    activeNotifications.add(notification);
+
+    const cleanup = () => {
+      activeNotifications.delete(notification);
+    };
+
+    notification.on('click', () => {
+      cleanup();
+      if (mainWindow) {
+        if (!mainWindow.isVisible()) {
+          mainWindow.show();
+          if (isMac && app.dock) app.dock.show();
+        }
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+        mainWindow.webContents.send('notification-clicked', data);
+      }
+    });
+
+    notification.on('close', cleanup);
+    notification.on('failed', (error) => {
+      console.error('[Notifications] Failed to display native notification:', error);
+      cleanup();
+    });
+
+    notification.show();
+    console.log(`[Notifications] Displayed native notification: "${title}" (active count: ${activeNotifications.size})`);
+  } catch (err) {
+    console.error('[Notifications] Exception in show-notification handler:', err);
+  }
 });
 
 // Allow renderer to change titleBarOverlay dynamically

@@ -93,7 +93,7 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.flowtask.chat",
+    "appId": "com.taskchat.app",
     "productName": "TaskChat",
     "icon": "build/icon.ico",
     "directories": {

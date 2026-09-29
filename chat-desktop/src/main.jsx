@@ -4,14 +4,18 @@
 if (import.meta.env.PROD) {
   window.addEventListener('vite:preloadError', (event) => {
     event.preventDefault(); // Prevent default error handling
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.warn('[REFRESH] vite:preloadError caught while offline — suppressing automatic reload');
+      return;
+    }
     const retryCount = parseInt(sessionStorage.getItem('vitePreloadRetryCount') || '0', 10);
 
-    if (retryCount < 3) {
+    if (retryCount < 2) {
       sessionStorage.setItem('vitePreloadRetryCount', (retryCount + 1).toString());
-      window.location.reload(); // Force a hard reload to get the fresh index.html
+      console.warn(`[REFRESH] window.location.reload triggered by: vite:preloadError (attempt ${retryCount + 1})`);
+      window.location.reload();
     } else {
-      // Max retries reached, display persistent error UI
-      document.body.innerHTML = '<div style="padding: 20px; font-family: system-ui; text-align: center;"><h1>App failed to load</h1><p>We are having trouble loading the app. Please clear your browser cache and try again.</p></div>';
+      console.error('[REFRESH] Max vite:preloadError reload attempts reached. Stopping auto-reload.');
     }
   });
 }

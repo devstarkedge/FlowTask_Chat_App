@@ -63,6 +63,23 @@ export const onDesktopNotificationClicked = (callback) => {
   }
 };
 
+export const getNotificationStatus = async () => {
+  if (isDesktopApp() && window.electronAPI?.getNotificationStatus) {
+    try {
+      return await window.electronAPI.getNotificationStatus();
+    } catch {
+      return { platform: 'darwin', supported: true, initialized: false };
+    }
+  }
+  return {
+    platform: isMac() ? 'darwin' : typeof navigator !== 'undefined' ? navigator.platform : 'browser',
+    isMac: isMac(),
+    supported: typeof window !== 'undefined' && 'Notification' in window,
+    permission: typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unknown',
+    initialized: true,
+  };
+};
+
 export const getAppVersion = () => {
   if (isDesktopApp()) {
     return window.electronAPI.getAppVersion();

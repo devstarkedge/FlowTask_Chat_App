@@ -1,394 +1,52 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Link2, Lock, ChevronDown, Check, Eye, Pencil, UserPlus } from "lucide-react";
+import { X, Link2, ChevronDown, Check, User, Users, Settings, Plus, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { useChannelStore } from "../../stores/channelStore";
 import { useCanvasStore } from "../../stores/canvasStore";
+import { useChatStore } from "../../stores/chatStore";
 import { getSocket } from "../../services/socket";
 import { canvasAPI } from "../../services/api";
+import { getCanvasUrl, getPublicCanvasUrl } from "../../utils/urlUtils";
 
 const EMPTY_MEMBERS = [];
-
-const ACCESS_LEVELS = [
-  {
-    value: "invite_only",
-    label: "Invite only",
-    desc: "Only people you add can view or edit",
-    icon: Lock,
-    color: "#ef4444",
-  },
-  {
-    value: "view",
-    label: "Can view",
-    desc: "Everyone in this channel can view, but not edit",
-    icon: Eye,
-    color: "#f59e0b",
-  },
-  {
-    value: "edit",
-    label: "Can edit",
-    desc: "Everyone in this channel can view and edit",
-    icon: Pencil,
-    color: "#10b981",
-  },
-];
 
 const ROLE_OPTIONS = [
   { value: "viewer", label: "Can view" },
   { value: "editor", label: "Can edit" },
 ];
 
-// ── Styles ────────────────────────────────────────────────────────────────
-const styles = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 2000,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "rgba(0,0,0,0.6)",
-    backdropFilter: "blur(6px)",
-    WebkitBackdropFilter: "blur(6px)",
-    animation: "canvasFadeIn 0.15s ease-out",
-  },
-  modal: {
-    background: "var(--bg-primary, #fff)",
-    borderRadius: 12,
-    width: 480,
-    maxWidth: "95vw",
-    maxHeight: "min(85vh, 660px)",
-    overflow: "hidden",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-    display: "flex",
-    flexDirection: "column",
-    animation: "canvasSlideUp 0.15s ease-out",
-  },
-  header: {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    padding: "20px 24px 10px",
-    flexShrink: 0,
-  },
-  headerLeft: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: 700,
-    margin: 0,
-    color: "var(--text-primary)",
-    lineHeight: 1.3,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: "var(--text-muted)",
-    margin: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    maxWidth: 380,
-  },
-  closeBtn: {
-    background: "none",
-    border: "none",
-    padding: 6,
-    cursor: "pointer",
-    color: "var(--text-muted)",
-    borderRadius: 8,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.1s",
-    flexShrink: 0,
-  },
-  closeBtnHover: {
-    background: "var(--bg-hover)",
-    color: "var(--text-primary)",
-  },
-  // Access level pills
-  accessRow: {
-    display: "flex",
-    gap: 8,
-    padding: "8px 24px 16px",
-    flexShrink: 0,
-  },
-  accessBtn: (isActive) => ({
-    flex: 1,
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 14px",
-    background: isActive ? "rgba(59,130,246,0.06)" : "var(--bg-secondary)",
-    border: `2px solid ${isActive ? "var(--accent-primary, #3b82f6)" : "transparent"}`,
-    borderRadius: 10,
-    cursor: "pointer",
-    textAlign: "left",
-    fontFamily: "inherit",
-    fontSize: 12,
-    color: "var(--text-primary)",
-    transition: "all 0.12s ease",
-    position: "relative",
-  }),
-  accessBtnIcon: (isActive, color) => ({
-    flexShrink: 0,
-    color: isActive ? "var(--accent-primary, #3b82f6)" : "var(--text-muted)",
-  }),
-  accessBtnText: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    minWidth: 0,
-  },
-  accessBtnLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    lineHeight: 1.3,
-  },
-  accessBtnDesc: {
-    fontSize: 10,
-    color: "var(--text-muted)",
-    lineHeight: 1.3,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  accessCheck: {
-    color: "var(--accent-primary, #3b82f6)",
-    flexShrink: 0,
-    marginLeft: "auto",
-  },
-  searchWrap: {
-    padding: "0 24px 12px",
-    flexShrink: 0,
-  },
-  searchInput: {
-    width: "100%",
-    padding: "10px 14px",
-    fontSize: 14,
-    border: "1px solid var(--border-primary)",
-    borderRadius: 10,
-    background: "var(--bg-secondary)",
-    outline: "none",
-    fontFamily: "inherit",
-    boxSizing: "border-box",
-    transition: "border-color 0.12s, box-shadow 0.12s",
-    color: "var(--text-primary)",
-  },
-  section: {
-    padding: "0 24px",
-    flex: 1,
-    minHeight: 0,
-    display: "flex",
-    flexDirection: "column",
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: 600,
-    color: "var(--text-muted)",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    margin: "0 0 8px",
-    flexShrink: 0,
-  },
-  empty: {
-    fontSize: 13,
-    color: "var(--text-muted)",
-    padding: "20px 0",
-    textAlign: "center",
-  },
-  peopleList: {
-    flex: 1,
-    overflowY: "auto",
-    margin: "0 -24px",
-    padding: "0 24px",
-  },
-  personRow: (isSelected) => ({
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: isSelected ? "6px 8px" : "6px 0",
-    margin: isSelected ? "0 -8px" : 0,
-    borderRadius: 8,
-    background: isSelected ? "rgba(59,130,246,0.06)" : "transparent",
-    transition: "background 0.1s",
-  }),
-  personItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-    padding: "4px 8px",
-    background: "none",
-    border: "none",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontSize: 13,
-    textAlign: "left",
-    fontFamily: "inherit",
-    transition: "background 0.1s",
-  },
-  avatar: (name) => ({
-    width: 28,
-    height: 28,
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    background: "var(--accent-primary, #3b82f6)",
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: 700,
-    overflow: "hidden",
-  }),
-  avatarImg: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  },
-  personName: {
-    flex: 1,
-    color: "var(--text-primary)",
-    fontWeight: 500,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  personCheck: {
-    color: "var(--accent-primary, #3b82f6)",
-    flexShrink: 0,
-  },
-  roleSelect: {
-    fontSize: 12,
-    padding: "4px 8px",
-    border: "1px solid var(--border-primary)",
-    borderRadius: 6,
-    background: "var(--bg-primary)",
-    color: "var(--text-primary)",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    outline: "none",
-    flexShrink: 0,
-    minWidth: 90,
-  },
-  footer: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "14px 24px",
-    borderTop: "1px solid var(--border-primary)",
-    flexShrink: 0,
-    background: "var(--bg-primary)",
-  },
-  publicShare: {
-    padding: "16px 24px",
-    borderTop: "1px solid var(--border-primary)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  publicShareInfo: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-  },
-  publicShareTitle: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: "var(--text-primary)",
-    margin: 0,
-  },
-  publicShareDesc: {
-    fontSize: 12,
-    color: "var(--text-muted)",
-    margin: 0,
-  },
-  toggleBtn: (isActive) => ({
-    padding: "6px 12px",
-    borderRadius: 8,
-    border: `1px solid ${isActive ? "var(--accent-primary, #3b82f6)" : "var(--border-primary)"}`,
-    background: isActive ? "rgba(59,130,246,0.1)" : "transparent",
-    color: isActive ? "var(--accent-primary, #3b82f6)" : "var(--text-primary)",
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: "pointer",
-    transition: "all 0.15s",
-  }),
-  copyLink: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    background: "none",
-    border: "none",
-    color: "var(--accent-primary, #3b82f6)",
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: "pointer",
-    padding: "6px 12px",
-    borderRadius: 8,
-    fontFamily: "inherit",
-    transition: "all 0.1s",
-  },
-  doneBtn: {
-    padding: "8px 24px",
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#fff",
-    background: "var(--accent-primary, #3b82f6)",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    transition: "background 0.15s",
-  },
-  doneBtnDisabled: {
-    opacity: 0.6,
-    cursor: "not-allowed",
-  },
-};
+// Dropdown options for "Anyone in [Workspace] can..."
+const WORKSPACE_ACCESS_OPTIONS = [
+  { value: "invite_only", label: "Invite only" },
+  { value: "view", label: "Anyone in Stark Edge Team can view" },
+  { value: "edit", label: "Anyone in Stark Edge Team can edit" },
+];
 
-function getInitials(name) {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-export default function CanvasShareModal({
-  canvas,
-  isOpen,
-  onClose,
-  channelId,
-}) {
+export default function CanvasShareModal({ canvas, isOpen, onClose, channelId }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [userRoles, setUserRoles] = useState(new Map());
   const [currentAccessLevel, setCurrentAccessLevel] = useState("view");
   const [isSaving, setIsSaving] = useState(false);
   const [isTogglingPublic, setIsTogglingPublic] = useState(false);
+  
+  // Accordion state
+  const [expandedSection, setExpandedSection] = useState(null); // 'people' | 'advanced' | null
+
   const searchRef = useRef(null);
 
-  const members =
-    useChannelStore((s) => s.membersByChannel[channelId]) ?? EMPTY_MEMBERS;
+  const members = useChannelStore((s) => s.membersByChannel[channelId]) ?? EMPTY_MEMBERS;
   const fetchMembers = useChannelStore((s) => s.fetchMembers);
   const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
+  const sendMessage = useChatStore((s) => s.sendMessage);
 
   useEffect(() => {
     if (isOpen && channelId) {
       fetchMembers(channelId);
-      // Focus search input when modal opens
       setTimeout(() => searchRef.current?.focus(), 100);
     }
   }, [isOpen, channelId, fetchMembers]);
 
-  // Sync modal state when opening
   useEffect(() => {
     if (isOpen) {
       setCurrentAccessLevel(canvas?.permissions?.accessLevel || "view");
@@ -404,10 +62,11 @@ export default function CanvasShareModal({
         if (uid && !map.has(uid)) map.set(uid, "viewer");
       });
       setUserRoles(map);
+      setExpandedSection(null); // reset
+      setSearchQuery("");
     }
-  }, [isOpen]);
+  }, [isOpen, canvas]);
 
-  // Close on Escape
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e) => {
@@ -444,9 +103,7 @@ export default function CanvasShareModal({
 
   const handleCopyLink = useCallback(() => {
     const canvasId = canvas?._id;
-    const url = canvasId
-      ? `${window.location.origin}/canvas/${canvasId}`
-      : window.location.href;
+    const url = canvasId ? getCanvasUrl(canvasId) : window.location.href;
     navigator.clipboard.writeText(url).then(() => {
       toast.success("Link copied to clipboard");
     });
@@ -462,11 +119,7 @@ export default function CanvasShareModal({
           await updateCanvasMetadata(canvasId, {
             permissions: { accessLevel: newLevel },
           });
-          toast.success(
-            `Permission updated to ${
-              ACCESS_LEVELS.find((p) => p.value === newLevel)?.label
-            }`
-          );
+          toast.success("Permission updated");
         } catch {
           toast.error("Failed to update permissions");
         }
@@ -497,7 +150,6 @@ export default function CanvasShareModal({
 
       await updateCanvasMetadata(canvasId, { permissions });
 
-      // Notify shared users via socket
       if (targetUserIds.length > 0) {
         const socket = getSocket();
         if (socket) {
@@ -523,8 +175,6 @@ export default function CanvasShareModal({
     setIsTogglingPublic(true);
     try {
       const res = await canvasAPI.togglePublicShare(canvasId);
-      // It's handled globally via socket but we can also update local state if needed.
-      // We rely on canvas updates pushing new state down.
       if (res.data?.success) {
         toast.success(res.data.data.sharing?.isPublic ? "Public sharing enabled" : "Public sharing disabled");
       }
@@ -535,9 +185,33 @@ export default function CanvasShareModal({
     }
   }, [canvasId]);
 
+  const handleShareToChannel = useCallback(async () => {
+    if (!canvasId || !channelId) return;
+    try {
+      // First ensure the permissions are saved
+      await handleDone();
+      
+      // Send the structured Canvas message
+      await sendMessage(channelId, "I shared a canvas", {
+        contentType: "canvas_share",
+        canvasMeta: {
+          canvasId: canvasId,
+          title: canvas?.title || "Untitled canvas",
+          permission: currentAccessLevel,
+          previewText: canvas?.content 
+            ? canvas.content.replace(/<[^>]*>?/gm, '').substring(0, 200) 
+            : null
+        }
+      });
+      toast.success("Shared to channel");
+    } catch (err) {
+      toast.error("Failed to share to channel");
+    }
+  }, [canvasId, channelId, canvas, currentAccessLevel, handleDone, sendMessage]);
+
   const handleCopyPublicLink = useCallback(() => {
     if (!canvas?.sharing?.publicToken) return;
-    const url = `${window.location.origin}/public/canvas/${canvas.sharing.publicToken}`;
+    const url = getPublicCanvasUrl(canvas.sharing.publicToken);
     navigator.clipboard.writeText(url).then(() => {
       toast.success("Public link copied");
     });
@@ -545,180 +219,319 @@ export default function CanvasShareModal({
 
   if (!isOpen) return null;
 
+  // Derive summary for People section
+  const sharedCount = userRoles.size;
+  let peopleSummary = "No one added yet";
+  if (sharedCount > 0) {
+    const firstNames = [];
+    let count = 0;
+    for (const [uid] of userRoles.entries()) {
+      if (count >= 2) break;
+      const member = members.find((m) => String(m._id || m.userId) === uid);
+      if (member) firstNames.push(member.name);
+      count++;
+    }
+    if (sharedCount <= 2) {
+      peopleSummary = firstNames.join(" and ");
+    } else {
+      peopleSummary = `${firstNames.join(", ")} and ${sharedCount - 2} other${sharedCount - 2 > 1 ? "s" : ""}`;
+    }
+  }
+
   return createPortal(
     <div
-      style={styles.overlay}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 2000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.5)",
+        backdropFilter: "blur(2px)",
+      }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) {
+          handleDone(); // Save and close on click outside
+        }
       }}
     >
-      <div style={styles.modal}>
+      <div
+        style={{
+          background: "var(--bg-primary, #ffffff)",
+          borderRadius: 12,
+          width: 500,
+          maxWidth: "95vw",
+          maxHeight: "90vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+          overflow: "hidden",
+        }}
+      >
         {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.headerLeft}>
-            <h2 style={styles.title}>Share this canvas</h2>
-            <p style={styles.subtitle}>{canvas?.title || "Untitled canvas"}</p>
-          </div>
-          <button style={styles.closeBtn} onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Access Level Pills */}
-        <div style={styles.accessRow}>
-          {ACCESS_LEVELS.map((level) => {
-            const Icon = level.icon;
-            const isActive = currentAccessLevel === level.value;
-            return (
-              <button
-                key={level.value}
-                style={styles.accessBtn(isActive)}
-                onClick={() => handleAccessLevelChange(level.value)}
-                title={level.desc}
-              >
-                <Icon size={16} style={styles.accessBtnIcon(isActive)} />
-                <div style={styles.accessBtnText}>
-                  <span style={styles.accessBtnLabel}>{level.label}</span>
-                </div>
-                {isActive && <Check size={14} style={styles.accessCheck} />}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search */}
-        <div style={styles.searchWrap}>
-          <input
-            ref={searchRef}
-            type="text"
-            placeholder="Add people..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={styles.searchInput}
-            onFocus={(e) => {
-              e.target.style.borderColor = "var(--accent-primary, #3b82f6)";
-              e.target.style.boxShadow =
-                "0 0 0 3px rgba(59, 130, 246, 0.15)";
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = "var(--border-primary)";
-              e.target.style.boxShadow = "none";
-            }}
-          />
-        </div>
-
-        {/* People List */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>
-            People with access{" "}
-            {userRoles.size > 0 && (
-              <span
-                style={{
-                  color: "var(--text-muted)",
-                  fontWeight: 400,
-                  textTransform: "none",
-                  letterSpacing: 0,
-                  marginLeft: 4,
-                }}
-              >
-                ({userRoles.size})
-              </span>
-            )}
-          </h3>
-          <div style={styles.peopleList}>
-            {filteredMembers.length === 0 ? (
-              <div style={styles.empty}>
-                {currentAccessLevel === "invite_only"
-                  ? "Add people to share this canvas"
-                  : "No members found"}
-              </div>
-            ) : (
-              filteredMembers.map((member) => {
-                const uid = String(member._id || member.userId);
-                const isSelected = userRoles.has(uid);
-                const currentRole = userRoles.get(uid) || "viewer";
-                const avatarSrc = member.avatar;
-
-                return (
-                  <div key={uid} style={styles.personRow(isSelected)}>
-                    <button
-                      style={styles.personItem}
-                      onClick={() => toggleMember(member._id || member.userId)}
-                    >
-                      <div style={styles.avatar(member.name)}>
-                        {avatarSrc ? (
-                          <img
-                            src={avatarSrc}
-                            alt=""
-                            style={styles.avatarImg}
-                          />
-                        ) : (
-                          getInitials(member.name)
-                        )}
-                      </div>
-                      <span style={styles.personName}>{member.name}</span>
-                      {isSelected && (
-                        <Check size={16} style={styles.personCheck} />
-                      )}
-                    </button>
-                    {isSelected && (
-                      <select
-                        style={styles.roleSelect}
-                        value={currentRole}
-                        onChange={(e) => setMemberRole(uid, e.target.value)}
-                      >
-                        {ROLE_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Public Share */}
-        <div style={styles.publicShare}>
-          <div style={styles.publicShareInfo}>
-            <h4 style={styles.publicShareTitle}>Public sharing</h4>
-            <p style={styles.publicShareDesc}>Allow anyone with the link to view this canvas</p>
-            {canvas?.sharing?.isPublic && canvas?.sharing?.publicToken && (
-              <button style={styles.copyLink} onClick={handleCopyPublicLink}>
-                <Link2 size={14} />
-                Copy public link
-              </button>
-            )}
+        <div style={{ padding: "20px 24px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--text-primary, #1e293b)" }}>
+              Share this canvas
+            </h2>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-muted, #64748b)" }}>
+              {canvas?.title || "Untitled canvas"}
+            </p>
           </div>
           <button
-            style={styles.toggleBtn(canvas?.sharing?.isPublic)}
-            onClick={handleTogglePublicShare}
-            disabled={isTogglingPublic}
+            onClick={() => handleDone()}
+            style={{
+              background: "none", border: "none", padding: 4, cursor: "pointer", color: "var(--text-muted)", borderRadius: 6
+            }}
           >
-            {isTogglingPublic ? "..." : canvas?.sharing?.isPublic ? "On" : "Off"}
+            <X size={20} />
           </button>
+        </div>
+
+        {/* Scrollable Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 16px" }}>
+          
+          {/* Banner */}
+          <div
+            style={{
+              background: "#eff6ff", // Light blue background
+              border: "1px solid #bfdbfe",
+              borderRadius: 8,
+              padding: "12px 16px",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 12,
+              marginBottom: 16,
+              position: "relative"
+            }}
+          >
+            <div>
+              <span style={{
+                background: "#3b82f6", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, display: "inline-block", marginBottom: 6
+              }}>
+                New
+              </span>
+              <p style={{ margin: 0, fontSize: 13, color: "#1e3a8a", lineHeight: 1.4 }}>
+                <strong>Share this canvas with anyone, even if they're not on Slack.</strong><br/>
+                Just add them by email, and they'll get an invite to join you.
+              </p>
+            </div>
+            <button style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}>
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div style={{ marginBottom: 16 }}>
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Add by name, channel or email"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                fontSize: 14,
+                border: "2px solid var(--border-primary, #cbd5e1)",
+                borderRadius: 8,
+                outline: "none",
+                background: "var(--bg-primary, #ffffff)",
+                color: "var(--text-primary, #1e293b)",
+                transition: "border-color 0.2s, box-shadow 0.2s"
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "#3b82f6";
+                e.target.style.boxShadow = "0 0 0 3px rgba(59, 130, 246, 0.1)";
+                setExpandedSection("people"); // Auto-expand people list when typing
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "var(--border-primary, #cbd5e1)";
+                e.target.style.boxShadow = "none";
+              }}
+            />
+          </div>
+
+          {/* Accordions */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            
+            {/* People Section */}
+            <div style={{ borderBottom: expandedSection === "people" ? "none" : "1px solid var(--border-secondary, #e2e8f0)" }}>
+              <button
+                onClick={() => setExpandedSection(expandedSection === "people" ? null : "people")}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 0", background: "none", border: "none", cursor: "pointer", textAlign: "left"
+                }}
+              >
+                <div style={{ width: 24, display: "flex", justifyContent: "center" }}>
+                  <User size={18} color="var(--text-primary)" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>People</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{peopleSummary}</div>
+                </div>
+                <ChevronDown size={18} color="var(--text-muted)" style={{ transform: expandedSection === "people" ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+              </button>
+
+              {expandedSection === "people" && (
+                <div style={{ padding: "8px 0 16px 36px", maxHeight: 200, overflowY: "auto" }}>
+                  {filteredMembers.length === 0 ? (
+                    <div style={{ fontSize: 13, color: "var(--text-muted)" }}>No members found</div>
+                  ) : (
+                    filteredMembers.map((member) => {
+                      const uid = String(member._id || member.userId);
+                      const isSelected = userRoles.has(uid);
+                      const currentRole = userRoles.get(uid) || "viewer";
+
+                      return (
+                        <div key={uid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", gap: 12 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                            <div style={{ width: 24, height: 24, borderRadius: 4, background: "#e2e8f0", overflow: "hidden", flexShrink: 0 }}>
+                              {member.avatar ? (
+                                <img src={member.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              ) : (
+                                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#64748b" }}>
+                                  {member.name?.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <span style={{ fontSize: 14, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {member.name}
+                            </span>
+                          </div>
+                          
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {isSelected ? (
+                              <>
+                                <select
+                                  style={{
+                                    fontSize: 12, padding: "4px 8px", border: "1px solid var(--border-secondary)", borderRadius: 6, outline: "none", cursor: "pointer", background: "transparent"
+                                  }}
+                                  value={currentRole}
+                                  onChange={(e) => setMemberRole(uid, e.target.value)}
+                                >
+                                  {ROLE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                </select>
+                                <button onClick={() => toggleMember(uid)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 4 }}>
+                                  <X size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => toggleMember(uid)}
+                                style={{
+                                  fontSize: 12, fontWeight: 600, color: "#3b82f6", background: "none", border: "none", cursor: "pointer", padding: "4px 8px"
+                                }}
+                              >
+                                Add
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Advanced Settings Section */}
+            <div style={{ borderBottom: expandedSection === "advanced" ? "none" : "1px solid var(--border-secondary, #e2e8f0)" }}>
+              <button
+                onClick={() => setExpandedSection(expandedSection === "advanced" ? null : "advanced")}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 0", background: "none", border: "none", cursor: "pointer", textAlign: "left"
+                }}
+              >
+                <div style={{ width: 24, display: "flex", justifyContent: "center" }}>
+                  <Settings size={18} color="var(--text-primary)" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Advanced Settings</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Limit sharing</div>
+                </div>
+                <ChevronDown size={18} color="var(--text-muted)" style={{ transform: expandedSection === "advanced" ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+              </button>
+
+              {expandedSection === "advanced" && (
+                <div style={{ padding: "8px 0 16px 36px", display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Public Sharing</div>
+                      <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Allow anyone with the link to view</div>
+                    </div>
+                    <button
+                      onClick={handleTogglePublicShare}
+                      disabled={isTogglingPublic}
+                      style={{
+                        padding: "6px 12px", borderRadius: 16, border: "none", fontWeight: 600, fontSize: 12, cursor: "pointer",
+                        background: canvas?.sharing?.isPublic ? "#10b981" : "#e2e8f0",
+                        color: canvas?.sharing?.isPublic ? "#fff" : "var(--text-primary)",
+                      }}
+                    >
+                      {isTogglingPublic ? "..." : canvas?.sharing?.isPublic ? "Enabled" : "Disabled"}
+                    </button>
+                  </div>
+                  {canvas?.sharing?.isPublic && canvas?.sharing?.publicToken && (
+                    <button onClick={handleCopyPublicLink} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#3b82f6", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                      <Link2 size={14} /> Copy Public Link
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
 
         {/* Footer */}
-        <div style={styles.footer}>
-          <button style={styles.copyLink} onClick={handleCopyLink}>
-            <Link2 size={14} />
-            Copy link
-          </button>
-          <button
-            style={
-              isSaving
-                ? { ...styles.doneBtn, ...styles.doneBtnDisabled }
-                : styles.doneBtn
-            }
-            onClick={handleDone}
-            disabled={isSaving}
-          >
-            {isSaving ? "Saving..." : "Done"}
-          </button>
+        <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border-secondary, #e2e8f0)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg-secondary, #f8fafc)", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button
+              onClick={handleCopyLink}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#3b82f6", fontSize: 14, fontWeight: 600, padding: "8px 0"
+              }}
+            >
+              <Link2 size={16} /> Copy Link
+            </button>
+            {channelId && (
+              <button
+                onClick={handleShareToChannel}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, background: "#3b82f6", border: "none", cursor: "pointer", color: "#ffffff", fontSize: 13, fontWeight: 600, padding: "8px 16px", borderRadius: 6, transition: "background 0.2s"
+                }}
+              >
+                Share in Chat
+              </button>
+            )}
+          </div>
+
+          <div style={{ position: "relative" }}>
+            <select
+              value={currentAccessLevel}
+              onChange={(e) => handleAccessLevelChange(e.target.value)}
+              style={{
+                appearance: "none",
+                background: "var(--bg-primary, #ffffff)",
+                border: "1px solid var(--border-primary, #cbd5e1)",
+                borderRadius: 8,
+                padding: "8px 32px 8px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text-primary, #1e293b)",
+                cursor: "pointer",
+                outline: "none",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+              }}
+            >
+              {WORKSPACE_ACCESS_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} color="var(--text-muted)" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+          </div>
         </div>
       </div>
     </div>,

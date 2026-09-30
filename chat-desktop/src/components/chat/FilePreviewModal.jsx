@@ -178,10 +178,33 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
 
   const content = (
     <div className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      {/* 1. Dedicated Window Controls Title Bar (Top Tier) */}
+      {isDesktop && (
+        <div className="file-preview-titlebar">
+          {!window.electronAPI?.hasNativeWindowControls && (
+            <div className="file-preview-window-controls">
+              <ToolbarBtn title="Minimize" icon={Minus} onClick={handleMinimizeWindow} />
+              <ToolbarBtn
+                title={isMaximized ? "Restore" : "Maximize"}
+                icon={isMaximized ? Copy : Square}
+                onClick={handleMaximizeWindow}
+              />
+              <ToolbarBtn
+                title="Close Window"
+                icon={X}
+                onClick={handleCloseWindow}
+                className="file-preview-win-close"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Media Preview Header (Second Tier) */}
       <div
         className={`file-preview-topbar ${isDesktop ? 'is-desktop' : ''}`}
         style={{
-          paddingRight: isDesktop ? (window.electronAPI?.hasNativeWindowControls ? '152px' : '20px') : '20px',
+          top: isDesktop ? 32 : 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1, paddingRight: 12 }}>
@@ -228,26 +251,6 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <ToolbarBtn title="Download" icon={Download} onClick={() => handleDownload(currentFile)} />
             <ToolbarBtn title="Close Preview" icon={X} onClick={onClose} />
           </div>
-
-          {isDesktop && !window.electronAPI?.hasNativeWindowControls && (
-            <>
-              <div className="file-preview-divider" />
-              <div className="file-preview-window-controls">
-                <ToolbarBtn title="Minimize" icon={Minus} onClick={handleMinimizeWindow} />
-                <ToolbarBtn
-                  title={isMaximized ? "Restore" : "Maximize"}
-                  icon={isMaximized ? Copy : Square}
-                  onClick={handleMaximizeWindow}
-                />
-                <ToolbarBtn
-                  title="Close Window"
-                  icon={X}
-                  onClick={handleCloseWindow}
-                  className="file-preview-win-close"
-                />
-              </div>
-            </>
-          )}
         </div>
       </div>
 
@@ -279,8 +282,8 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
-          height: 'calc(100vh - 64px)',
-          marginTop: 64,
+          height: `calc(100vh - ${isDesktop ? 96 : 64}px)`,
+          marginTop: isDesktop ? 96 : 64,
           padding: '24px 48px',
           boxSizing: 'border-box',
           position: 'relative',

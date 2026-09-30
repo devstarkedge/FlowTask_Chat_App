@@ -158,7 +158,13 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        useAuthStore.getState().logout();
+        const refreshStatus = refreshError.response?.status;
+        // Only trigger hard logout if server explicitly responded with 401 or 403,
+        // confirming that the refresh token is invalid or revoked.
+        // DO NOT log out on network errors, timeouts, or 5xx server errors.
+        if (refreshStatus === 401 || refreshStatus === 403) {
+          useAuthStore.getState().logout();
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

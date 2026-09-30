@@ -39,23 +39,36 @@ function PageFallback() {
  */
 function AuthenticatedDefaultRedirect() {
   const { user } = useAuthStore()
-  const { activeWorkspaceId, workspaces, isLoading, isWorkspacesLoaded } = useWorkspaceStore()
+  const { activeWorkspaceId, workspaces, isLoading, isWorkspacesLoaded, fetchWorkspaces } = useWorkspaceStore()
+
+  // If we don't have a target ID, we must wait for workspaces to load to pick one.
+  // We must trigger the fetch here if it hasn't started, to prevent a deadlock.
+  useEffect(() => {
+    // Only run if we actually need to fetch (user is logged in, no target ID cached)
+    if (user) {
+      const savedId = getSavedWorkspaceId(user._id)
+      const targetId = activeWorkspaceId || savedId
+      if (!targetId && !isWorkspacesLoaded && !isLoading) {
+        fetchWorkspaces()
+      }
+    }
+  }, [user, activeWorkspaceId, isWorkspacesLoaded, isLoading, fetchWorkspaces])
 
   if (!user) {
     return <Navigate to="/login" replace />
   }
 
-  // Show splash loader while workspaces are being restored
-  if (isLoading || !isWorkspacesLoaded) {
-    return <PageFallback />
-  }
-
   const savedId = getSavedWorkspaceId(user._id)
   const targetId = activeWorkspaceId || savedId
-  const validWorkspace = targetId && workspaces.find((w) => w._id === targetId)
 
-  if (validWorkspace) {
-    return <Navigate to={`/workspace/${validWorkspace._id}`} replace />
+  // If a target workspace ID is already cached locally, navigate to it immediately
+  if (targetId) {
+    return <Navigate to={`/workspace/${targetId}`} replace />
+  }
+
+  // Show splash loader while workspaces are being restored ONLY if no target workspace is cached yet
+  if (isLoading || !isWorkspacesLoaded) {
+    return <PageFallback />
   }
 
   if (workspaces.length === 1) {

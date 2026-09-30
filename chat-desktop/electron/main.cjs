@@ -17,6 +17,23 @@ let tray = null;
 let isQuitting = false;
 const hasTitleBarOverlay = process.platform === 'win32' || process.platform === 'linux';
 const overlayWindows = new WeakSet();
+
+// Ensure single instance behavior — prevent second launch from opening unauthenticated LevelDB locked process
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+        if (process.platform === 'darwin' && app.dock) app.dock.show();
+      }
+      mainWindow.focus();
+    }
+  });
+}
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -24,6 +41,8 @@ function createWindow() {
     minWidth: 600,
     minHeight: 500,
     title: 'TaskChat',
+    show: false, // Wait until ready-to-show to prevent white screen flash
+    backgroundColor: '#1E1E1E', // Dark background for the window to match app theme
     icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
     titleBarStyle: 'hidden',
     ...(hasTitleBarOverlay ? {
@@ -36,6 +55,11 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
   if (hasTitleBarOverlay) overlayWindows.add(mainWindow);
 
   if (isDev) {

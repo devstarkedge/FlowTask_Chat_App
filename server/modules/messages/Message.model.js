@@ -253,6 +253,16 @@ const messageSchema = new Schema({
     type: activityMetaSchema,
     default: null,
   },
+  canvasMeta: {
+    type: new Schema({
+      canvasId: { type: String, required: true },
+      title: { type: String, default: 'Untitled Canvas' },
+      shareToken: { type: String, default: null },
+      permission: { type: String, default: 'view' },
+      previewText: { type: String, default: null },
+    }, { _id: false }),
+    default: null,
+  },
   gifMeta: {
     type: gifMetaSchema,
     default: null,

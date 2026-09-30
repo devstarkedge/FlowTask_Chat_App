@@ -1,6 +1,7 @@
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import MessageContentResolver from "./MessageContentResolver";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
@@ -1103,7 +1104,9 @@ const MessageItem = memo(
               )}
 
               {/* ── Message content (rich HTML or plain text) ── */}
-              {renderMessageContent()}
+              <MessageContentResolver rawContent={message.content} message={message}>
+                {renderMessageContent()}
+              </MessageContentResolver>
 
               {!isDeleted && isFailed && (
                 <div className="flex items-center gap-2 mt-1">

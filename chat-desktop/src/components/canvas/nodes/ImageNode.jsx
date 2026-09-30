@@ -12,7 +12,7 @@
  */
 
 import Image from '@tiptap/extension-image';
-import { buildImageUrl, isPlaceholderUrl } from '../../../services/mediaService';
+import { buildImageUrl, isPlaceholderUrl, downloadFile } from '../../../services/mediaService';
 
 const MIN_WIDTH = 100;
 const MIN_HEIGHT = 60;
@@ -118,35 +118,18 @@ export default Image.extend({
 
   addNodeView() {
     return ({ node, editor, getPos }) => {
+      let currentNode = node;
       const container = document.createElement('div');
       container.className = 'canvas-image-node-container';
       container.style.cssText = 'position: relative; margin: 12px 0; display: inline-block; max-width: 100%;';
 
       // ── Image element ──────────────────────────────────────────────────
       const img = document.createElement('img');
-
-      // CRITICAL: Use proxy URL for authenticated access to Cloudinary
-      // Direct Cloudinary URLs fail without auth; proxy routes through our server
-      const imageFile = {
-        secureUrl: node.attrs.src,
-        fileId: node.attrs.fileId,
-        _id: node.attrs.fileId,
-        assetId: node.attrs.fileId,
-      };
-      const resolvedSrc = buildImageUrl(imageFile);
-
-      // Handle placeholder URLs (still uploading)
-      if (!resolvedSrc || isPlaceholderUrl(resolvedSrc)) {
-        img.style.display = 'none';
-      } else {
-        img.src = resolvedSrc;
-      }
-
-      img.alt = node.attrs.alt || node.attrs.fileName || '';
+      img.alt = currentNode.attrs.alt || currentNode.attrs.fileName || '';
 
       let imgStyle = 'max-width: 100%; height: auto; border-radius: 8px; display: block; cursor: pointer; border: 1px solid var(--border-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.04);';
-      const storedWidth = node.attrs.width;
-      const storedHeight = node.attrs.height;
+      const storedWidth = currentNode.attrs.width;
+      const storedHeight = currentNode.attrs.height;
       if (storedWidth && storedWidth !== '100%') {
         imgStyle += ` width: ${typeof storedWidth === 'number' ? storedWidth + 'px' : storedWidth};`;
       }
@@ -172,11 +155,6 @@ export default Image.extend({
       ].join(';');
       loadingPlaceholder.innerHTML = '<div style="width:20px;height:20px;border:2px solid var(--border-primary);border-top-color:var(--accent-primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span>Loading image...</span>';
 
-      // Show loading state for placeholder URLs
-      if (!resolvedSrc || isPlaceholderUrl(resolvedSrc)) {
-        loadingPlaceholder.style.display = 'flex';
-      }
-
       // ── Error placeholder ──────────────────────────────────────────────
       const errorPlaceholder = document.createElement('div');
       errorPlaceholder.style.cssText = [
@@ -194,27 +172,66 @@ export default Image.extend({
         'cursor: pointer',
       ].join(';');
       errorPlaceholder.innerHTML = '<span>🖼️</span><span>Image failed to load — click to retry</span>';
-      errorPlaceholder.addEventListener('click', (e) => {
-        e.stopPropagation();
-        // Retry with proxy URL
-        const retryFile = {
-          secureUrl: node.attrs.src,
-          fileId: node.attrs.fileId,
-          _id: node.attrs.fileId,
-          assetId: node.attrs.fileId,
-        };
-        const retryUrl = buildImageUrl(retryFile);
-        if (retryUrl && !isPlaceholderUrl(retryUrl)) {
-          img.src = retryUrl;
+
+      // ── Load Logic ─────────────────────────────────────────────────────
+      let currentBlobUrl = null;
+      
+      const loadImage = async (src, fileId) => {
+        // If it's a local object URL or data URL
+        if (src && (src.startsWith('blob:') || src.startsWith('data:'))) {
+          img.src = src;
           loadingPlaceholder.style.display = 'none';
           errorPlaceholder.style.display = 'none';
           img.style.display = 'block';
+          return;
         }
+
+        const imageFile = {
+          secureUrl: src,
+          fileId: fileId,
+          _id: fileId,
+          assetId: fileId,
+        };
+        const resolvedUrl = buildImageUrl(imageFile);
+
+        if (!resolvedUrl || isPlaceholderUrl(resolvedUrl)) {
+          img.style.display = 'none';
+          errorPlaceholder.style.display = 'none';
+          loadingPlaceholder.style.display = 'flex';
+          return;
+        }
+
+        // We have a remote URL. Need to fetch securely!
+        loadingPlaceholder.style.display = 'flex';
+        img.style.display = 'none';
+        errorPlaceholder.style.display = 'none';
+
+        if (currentBlobUrl) {
+          URL.revokeObjectURL(currentBlobUrl);
+          currentBlobUrl = null;
+        }
+
+        try {
+          const blob = await downloadFile(imageFile);
+          currentBlobUrl = URL.createObjectURL(blob);
+          img.src = currentBlobUrl;
+        } catch (e) {
+          console.error('[ImageNode] Failed to securely load image:', e);
+          loadingPlaceholder.style.display = 'none';
+          errorPlaceholder.style.display = 'flex';
+        }
+      };
+
+      // Trigger initial load
+      loadImage(currentNode.attrs.src, currentNode.attrs.fileId);
+
+      errorPlaceholder.addEventListener('click', (e) => {
+        e.stopPropagation();
+        loadImage(currentNode.attrs.src, currentNode.attrs.fileId);
       });
 
       img.addEventListener('error', () => {
-        // Only show error if we have a real URL that failed (not placeholder)
-        if (resolvedSrc && !isPlaceholderUrl(resolvedSrc)) {
+        if (!currentBlobUrl && img.src && !img.src.startsWith('blob:') && !img.src.startsWith('data:')) {
           img.style.display = 'none';
           loadingPlaceholder.style.display = 'none';
           errorPlaceholder.style.display = 'flex';
@@ -228,7 +245,7 @@ export default Image.extend({
       });
 
       // ── Loading state ──────────────────────────────────────────────────
-      if (node.attrs.loading) {
+      if (currentNode.attrs.loading) {
         img.style.opacity = '0.4';
         img.style.filter = 'blur(2px)';
         img.style.minHeight = '120px';
@@ -243,25 +260,25 @@ export default Image.extend({
         e.stopPropagation();
         e.preventDefault(); // CRITICAL: prevents any navigation/redirect
 
-        if (!node.attrs.src || node.attrs.loading) return;
+        if (!currentNode.attrs.src || currentNode.attrs.loading) return;
 
         // Build complete file metadata for preview modal
         const fileData = {
-          _id: node.attrs.fileId,
-          fileId: node.attrs.fileId,
-          assetId: node.attrs.fileId,
-          url: node.attrs.src,
-          src: node.attrs.src,
-          secureUrl: node.attrs.src,
-          fileName: node.attrs.fileName || 'Image',
-          name: node.attrs.fileName || 'Image',
-          originalName: node.attrs.fileName || 'Image',
-          mimeType: node.attrs.mimeType || 'image/png',
-          type: node.attrs.mimeType || 'image/png',
-          fileSize: node.attrs.fileSize || 0,
-          size: node.attrs.fileSize || 0,
-          thumbnailUrl: node.attrs.thumbnailUrl || node.attrs.src,
-          alt: node.attrs.alt || '',
+          _id: currentNode.attrs.fileId,
+          fileId: currentNode.attrs.fileId,
+          assetId: currentNode.attrs.fileId,
+          url: currentNode.attrs.src,
+          src: currentNode.attrs.src,
+          secureUrl: currentNode.attrs.src,
+          fileName: currentNode.attrs.fileName || 'Image',
+          name: currentNode.attrs.fileName || 'Image',
+          originalName: currentNode.attrs.fileName || 'Image',
+          mimeType: currentNode.attrs.mimeType || 'image/png',
+          type: currentNode.attrs.mimeType || 'image/png',
+          fileSize: currentNode.attrs.fileSize || 0,
+          size: currentNode.attrs.fileSize || 0,
+          thumbnailUrl: currentNode.attrs.thumbnailUrl || currentNode.attrs.src,
+          alt: currentNode.attrs.alt || '',
         };
 
         // Dispatch custom event for parent component to handle
@@ -346,7 +363,7 @@ export default Image.extend({
               try {
                 editor.view.dispatch(
                   editor.state.tr.setNodeMarkup(pos, undefined, {
-                    ...node.attrs,
+                    ...currentNode.attrs,
                     width: `${finalWidth}px`,
                     height: `${finalHeight}px`,
                   }),
@@ -402,22 +419,15 @@ export default Image.extend({
         update: (updatedNode) => {
           if (updatedNode.type.name !== 'image') return false;
 
-          // CRITICAL: Re-resolve proxy URL on every update
-          const updatedImageFile = {
-            secureUrl: updatedNode.attrs.src,
-            fileId: updatedNode.attrs.fileId,
-            _id: updatedNode.attrs.fileId,
-            assetId: updatedNode.attrs.fileId,
-          };
-          const resolvedSrc = buildImageUrl(updatedImageFile);
-          const newSrc = resolvedSrc || updatedNode.attrs.src || '';
+          const oldSrc = currentNode.attrs.src;
+          const oldFileId = currentNode.attrs.fileId;
+          const newSrc = updatedNode.attrs.src;
+          const newFileId = updatedNode.attrs.fileId;
 
-          if (newSrc !== img.src) {
-            img.src = newSrc;
-            // Reset states on src change
-            errorPlaceholder.style.display = 'none';
-            loadingPlaceholder.style.display = isPlaceholderUrl(newSrc) ? 'flex' : 'none';
-            img.style.display = newSrc && !isPlaceholderUrl(newSrc) ? 'block' : 'none';
+          currentNode = updatedNode;
+
+          if (newSrc !== oldSrc || newFileId !== oldFileId) {
+            loadImage(newSrc, newFileId);
           }
 
           img.alt = updatedNode.attrs.alt || updatedNode.attrs.fileName || '';
@@ -430,7 +440,9 @@ export default Image.extend({
             img.style.opacity = '1';
             img.style.filter = 'none';
             img.style.minHeight = '';
-            if (!isPlaceholderUrl(newSrc)) {
+            // loadImage handles its own loadingPlaceholder toggling, 
+            // but we can ensure it's hidden if we have a valid blob or src loaded.
+            if (img.src && !isPlaceholderUrl(img.src) && errorPlaceholder.style.display !== 'flex') {
               loadingPlaceholder.style.display = 'none';
             }
           }
@@ -449,6 +461,12 @@ export default Image.extend({
           }
 
           return true;
+        },
+        destroy: () => {
+          if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+            currentBlobUrl = null;
+          }
         },
       };
     };

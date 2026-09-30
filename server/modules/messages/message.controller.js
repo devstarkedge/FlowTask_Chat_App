@@ -72,6 +72,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     gifMeta,
     audioMeta,
     videoMeta,
+    canvasMeta,
   } = req.body;
 
   const channelId = req.params.channelId;
@@ -97,6 +98,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     gifMeta,
     audioMeta,
     videoMeta,
+    canvasMeta,
   });
 
   console.log("Message saved:", message);

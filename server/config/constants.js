@@ -113,6 +113,7 @@ export const MESSAGE_CONTENT_TYPES = Object.freeze({
   ACTIVITY: 'activity',
   AUDIO: 'audio',
   VIDEO: 'video',
+  CANVAS_SHARE: 'canvas_share',
 });
 
 // ─── Attachment Sources ──────────────────────────────────────────────────────

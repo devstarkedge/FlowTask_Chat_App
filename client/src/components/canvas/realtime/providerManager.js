@@ -108,7 +108,14 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
         if (consecutiveFailures < maxConsecutiveFailures) {
           scheduleReconnect();
         } else {
-          logger.error('[COLLAB MANAGER] too many disconnects, stopping reconnection', { key, failures: consecutiveFailures });
+          // Log only once at the exact limit to prevent console spam
+          if (consecutiveFailures === maxConsecutiveFailures) {
+            logger.error('[COLLAB MANAGER] too many disconnects, stopping reconnection', { key, failures: consecutiveFailures });
+          }
+          // Force the provider to stop its own internal reconnect loop
+          try {
+            provider.disconnect();
+          } catch (e) {}
         }
       }
     },
@@ -116,10 +123,10 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
       logger.info('[COLLAB MANAGER] provider synced', { key, state });
     },
     onClose: ({ event } = {}) => {
-      logger.warn('[COLLAB MANAGER] provider closed', { key, code: event?.code, reason: event?.reason });
+      logger.debug('[COLLAB MANAGER] provider closed', { key, code: event?.code, reason: event?.reason });
     },
     onDisconnect: ({ event } = {}) => {
-      logger.warn('[COLLAB MANAGER] provider disconnected', { key, code: event?.code, reason: event?.reason });
+      logger.debug('[COLLAB MANAGER] provider disconnected', { key, code: event?.code, reason: event?.reason });
     },
     onAwarenessChange: () => logger.debug('[COLLAB MANAGER] awareness changed', { key }),
     onAuthenticationFailed: async () => {

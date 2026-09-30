@@ -16,6 +16,7 @@ import {
 import toast from "react-hot-toast";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useCanvasUiStore } from "../../stores/canvasUiStore";
+import { getCanvasUrl } from "../../utils/urlUtils";
 
 const FONT_FAMILIES = [
   { label: "System UI", value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
@@ -135,7 +136,7 @@ export default function CanvasThreeDotMenu({
 
   const handleCopyLink = useCallback(() => {
     const url = canvasId
-      ? `${window.location.origin}/canvas/${canvasId}`
+      ? getCanvasUrl(canvasId)
       : window.location.href;
     navigator.clipboard.writeText(url).then(() => {
       toast.success("Link copied to clipboard");

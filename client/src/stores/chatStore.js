@@ -488,6 +488,7 @@ export const useChatStore = create((set, get) => ({
         htmlContent: options.htmlContent || content,
         contentType: options.contentType || "text",
         gifMeta: options.gifMeta || null,
+        canvasMeta: options.canvasMeta || null,
         authorId: user,
         senderSnapshot: {
           name: user?.name || "You",

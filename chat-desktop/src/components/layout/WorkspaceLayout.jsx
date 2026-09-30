@@ -40,32 +40,32 @@ export default function WorkspaceLayout() {
     init()
   }, [fetchWorkspaces])
 
-  // Sync URL workspaceId → store
+  // 1. Instantly sync URL workspaceId → store without waiting for network
+  useEffect(() => {
+    if (workspaceId && workspaceId !== activeWorkspaceId) {
+      switchWorkspace(workspaceId)
+    }
+  }, [workspaceId, activeWorkspaceId, switchWorkspace])
+
+  // 2. Validate the workspace ID only after we've fetched workspaces
   useEffect(() => {
     if (!workspaceId) return
 
     // Don't validate until we've at least tried to load workspaces once
     if (!hasInitialFetchRun || isLoading) return
 
-    if (!isLoading && hasInitialFetchRun) {
-      const valid = workspaces.find((w) => w._id === workspaceId)
-      if (!valid) {
-        if (workspaces.length > 0) {
-          const user = useAuthStore.getState().user
-          const savedId = getSavedWorkspaceId(user?._id)
-          const fallback = workspaces.find((w) => w._id === savedId) || workspaces[0]
-          navigate(`/workspace/${fallback._id}`, { replace: true })
-        } else {
-          navigate('/select-workspace', { replace: true })
-        }
-        return
+    const valid = workspaces.find((w) => w._id === workspaceId)
+    if (!valid) {
+      if (workspaces.length > 0) {
+        const user = useAuthStore.getState().user
+        const savedId = getSavedWorkspaceId(user?._id)
+        const fallback = workspaces.find((w) => w._id === savedId) || workspaces[0]
+        navigate(`/workspace/${fallback._id}`, { replace: true })
+      } else {
+        navigate('/select-workspace', { replace: true })
       }
     }
-
-    if (workspaceId !== activeWorkspaceId) {
-      switchWorkspace(workspaceId)
-    }
-  }, [workspaceId, activeWorkspaceId, workspaces, isLoading, hasInitialFetchRun, switchWorkspace, navigate])
+  }, [workspaceId, workspaces, isLoading, hasInitialFetchRun, navigate])
 
   // Ensure socket is connected once workspace context is ready
   const connectionStatus = useChatStore((s) => s.connectionStatus)

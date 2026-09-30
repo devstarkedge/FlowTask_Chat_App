@@ -55,7 +55,7 @@ class MessageService {
    * Supports optimistic UI via tempId — client generates a temporary ID,
    * server includes it in the ACK so the client can reconcile.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, parentMessageId, tempId, workspaceId, mentions, gifMeta, audioMeta, videoMeta }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, parentMessageId, tempId, workspaceId, mentions, gifMeta, audioMeta, videoMeta, canvasMeta }) {
     const startTime = performance.now();
 
     // Validate channel exists and is not archived
@@ -107,6 +107,7 @@ class MessageService {
       gifMeta: gifMeta || undefined,
       audioMeta: audioMeta || undefined,
       videoMeta: videoMeta || undefined,
+      canvasMeta: canvasMeta || undefined,
       senderSnapshot,
       ...(workspaceId && { workspaceId }),
     };

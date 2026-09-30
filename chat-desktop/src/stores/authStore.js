@@ -13,12 +13,31 @@ function createAuthAttemptId() {
   return `flowtask-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+function getSavedUser() {
+  try {
+    const raw = localStorage.getItem('chat_user')
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+function saveUser(user) {
+  try {
+    if (user) {
+      localStorage.setItem('chat_user', JSON.stringify(user))
+    } else {
+      localStorage.removeItem('chat_user')
+    }
+  } catch (e) {}
+}
+
 export const useAuthStore = create((set, get) => ({
   accessToken: localStorage.getItem('chat_access_token') || null,
   refreshToken: localStorage.getItem('chat_refresh_token') || null,
-  user: null,
+  user: getSavedUser(),
   isLoading: false,
-  isInitialized: !localStorage.getItem('chat_access_token'),
+  isInitialized: !localStorage.getItem('chat_access_token') || !!getSavedUser(),
   error: null,
   flowtaskEnabled: FLOWTASK_ENABLED,
   channelSync: null,
@@ -84,6 +103,7 @@ export const useAuthStore = create((set, get) => ({
       const { user, accessToken, refreshToken } = data.data
       localStorage.setItem('chat_access_token', accessToken)
       localStorage.setItem('chat_refresh_token', refreshToken)
+      saveUser(user)
       set({ accessToken, refreshToken, user, isLoading: false, isInitialized: true })
       // Fetch workspaces for workspace selector; socket connects when workspace is selected
       await useWorkspaceStore.getState().fetchWorkspaces()
@@ -115,6 +135,7 @@ export const useAuthStore = create((set, get) => ({
         localStorage.setItem('chat_access_token', accessToken)
         localStorage.setItem('chat_refresh_token', refreshToken)
         if (flowTaskToken) localStorage.setItem('flowtask_token', flowTaskToken)
+        saveUser(user)
         set({
           accessToken,
           refreshToken,
@@ -126,7 +147,7 @@ export const useAuthStore = create((set, get) => ({
           // setChannels (not a raw setState) — drops a stale, persisted
           // activeChannelId from an earlier session/workspace if it isn't
           // in this login's channel list. See channelStore.js#setChannels.
-          useChannelStore.getState().setChannels(channels)
+          useChannelStore.getState().setChannels?.(channels)
         }
         useWorkspaceStore.getState().fetchWorkspaces().catch((error) => {
           logger.error('Post-login workspace reconciliation failed:', error)
@@ -159,12 +180,23 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const { data } = await authAPI.me()
-      set({ user: data.data.user || data.data, isLoading: false, isInitialized: true })
+      const user = data.data.user || data.data
+      saveUser(user)
+      set({ user, isLoading: false, isInitialized: true })
       await useWorkspaceStore.getState().fetchWorkspaces()
-      // Socket connects when workspace is selected via WorkspaceLayout
-      return data.data.user || data.data
+      return user
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Failed to fetch user'
+      const status = error.response?.status
+      const cachedUser = getSavedUser()
+      // If we have an existing access token and a cached user profile, but network/server failed (not 401/403 explicit auth failure),
+      // preserve authenticated state with cached user profile instead of dropping to unauthenticated state.
+      if (get().accessToken && cachedUser && status !== 401 && status !== 403) {
+        logger.warn('fetchUser failed (network or server error), preserving session with cached user profile:', error)
+        set({ user: cachedUser, isLoading: false, isInitialized: true, error: null })
+        useWorkspaceStore.getState().fetchWorkspaces().catch(() => {})
+        return cachedUser
+      }
       set({ isLoading: false, error: msg, isInitialized: true })
       // Don't call logout() here — the API 401 interceptor handles token refresh
       // and calls logout only when refresh fails. Calling it here would be premature.
@@ -197,6 +229,7 @@ export const useAuthStore = create((set, get) => ({
     localStorage.removeItem('chat_access_token')
     localStorage.removeItem('chat_refresh_token')
     localStorage.removeItem('flowtask_token')
+    saveUser(null)
     if (user?._id) {
       localStorage.removeItem(`taskchat_active_workspace_${user._id}`)
     }
@@ -222,6 +255,7 @@ export const useAuthStore = create((set, get) => ({
     localStorage.removeItem('chat_access_token');
     localStorage.removeItem('chat_refresh_token');
     localStorage.removeItem('flowtask_token');
+    saveUser(null);
     disconnectSocket();
     useWorkspaceStore.getState().clearWorkspaceState();
     flowTaskLoginInFlight = null;
@@ -267,7 +301,9 @@ export const useAuthStore = create((set, get) => ({
   updatePreferences: async (prefs) => {
     try {
       const { data } = await authAPI.updatePreferences(prefs)
-      set({ user: data.data.user })
+      const updated = data.data.user
+      saveUser(updated)
+      set({ user: updated })
     } catch (error) {
       logger.error('Failed to update preferences:', error)
     }

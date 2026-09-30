@@ -246,12 +246,6 @@ export default function CreateWorkspacePage() {
             initial="hidden"
             animate="visible"
           >
-            <motion.div variants={fadeUp} className="cwp-back-link-wrapper">
-              <Link to="/select-workspace" className="cwp-back-link">
-                <ArrowLeft size={14} strokeWidth={2.2} />
-                <span>Back to Select Workspace</span>
-              </Link>
-            </motion.div>
 
             <motion.h1 variants={fadeUp} className="cwp-title">
               Create your

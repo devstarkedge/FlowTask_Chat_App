@@ -149,23 +149,34 @@ async function authenticateCanvasSession({ token, documentName, requestParameter
     throw new Error("Invalid canvas document");
   }
 
-  // If the client did not provide a valid workspaceId, try to derive it
-  // from the canvas document as a safe fallback. This helps support
-  // clients that may omit the workspace context during the WS handshake.
-  if (!workspaceId || !/^[0-9a-fA-F]{24}$/.test(workspaceId)) {
-    try {
-      const foundCanvas = await Canvas.findById(canvasId).select('workspaceId').lean();
-      if (foundCanvas?.workspaceId) {
-        workspaceId = String(foundCanvas.workspaceId);
-        logger.debug('[CANVAS COLLAB] derived workspaceId from canvas', { canvasId, workspaceId });
-      }
-    } catch (err) {
-      logger.debug('[CANVAS COLLAB] failed to derive workspaceId from canvas', { err: err?.message || err });
-    }
+  const publicToken = payload.requestParameters.get("publicToken");
+
+  const canvas = await Canvas.findById(canvasId)
+    .select("_id workspaceId channelId title permissions sharing")
+    .lean();
+
+  if (!canvas) {
+    logger.warn('[CANVAS COLLAB] canvas not found', { canvasId });
+    throw new Error("Canvas not found");
   }
 
+  // Check public access first
+  if (canvas.sharing?.isPublic && canvas.sharing?.publicToken && publicToken === canvas.sharing.publicToken) {
+    logger.debug('[CANVAS COLLAB] granted public access via publicToken', { canvasId });
+    const crypto = await import("crypto");
+    return {
+      canvasId,
+      workspaceId: canvas.workspaceId.toString(),
+      channelId: canvas.channelId?.toString(),
+      userId: `anonymous-${crypto.randomBytes(4).toString('hex')}`,
+      userName: "Anonymous Viewer",
+      userAvatar: null,
+    };
+  }
+
+  // If the client did not provide a valid workspaceId, fallback to canvas's workspace
   if (!workspaceId || !/^[0-9a-fA-F]{24}$/.test(workspaceId)) {
-    throw new Error("Workspace context is required");
+    workspaceId = canvas.workspaceId.toString();
   }
 
   const user = await resolveUserFromToken(handshakeToken);
@@ -183,15 +194,6 @@ async function authenticateCanvasSession({ token, documentName, requestParameter
   if (!membership) {
     logger.warn('[CANVAS COLLAB] membership check failed', { userId: user._id, workspaceId });
     throw new Error("Not a member of this workspace");
-  }
-
-  const canvas = await Canvas.findOne({ _id: canvasId, workspaceId })
-    .select("_id workspaceId channelId title permissions")
-    .lean();
-
-  if (!canvas) {
-    logger.warn('[CANVAS COLLAB] canvas not found or not in workspace', { canvasId, workspaceId });
-    throw new Error("Canvas not found");
   }
 
   // Enforce canvas-level permission rules

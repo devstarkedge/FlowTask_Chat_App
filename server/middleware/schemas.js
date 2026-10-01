@@ -87,7 +87,7 @@ export const sendMessageSchema = z
       .object({
         canvasId: z.string(),
         title: z.string().optional(),
-        shareToken: z.string().optional(),
+        publicToken: z.string().optional().nullable(),
         permission: z.string().optional(),
         previewText: z.string().optional().nullable(),
       })

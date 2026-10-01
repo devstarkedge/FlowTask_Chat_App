@@ -103,7 +103,8 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
 
   const handleCopyLink = useCallback(() => {
     const canvasId = canvas?._id;
-    const url = canvasId ? getCanvasUrl(canvasId) : window.location.href;
+    if (!canvasId) return;
+    const url = getCanvasUrl(canvasId);
     navigator.clipboard.writeText(url).then(() => {
       toast.success("Link copied to clipboard");
     });
@@ -197,6 +198,7 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
         canvasMeta: {
           canvasId: canvasId,
           title: canvas?.title || "Untitled canvas",
+          publicToken: canvas?.sharing?.isPublic ? canvas.sharing.publicToken : null,
           permission: currentAccessLevel,
           previewText: canvas?.content 
             ? canvas.content.replace(/<[^>]*>?/gm, '').substring(0, 200) 

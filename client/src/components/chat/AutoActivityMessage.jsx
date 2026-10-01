@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { ExternalLink, FileText } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { buildRedirectFromMeta } from '../../utils/flowTaskUrl'
 import { useLiveProfileData } from '../../hooks/useLiveProfileData'
 
@@ -107,6 +108,8 @@ function formatMinutes(totalMinutes) {
  * field-level diffs for TASK_UPDATED events.
  */
 export default function AutoActivityMessage({ message }) {
+  const navigate = useNavigate()
+  const location = useLocation()
   message = useLiveProfileData(message)
   const meta = { ...message.activityMeta }
   if (meta.actorId?.name) {
@@ -117,6 +120,17 @@ export default function AutoActivityMessage({ message }) {
   const eventType = meta.eventType || ''
   const config = EVENT_CONFIG[eventType] || { label: 'activity', accent: 'var(--accent-primary)' }
   const redirect = buildRedirectFromMeta(meta)
+
+  const handleOpenCanvas = (canvasId) => {
+    if (!canvasId) return
+    navigate('.', {
+      replace: true,
+      state: {
+        ...location.state,
+        targetTab: `canvas:${canvasId}`,
+      },
+    })
+  }
 
   // ─── Canvas Custom Slack-like Card Renderer ───
   if (eventType.startsWith('CANVAS_')) {
@@ -137,7 +151,7 @@ export default function AutoActivityMessage({ message }) {
               title="Open Canvas"
               onClick={(e) => {
                 e.preventDefault();
-                window.location.pathname = `/canvas/${meta.canvasId}`;
+                handleOpenCanvas(meta.canvasId);
               }}
             >
               Open Canvas
@@ -191,7 +205,7 @@ export default function AutoActivityMessage({ message }) {
                   }}
                   onClick={(e) => {
                     e.preventDefault();
-                    window.location.pathname = `/canvas/${meta.canvasId}`;
+                    handleOpenCanvas(meta.canvasId);
                   }}
                 >
                   <FileText size={13} style={{ display: 'inline', verticalAlign: 'middle', marginTop: -2 }} />

@@ -17,6 +17,7 @@ import MentionDropdown from './MentionDropdown'
 import RichTextEditor from './RichTextEditor'
 import ScheduleMessageModal from './ScheduleMessageModal'
 import GifPickerModal from './GifPickerModal'
+import { isStrictCanvasUrl } from '../../utils/canvasUrlUtils'
 
 // ─── Toolbar Button ──────────────────────────────────────────────────────────
 

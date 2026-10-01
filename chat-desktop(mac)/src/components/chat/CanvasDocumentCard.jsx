@@ -1,15 +1,25 @@
 import React from "react";
 import { FileText, ExternalLink } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export default function CanvasDocumentCard({ url, canvasId, token, isPublic }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleOpen = () => {
-    if (isPublic) {
-      window.open(url, "_blank");
+    if (isPublic && token) {
+      navigate(`/public/canvas/${token}`);
+    } else if (canvasId) {
+      navigate(".", {
+        replace: true,
+        state: {
+          ...location.state,
+          targetTab: `canvas:${canvasId}`,
+        },
+      });
     } else {
-      navigate(`/canvas/${canvasId}`);
+      // Fallback if we only have URL
+      window.open(url, "_blank");
     }
   };
 
@@ -98,22 +108,7 @@ export default function CanvasDocumentCard({ url, canvasId, token, isPublic }) {
         </div>
       </div>
 
-      {/* Raw Link Below */}
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          fontSize: 13,
-          color: "var(--text-link, #2563eb)",
-          textDecoration: "underline",
-          wordBreak: "break-all",
-          display: "inline-block",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {url}
-      </a>
+
     </div>
   );
 }

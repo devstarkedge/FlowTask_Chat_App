@@ -119,7 +119,7 @@ export default function ChatPanel({
     const targetTab = location.state?.targetTab;
     const targetChannelId = location.state?.targetChannelId;
 
-    if (targetTab && targetChannelId === channelId) {
+    if (targetTab && (!targetChannelId || targetChannelId === channelId)) {
       setActiveTab(targetTab);
       // Ensure it's added to open tabs if it's a canvas
       const cvsId = targetTab.split(":")[1];

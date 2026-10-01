@@ -294,35 +294,7 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
         {/* Scrollable Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 16px" }}>
           
-          {/* Banner */}
-          <div
-            style={{
-              background: "#eff6ff", // Light blue background
-              border: "1px solid #bfdbfe",
-              borderRadius: 8,
-              padding: "12px 16px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 12,
-              marginBottom: 16,
-              position: "relative"
-            }}
-          >
-            <div>
-              <span style={{
-                background: "#3b82f6", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, display: "inline-block", marginBottom: 6
-              }}>
-                New
-              </span>
-              <p style={{ margin: 0, fontSize: 13, color: "#1e3a8a", lineHeight: 1.4 }}>
-                <strong>Share this canvas with anyone, even if they're not on Slack.</strong><br/>
-                Just add them by email, and they'll get an invite to join you.
-              </p>
-            </div>
-            <button style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}>
-              <X size={16} />
-            </button>
-          </div>
+
 
           {/* Search Input */}
           <div style={{ marginBottom: 16 }}>

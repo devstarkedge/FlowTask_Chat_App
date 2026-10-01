@@ -315,12 +315,12 @@ export default function CanvasHeader({
                   <ImageIcon size={14} />
                   Change cover
                 </button>
-                <button
+                {/* <button
                   className="canvas-cover-remove-btn"
                   onClick={handleCoverRemove}
                 >
                   Remove
-                </button>
+                </button> */}
               </div>
             </>
           )}

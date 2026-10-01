@@ -24,6 +24,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import TemplateVariable from "./extensions/TemplateVariable";
+import TableResponsive from "./extensions/TableResponsive";
 import TemplateVariableView from "./TemplateVariableView";
 import CalloutNode from "../nodes/CalloutNode";
 import FileNode from "../nodes/FileNode";
@@ -217,6 +218,7 @@ export function buildExtensions({ withCollab, ydoc, provider, user }) {
     TableRow,
     TableHeader,
     TableCell,
+    TableResponsive,
     CharacterCount,
     Highlight.configure({ multicolor: true }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),

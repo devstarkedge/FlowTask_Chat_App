@@ -289,6 +289,12 @@ export const messageAPI = {
       timeout: 60000,
       onUploadProgress,
     }),
+  uploadWorkspaceFilesSync: (formData, onUploadProgress) =>
+    api.post(`/messages/upload?sync=true`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 60000,
+      onUploadProgress,
+    }),
   // Direct Cloudinary upload support
   getUploadSignature: (channelId) =>
     api.post(`/channels/${channelId}/upload/sign`),

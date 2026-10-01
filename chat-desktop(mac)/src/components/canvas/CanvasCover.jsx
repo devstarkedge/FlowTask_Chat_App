@@ -108,16 +108,7 @@ export default function CanvasCover({ cover, canvasId, canvasTitle, channelId, o
       const formData = new FormData();
       formData.append("files", file);
 
-      const channelIdToUse = channelId || useChannelStore.getState().activeChannelId || useChannelStore.getState().channels?.[0]?._id;
-      if (!channelIdToUse) {
-        toast.error("No active channel context found for uploading.");
-        setIsUploading(false);
-        isUploadingRef.current = false;
-        setUploadPreview(null);
-        return;
-      }
-
-      const res = await messageAPI.uploadFilesSync(channelIdToUse, formData);
+      const res = await messageAPI.uploadWorkspaceFilesSync(formData);
       if (res.data && res.data.success) {
         const uploadedUrl = res.data.data?.urls?.[0] || res.data.data?.files?.[0]?.url;
         if (uploadedUrl) {

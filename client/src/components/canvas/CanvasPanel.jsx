@@ -678,10 +678,10 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
     );
   }
 
-  // Editor (view === "editor" or activeCanvas exists with no other view)
   if (activeCanvas) {
     return (
       <CanvasEditor
+        key={activeCanvas._id}
         canvas={activeCanvas}
         onSave={handleSave}
         onBack={undefined}

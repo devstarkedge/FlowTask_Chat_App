@@ -192,12 +192,9 @@
 
 /* Cover picker panel */
 .canvas-cover-picker-panel {
-  background: var(--canvas-cover-picker-bg);
-  border: 1px solid var(--canvas-cover-picker-border);
+  /* Removed styling since CanvasCover provides its own card styling */
   border-radius: var(--canvas-cover-picker-radius);
-  padding: 12px 14px;
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: 90vh;
 }
 
 /* Cover close button */

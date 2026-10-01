@@ -285,11 +285,11 @@ export default function CanvasThreeDotMenu({
         />
       )} */}
 
-      <div className="canvas-three-dot-divider" />
+      {/* <div className="canvas-three-dot-divider" /> */}
 
       {/* Group 3: Threads and History */}
-      <MenuItem icon={MessageSquare} label="Show all threads" onClick={handleShowThreads} />
-      <MenuItem icon={History} label="View version history" onClick={handleViewHistory} />
+      {/* <MenuItem icon={MessageSquare} label="Show all threads" onClick={handleShowThreads} />
+      <MenuItem icon={History} label="View version history" onClick={handleViewHistory} /> */}
 
       {/* <div className="canvas-three-dot-divider" /> */}
 

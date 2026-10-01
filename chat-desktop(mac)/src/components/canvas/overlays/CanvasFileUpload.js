@@ -136,27 +136,21 @@ export function useCanvasFileUpload(editor, canvas, isViewOnly) {
     formData.append("files", file);
 
     try {
-      const channelIdToUse = channelId || canvas?.channelId;
-      if (channelIdToUse) {
-        // Use sync=true to wait for Cloudinary upload and get the real URL
-        const response = await messageAPI.uploadFilesSync(channelIdToUse, formData);
-        // Use normalizeUploadResult to extract consistent metadata from the response
-        const normalized = normalizeUploadResult(response, file);
+      // Use sync=true to wait for Cloudinary upload and get the real URL
+      const response = await messageAPI.uploadWorkspaceFilesSync(formData);
+      // Use normalizeUploadResult to extract consistent metadata from the response
+      const normalized = normalizeUploadResult(response, file);
 
-        // CRITICAL: Validate that we got a real URL, not a placeholder
-        if (normalized.isPlaceholder || !normalized.url || normalized.url === '/placeholder-loading') {
-          console.error("[Canvas Upload] Received placeholder URL instead of real file URL", {
-            fileName: file.name,
-            normalized,
-          });
-          throw new Error('Upload completed but file URL is not ready yet');
-        }
-
-        return normalized;
+      // CRITICAL: Validate that we got a real URL, not a placeholder
+      if (normalized.isPlaceholder || !normalized.url || normalized.url === '/placeholder-loading') {
+        console.error("[Canvas Upload] Received placeholder URL instead of real file URL", {
+          fileName: file.name,
+          normalized,
+        });
+        throw new Error('Upload completed but file URL is not ready yet');
       }
 
-      console.warn("[Canvas Upload] No channel context for upload, using blob URL");
-      return null;
+      return normalized;
     } catch (err) {
       console.error("[Canvas Upload] Upload failed:", err);
       return null;

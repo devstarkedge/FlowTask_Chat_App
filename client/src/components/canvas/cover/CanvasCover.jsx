@@ -31,32 +31,28 @@ export default function CanvasCover({
   const [activeTab, setActiveTab] = useState("library"); // library | upload
   const [isUploading, setIsUploading] = useState(false);
   const [originalCover] = useState(cover);
+  const [draftCover, setDraftCover] = useState(cover);
   const fileInputRef = useRef(null);
 
-  const handleCancel = async () => {
+  const handleCancel = () => {
+    onClose?.();
+  };
+
+  const handleSave = async () => {
     if (canvasId) {
-      await updateCanvasMetadata(canvasId, { cover: originalCover });
+      await updateCanvasMetadata(canvasId, { cover: draftCover });
+      toast.success("Cover updated successfully.");
     }
     onClose?.();
   };
 
-  const handleSave = () => {
-    onClose?.();
+  const handleRemove = () => {
+    setDraftCover(null);
   };
 
-  const handleRemove = async () => {
-    if (canvasId) {
-      await updateCanvasMetadata(canvasId, { cover: null });
-    }
-    onClose?.();
-  };
-
-  const selectLibraryImage = async (url) => {
-    if (canvasId) {
-      await updateCanvasMetadata(canvasId, {
-        cover: { type: "image", value: url, yOffset: 50 }
-      });
-    }
+  const selectLibraryImage = (url) => {
+    const newCover = { type: "image", value: url, yOffset: 50 };
+    setDraftCover(newCover);
   };
 
   const handleFileSelect = useCallback(async (e) => {
@@ -91,10 +87,9 @@ export default function CanvasCover({
       if (res.data && res.data.success) {
         const uploadedUrl = res.data.data?.urls?.[0] || res.data.data?.files?.[0]?.url;
         if (uploadedUrl) {
-          await updateCanvasMetadata(canvasId, {
-            cover: { type: "image", value: uploadedUrl, yOffset: 50 },
-          });
-          toast.success("Cover image uploaded!");
+          const newCover = { type: "image", value: uploadedUrl, yOffset: 50 };
+          setDraftCover(newCover);
+          toast.success("Image uploaded and ready for preview.");
         } else {
           toast.error("Upload succeeded but no URL returned.");
         }
@@ -109,7 +104,7 @@ export default function CanvasCover({
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [canvasId, channelId, updateCanvasMetadata, isUploading]);
+  }, [canvasId, channelId, isUploading]);
 
   return (
     <div style={{
@@ -122,6 +117,36 @@ export default function CanvasCover({
       boxSizing: "border-box",
       width: "100%",
     }}>
+      {/* Draft Preview Area */}
+      {draftCover && (
+        <div style={{
+          height: 140,
+          marginBottom: 16,
+          borderRadius: 8,
+          border: "1px solid var(--border-primary, rgba(0,0,0,0.1))",
+          ...(draftCover.type === "image" ? {
+            backgroundImage: `url(${draftCover.value})`,
+            backgroundSize: "cover",
+            backgroundPosition: `center ${draftCover.yOffset ?? 50}%`,
+          } : {
+            background: draftCover.value
+          })
+        }}>
+          <div style={{
+            background: "rgba(0,0,0,0.6)",
+            color: "#fff",
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "4px 8px",
+            borderRadius: "8px 0 8px 0",
+            display: "inline-block",
+            textTransform: "uppercase"
+          }}>
+            Preview
+          </div>
+        </div>
+      )}
+
       {/* Tab strip */}
       <div style={{
         display: "flex",
@@ -180,7 +205,7 @@ export default function CanvasCover({
           boxSizing: "border-box",
         }}>
           {LIBRARY_PRESETS.map((preset) => {
-            const isSelected = cover?.type === "image" && cover.value === preset.value;
+            const isSelected = draftCover?.type === "image" && draftCover.value === preset.value;
             return (
               <button
                 key={preset.value}
@@ -287,7 +312,7 @@ export default function CanvasCover({
         paddingTop: 16,
         borderTop: "1px solid var(--border-primary, rgba(0,0,0,0.1))",
       }}>
-        {cover ? (
+        {draftCover ? (
           <button
             onClick={handleRemove}
             style={{

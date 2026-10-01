@@ -149,7 +149,12 @@ async function authenticateCanvasSession({ token, documentName, requestParameter
     throw new Error("Invalid canvas document");
   }
 
-  const publicToken = payload.requestParameters.get("publicToken");
+  let publicToken = null;
+  const rp = payload?.requestParameters;
+  if (rp) {
+    if (typeof rp.get === 'function') publicToken = rp.get("publicToken");
+    else if (typeof rp === 'object') publicToken = rp.publicToken;
+  }
 
   const canvas = await Canvas.findById(canvasId)
     .select("_id workspaceId channelId title permissions sharing")

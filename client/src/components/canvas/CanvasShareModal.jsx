@@ -498,16 +498,6 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
             >
               <Link2 size={16} /> Copy Link
             </button>
-            {channelId && (
-              <button
-                onClick={handleShareToChannel}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6, background: "#3b82f6", border: "none", cursor: "pointer", color: "#ffffff", fontSize: 13, fontWeight: 600, padding: "8px 16px", borderRadius: 6, transition: "background 0.2s"
-                }}
-              >
-                Share in Chat
-              </button>
-            )}
           </div>
 
           <div style={{ position: "relative" }}>

@@ -96,7 +96,7 @@ import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import { handleDownload } from "../../utils/handleDownload";
 import { useAppHistory } from "../../hooks/useAppHistory";
-import { setWindowControlsColor, isMac } from "../../services/desktopService";
+import { setWindowControlsColor, hasNativeWindowControls, isDesktopApp } from "../../services/desktopService";
 
 const EMPTY_LIST = [];
 
@@ -805,9 +805,7 @@ function formatSize(bytes) {
 /* ─── Main ChatLayout ─────────────────────────────────────────────────────── */
 
 export default function ChatLayout() {
-  useEffect(() => {
-    setWindowControlsColor("#ffffff");
-  }, []);
+
   const {
     fetchChannels,
     fetchMembers,
@@ -2003,7 +2001,8 @@ function GlobalTopBar({
     }
   };
 
-  const isMacPlatform = useMemo(() => isMac(), []);
+  const hasNativeControls = typeof window !== 'undefined' && Boolean(window.electronAPI?.hasNativeWindowControls);
+  const isDesktop = isDesktopApp();
 
   return (
     <>
@@ -2011,10 +2010,10 @@ function GlobalTopBar({
         className="cl-topbar"
         style={{
           position: 'relative',
-          paddingLeft: isMacPlatform ? '78px' : '0px',
           '--cl-nav-sidebar-width': navigationSidebarWidth
             ? `${navigationSidebarWidth}px`
             : 'var(--nav-sidebar-width)',
+          paddingRight: hasNativeControls ? '148px' : '12px',
         }}
       >
         <div className="cl-topbar__workspace">
@@ -2077,7 +2076,7 @@ function GlobalTopBar({
             <CircleHelp size={16} />
           </button>
 
-          {!isMacPlatform && (
+          {!hasNativeControls && isDesktop && (
             <div className="cl-topbar__window-controls">
               <button
                 className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"

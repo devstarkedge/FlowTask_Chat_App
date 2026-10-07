@@ -1,9 +1,10 @@
 import { useEffect, Suspense, lazy } from 'react'
-import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
+import { Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
+import { isDesktopApp, updateWindowControlsContrast } from './services/desktopService'
 
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
@@ -97,11 +98,63 @@ function SmartAuthRedirect() {
   return <AuthenticatedDefaultRedirect />
 }
 
+function useTitlebarContrast() {
+  const location = useLocation()
+
+  useEffect(() => {
+    if (!isDesktopApp() || !window.electronAPI?.setTitleBarOverlay) return
+
+    updateWindowControlsContrast()
+    const timer1 = setTimeout(updateWindowControlsContrast, 50)
+    const timer2 = setTimeout(updateWindowControlsContrast, 200)
+    const timer3 = setTimeout(updateWindowControlsContrast, 500)
+
+    const handleResize = () => updateWindowControlsContrast()
+    const handleThemeChange = () => updateWindowControlsContrast()
+
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('themeChanged', handleThemeChange)
+
+    let rafId = null
+    const handleDomMutation = () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        updateWindowControlsContrast()
+      })
+    }
+
+    const observer = new MutationObserver(handleDomMutation)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] })
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-theme', 'class', 'style'] })
+    }
+
+    let unsubMax = null
+    if (window.electronAPI?.onMaximizedChange) {
+      unsubMax = window.electronAPI.onMaximizedChange(() => {
+        updateWindowControlsContrast()
+      })
+    }
+
+    return () => {
+      clearTimeout(timer1)
+      clearTimeout(timer2)
+      clearTimeout(timer3)
+      if (rafId) cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('themeChanged', handleThemeChange)
+      observer.disconnect()
+      if (unsubMax) unsubMax()
+    }
+  }, [location.pathname])
+}
+
 function App() {
   const { user, isInitialized } = useAuthStore()
   const hydrateFromPreferences = useThemeStore((s) => s.hydrateFromPreferences)
 
   usePresenceTracker()
+  useTitlebarContrast()
 
   useEffect(() => {
     const state = useAuthStore.getState()

@@ -56,9 +56,6 @@ const FEATURES = [
 ];
 
 export default function LandingPage() {
-  useEffect(() => {
-    setWindowControlsColor("#ffffff");
-  }, []);
   return (
     <div
       style={{

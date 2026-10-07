@@ -155,9 +155,7 @@ export default function RegisterPage() {
   const { register, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    setWindowControlsColor("#000000");
-  }, []);
+
 
   const [form, setForm] = useState({
     name: "",

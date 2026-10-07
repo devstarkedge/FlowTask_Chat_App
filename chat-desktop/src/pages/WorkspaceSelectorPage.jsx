@@ -17,6 +17,7 @@ import Loader from "../components/shared/Loader";
 import JoinWorkspaceModal from "../components/workspace/JoinWorkspaceModal";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { setWindowControlsColor } from "../services/desktopService";
 import "./custom-css/workspaceSelectorPage.css";
 
 /* ─────────────────────────────────────────────────────────────────────────

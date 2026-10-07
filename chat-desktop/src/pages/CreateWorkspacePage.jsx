@@ -1,6 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useWorkspaceStore } from "../stores/workspaceStore";
+import { setWindowControlsColor } from "../services/desktopService";
 import {
   MessageSquare,
   ArrowRight,
@@ -123,6 +124,8 @@ export default function CreateWorkspacePage() {
   const [searchParams] = useSearchParams();
   const selectedPlan = searchParams.get("plan") || "free";
   const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
+
+
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -320,170 +323,178 @@ export default function CreateWorkspacePage() {
                 </motion.div>
               )}
 
-              <form onSubmit={handleSubmit}>
-                {/* ── Workspace Logo ── */}
-                <div
-                  className="cwp-field"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    marginBottom: 20,
-                  }}
-                >
-                  <label
-                    className="cwp-field-label"
-                    style={{ width: "100%", textAlign: "left" }}
-                  >
-                    Workspace Logo
-                  </label>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                <div className="cwp-form-scrollable">
+                  {/* ── Workspace Logo ── */}
                   <div
-                    onClick={() => fileInputRef.current?.click()}
+                    className="cwp-field"
                     style={{
-                      width: 80,
-                      height: 80,
-                      borderRadius: 16,
-                      border: "2px dashed var(--border-color, #e2e8f0)",
                       display: "flex",
+                      flexDirection: "column",
                       alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      overflow: "hidden",
-                      position: "relative",
-                      background: logoUrl
-                        ? `url(${logoUrl}) center/cover no-repeat`
-                        : "var(--bg-secondary, #f8fafc)",
+                      marginBottom: 24,
                     }}
                   >
-                    {!logoUrl && (
+                    <label
+                      className="cwp-field-label"
+                      style={{ width: "100%", textAlign: "left" }}
+                    >
+                      Workspace Logo
+                    </label>
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{
+                        width: 100,
+                        height: 100,
+                        borderRadius: 18,
+                        border: "3px dashed #e4e4e7",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        overflow: "hidden",
+                        position: "relative",
+                        background: logoUrl
+                          ? `url(${logoUrl}) center/cover no-repeat`
+                          : "#f9f9fb",
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!logoUrl) e.currentTarget.style.borderColor = '#6366f1';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!logoUrl) e.currentTarget.style.borderColor = '#e4e4e7';
+                      }}
+                    >
+                      {!logoUrl && (
+                        <div style={{ textAlign: 'center', padding: '12px' }}>
+                          <div style={{ fontSize: 13, color: '#6366f1', fontWeight: 700, marginBottom: 4 }}>
+                            {isUploadingLogo ? "Uploading..." : "Upload Logo"}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#a1a1aa', fontWeight: 500 }}>
+                            PNG, JPG, SVG
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      style={{ display: "none" }}
+                    />
+                  </div>
+
+                  {/* ── Workspace Name ── */}
+                  <div className="cwp-field">
+                    <label htmlFor="workspace-name" className="cwp-field-label">
+                      Workspace Name
                       <span
                         style={{
-                          fontSize: 12,
-                          color: "var(--text-secondary, #64748b)",
-                          fontWeight: 600,
+                          color: "#ef4444",
+                          letterSpacing: 0,
+                          fontWeight: 900,
                         }}
                       >
-                        {isUploadingLogo ? "Uploading..." : "Upload Logo"}
+                        *
                       </span>
-                    )}
+                    </label>
+                    <input
+                      id="workspace-name"
+                      className="cwp-input"
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Acme Corp"
+                      maxLength={50}
+                      autoFocus
+                    />
+
+                    <div className="cwp-slug-row">
+                      <AnimatePresence mode="wait">
+                        <motion.span
+                          key={slug || "__empty__"}
+                          className={`cwp-slug-pill cwp-mono ${slug ? "has" : "empty"}`}
+                          variants={slugVariants}
+                          initial="initial"
+                          animate="animate"
+                          exit="exit"
+                        >
+                          {slug ? (
+                            <>
+                              <motion.span
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{
+                                  duration: 0.25,
+                                  ease: [0.22, 1, 0.36, 1],
+                                }}
+                              >
+                                <Check size={10} strokeWidth={3} />
+                              </motion.span>
+                              …/{slug}
+                            </>
+                          ) : (
+                            "auto-generated"
+                          )}
+                        </motion.span>
+                      </AnimatePresence>
+                      <span className="cwp-char-count cwp-mono">
+                        {name.length} / 50
+                      </span>
+                    </div>
                   </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    style={{ display: "none" }}
-                  />
-                </div>
 
-                {/* ── Workspace Name ── */}
-                <div className="cwp-field">
-                  <label htmlFor="workspace-name" className="cwp-field-label">
-                    Workspace Name
-                    <span
-                      style={{
-                        color: "#ef4444",
-                        letterSpacing: 0,
-                        fontWeight: 900,
-                      }}
+                  {/* ── Description ── */}
+                  <div className="cwp-field">
+                    <label
+                      htmlFor="workspace-description"
+                      className="cwp-field-label"
                     >
-                      *
-                    </span>
-                  </label>
-                  <input
-                    id="workspace-name"
-                    className="cwp-input"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Acme Corp"
-                    maxLength={50}
-                    autoFocus
-                  />
-
-                  <div className="cwp-slug-row">
-                    <AnimatePresence mode="wait">
-                      <motion.span
-                        key={slug || "__empty__"}
-                        className={`cwp-slug-pill cwp-mono ${slug ? "has" : "empty"}`}
-                        variants={slugVariants}
-                        initial="initial"
-                        animate="animate"
-                        exit="exit"
+                      Description
+                      <span
+                        style={{
+                          fontSize: 9,
+                          color: "#a1a1aa",
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: ".06em",
+                          marginLeft: 4,
+                        }}
                       >
-                        {slug ? (
-                          <>
-                            <motion.span
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              transition={{
-                                duration: 0.25,
-                                ease: [0.22, 1, 0.36, 1],
-                              }}
-                            >
-                              <Check size={10} strokeWidth={3} />
-                            </motion.span>
-                            …/{slug}
-                          </>
-                        ) : (
-                          "auto-generated"
-                        )}
-                      </motion.span>
+                        optional
+                      </span>
+                    </label>
+                    <textarea
+                      id="workspace-description"
+                      className="cwp-input"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="What's this workspace for?"
+                      maxLength={200}
+                      rows={3}
+                      style={{
+                        resize: "vertical",
+                        lineHeight: 1.7,
+                        marginBottom: description.length > 0 ? 6 : 0,
+                      }}
+                    />
+                    <AnimatePresence>
+                      {description.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          style={{ textAlign: "right" }}
+                        >
+                          <span className="cwp-char-count cwp-mono">
+                            {description.length} / 200
+                          </span>
+                        </motion.div>
+                      )}
                     </AnimatePresence>
-                    <span className="cwp-char-count cwp-mono">
-                      {name.length} / 50
-                    </span>
                   </div>
-                </div>
-
-                {/* ── Description ── */}
-                <div className="cwp-field">
-                  <label
-                    htmlFor="workspace-description"
-                    className="cwp-field-label"
-                  >
-                    Description
-                    <span
-                      style={{
-                        fontSize: 9,
-                        color: "#a1a1aa",
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: ".06em",
-                        marginLeft: 4,
-                      }}
-                    >
-                      optional
-                    </span>
-                  </label>
-                  <textarea
-                    id="workspace-description"
-                    className="cwp-input"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="What's this workspace for?"
-                    maxLength={200}
-                    rows={3}
-                    style={{
-                      resize: "vertical",
-                      lineHeight: 1.7,
-                      marginBottom: description.length > 0 ? 6 : 0,
-                    }}
-                  />
-                  <AnimatePresence>
-                    {description.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        style={{ textAlign: "right" }}
-                      >
-                        <span className="cwp-char-count cwp-mono">
-                          {description.length} / 200
-                        </span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
 
                 {/* ── Submit ── */}

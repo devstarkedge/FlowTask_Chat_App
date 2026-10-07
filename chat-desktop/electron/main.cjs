@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 
@@ -35,6 +35,7 @@ if (!gotTheLock) {
   });
 }
 function createWindow() {
+  const initialSymbolColor = (nativeTheme && nativeTheme.shouldUseDarkColors) ? '#ffffff' : '#0f172a';
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -46,7 +47,7 @@ function createWindow() {
     icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
     titleBarStyle: 'hidden',
     ...(hasTitleBarOverlay ? {
-      titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 48 },
+      titleBarOverlay: { color: '#00000000', symbolColor: initialSymbolColor, height: 48 },
     } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

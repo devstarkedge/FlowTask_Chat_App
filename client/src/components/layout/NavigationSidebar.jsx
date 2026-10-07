@@ -82,6 +82,7 @@ export default function NavigationSidebar({
   onToggleAllThreads,
   onToggleNotifications,
   showAllThreads = false,
+  isCollapsed = false,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -491,7 +492,7 @@ export default function NavigationSidebar({
 
   return (
     <>
-      <SidebarContainer header={header} aria-label="Channels sidebar">
+      <SidebarContainer header={header} isCollapsed={isCollapsed} aria-label="Channels sidebar">
         {channelSync?.workspaceId === activeWorkspaceId
           && ['partial', 'failed'].includes(channelSync.status) && (
           <div

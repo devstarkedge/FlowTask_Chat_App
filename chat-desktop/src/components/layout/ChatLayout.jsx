@@ -96,7 +96,7 @@ import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import { handleDownload } from "../../utils/handleDownload";
 import { useAppHistory } from "../../hooks/useAppHistory";
-import { setWindowControlsColor } from "../../services/desktopService";
+import { setWindowControlsColor, hasNativeWindowControls, isDesktopApp, updateWindowControlsContrast } from "../../services/desktopService";
 
 const EMPTY_LIST = [];
 
@@ -134,7 +134,7 @@ const LAYOUT_STYLES = `
   height: 48px;
   display: grid;
   grid-template-columns:
-    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+    calc(var(--workspace-sidebar-width, 48px) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
     auto
     minmax(0, 1fr)
     auto;
@@ -233,9 +233,17 @@ const LAYOUT_STYLES = `
 .cl-topbar__search-wrap {
   flex: 1;
   min-width: 0;
-  max-width: 640px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   overflow: visible;
   position: relative;
+}
+
+.cl-topbar__search-wrap .global-search {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .cl-topbar__actions {
@@ -278,7 +286,7 @@ const LAYOUT_STYLES = `
 @media (max-width: 1024px) {
   .cl-topbar {
     grid-template-columns:
-      calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+      calc(var(--workspace-sidebar-width, 48px) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
       auto
       minmax(0, 1fr)
       auto;
@@ -805,9 +813,7 @@ function formatSize(bytes) {
 /* ─── Main ChatLayout ─────────────────────────────────────────────────────── */
 
 export default function ChatLayout() {
-  useEffect(() => {
-    setWindowControlsColor("#ffffff");
-  }, []);
+
   const {
     fetchChannels,
     fetchMembers,
@@ -1979,6 +1985,12 @@ function GlobalTopBar({
     }
   }, []);
 
+  useEffect(() => {
+    if (isDesktopApp()) {
+      updateWindowControlsContrast();
+    }
+  }, []);
+
   const closeWorkspaceModal = () => setWorkspaceModal(null);
   const openJoinedWorkspace = (workspace) => {
     closeWorkspaceModal();
@@ -2003,6 +2015,9 @@ function GlobalTopBar({
     }
   };
 
+  const hasNativeControls = typeof window !== 'undefined' && Boolean(window.electronAPI?.hasNativeWindowControls);
+  const isDesktop = isDesktopApp();
+
   return (
     <>
       <header
@@ -2012,6 +2027,7 @@ function GlobalTopBar({
           '--cl-nav-sidebar-width': navigationSidebarWidth
             ? `${navigationSidebarWidth}px`
             : 'var(--nav-sidebar-width)',
+          paddingRight: hasNativeControls ? '148px' : '12px',
         }}
       >
         <div className="cl-topbar__workspace">
@@ -2074,34 +2090,36 @@ function GlobalTopBar({
             <CircleHelp size={16} />
           </button>
 
-          <div className="cl-topbar__window-controls">
-            <button
-              className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
-              onClick={handleMinimize}
-              title="Minimize"
-              aria-label="Minimize"
-            >
-              <Minus size={15} />
-            </button>
+          {!hasNativeControls && isDesktop && (
+            <div className="cl-topbar__window-controls">
+              <button
+                className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
+                onClick={handleMinimize}
+                title="Minimize"
+                aria-label="Minimize"
+              >
+                <Minus size={15} />
+              </button>
 
-            <button
-              className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
-              onClick={handleMaximize}
-              title={isMaximized ? "Restore" : "Maximize"}
-              aria-label={isMaximized ? "Restore" : "Maximize"}
-            >
-              {isMaximized ? <Copy size={14} /> : <Square size={14} />}
-            </button>
+              <button
+                className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"
+                onClick={handleMaximize}
+                title={isMaximized ? "Restore" : "Maximize"}
+                aria-label={isMaximized ? "Restore" : "Maximize"}
+              >
+                {isMaximized ? <Copy size={14} /> : <Square size={14} />}
+              </button>
 
-            <button
-              className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__close-btn cl-topbar__window-control"
-              onClick={handleClose}
-              title="Close"
-              aria-label="Close"
-            >
-              <X size={16} />
-            </button>
-          </div>
+              <button
+                className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__close-btn cl-topbar__window-control"
+                onClick={handleClose}
+                title="Close"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

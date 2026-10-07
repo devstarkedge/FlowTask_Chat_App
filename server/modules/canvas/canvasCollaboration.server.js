@@ -1,4 +1,4 @@
-import { Server } from "@hocuspocus/server";
+import { Hocuspocus } from "@hocuspocus/server";
 import { Redis } from "@hocuspocus/extension-redis";
 import IORedis from "ioredis";
 import * as Y from "yjs";
@@ -150,7 +150,7 @@ async function authenticateCanvasSession({ token, documentName, requestParameter
   }
 
   let publicToken = null;
-  const rp = payload?.requestParameters;
+  const rp = requestParameters;
   if (rp) {
     if (typeof rp.get === 'function') publicToken = rp.get("publicToken");
     else if (typeof rp === 'object') publicToken = rp.publicToken;
@@ -313,7 +313,7 @@ export async function startCanvasCollaborationServer() {
 
   if (collaborationServer) return collaborationServer;
 
-  collaborationServer = new Server({
+  collaborationServer = new Hocuspocus({
     // Do not set `port` here to avoid automatic binding by the
     // constructor. We call `listen()` explicitly below which
     // prevents double-binding / EADDRINUSE when the constructor
@@ -443,7 +443,6 @@ export async function stopCanvasCollaborationServer() {
   if (!collaborationServer) return;
 
   try {
-    collaborationServer.hocuspocus.flushPendingStores();
     await collaborationServer.destroy();
     collaborationServer = null;
   } finally {

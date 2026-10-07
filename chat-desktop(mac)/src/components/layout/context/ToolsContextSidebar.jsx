@@ -95,7 +95,7 @@ const STYLES = `
 }
 `;
 
-export default function ToolsContextSidebar() {
+export default function ToolsContextSidebar({ isCollapsed = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { workspaceId } = useParams();
@@ -141,6 +141,7 @@ export default function ToolsContextSidebar() {
 
   return (
     <SidebarContainer
+      isCollapsed={isCollapsed}
       subHeader={
         <div className="tcs-section-title">
           Tools

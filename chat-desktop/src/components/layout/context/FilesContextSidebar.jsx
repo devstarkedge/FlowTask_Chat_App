@@ -708,6 +708,7 @@ export default function FilesContextSidebar({
   selectedFileId,
   onSelectFile,
   onFilesChanged,
+  isCollapsed = false,
 }) {
   useStylesInjected();
 
@@ -842,7 +843,7 @@ export default function FilesContextSidebar({
   );
 
   return (
-    <SidebarContainer subHeader={subHeader} aria-label="Files sidebar">
+    <SidebarContainer subHeader={subHeader} isCollapsed={isCollapsed} aria-label="Files sidebar">
       {/* Scrollable list */}
       <div className="fcs-list-scroll" role="listbox" aria-label="Files list">
         {/* Skeletons */}

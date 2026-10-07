@@ -11,16 +11,17 @@ export function getCanvasCollaborationUrl() {
   // 1. Prefer an explicit override — covers all environments.
   const explicit = import.meta.env.VITE_CANVAS_COLLAB_URL;
   if (explicit) {
-    _cachedCollabUrl = explicit.replace(/\/+$/, "");
+    let resolved = explicit.replace(/\/+$/, "");
+    if (typeof window !== "undefined" && window.location.protocol === "https:" && resolved.startsWith("ws://") && !resolved.includes("localhost") && !resolved.includes("127.0.0.1")) {
+      resolved = resolved.replace(/^ws:\/\//i, "wss://");
+    }
+    _cachedCollabUrl = resolved;
     console.debug('[Canvas Collab] URL from VITE_CANVAS_COLLAB_URL:', _cachedCollabUrl);
     return _cachedCollabUrl;
   }
 
-  // The Hocuspocus server always runs on a separate port (PORT+1 by default).
-  // We must apply this port in BOTH dev and production; previously it was
-  // only applied in dev mode, causing all production connections to fail by
-  // hitting port 443 instead of the Hocuspocus port.
-  const collabPort = import.meta.env.VITE_CANVAS_COLLAB_PORT;
+  // The Hocuspocus server runs on port 3201 (PORT+1 by default).
+  const collabPort = import.meta.env.VITE_CANVAS_COLLAB_PORT || 3201;
 
   // 2. Derive from the API base URL if provided.
   const apiBase = import.meta.env.VITE_API_BASE_URL;

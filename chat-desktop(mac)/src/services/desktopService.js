@@ -22,9 +22,18 @@ export const isMac = () => {
   return false;
 };
 
+export const hasNativeWindowControls = () => {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.electronAPI?.hasNativeWindowControls);
+};
+
 export const setWindowControlsColor = (symbolColor) => {
   if (isDesktopApp() && window.electronAPI?.setTitleBarOverlay) {
-    window.electronAPI.setTitleBarOverlay({ symbolColor });
+    try {
+      window.electronAPI.setTitleBarOverlay({ symbolColor });
+    } catch (e) {
+      console.warn('[desktopService] Failed to set titleBarOverlay color:', e);
+    }
   }
 };
 

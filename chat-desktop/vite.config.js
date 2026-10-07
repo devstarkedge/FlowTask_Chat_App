@@ -57,7 +57,30 @@ export default ({ mode }) => {
     base: mode === "production" ? "./" : "/",
 
     plugins: [
-      react(), 
+      (() => {
+        const plugins = react({ disableOxcRecommendation: true });
+        plugins.forEach((p) => {
+          if (p.name === "vite:react-babel" && p.config) {
+            const origConfig = p.config;
+            p.config = (...args) => {
+              const res = origConfig(...args);
+              if (res) {
+                delete res.esbuild;
+                delete res.optimizeDeps;
+              }
+              return {
+                ...res,
+                oxc: {
+                  jsx: {
+                    runtime: "automatic",
+                  },
+                },
+              };
+            };
+          }
+        });
+        return plugins;
+      })(),
       tailwindcss(),
       {
         name: 'html-csp-transform',

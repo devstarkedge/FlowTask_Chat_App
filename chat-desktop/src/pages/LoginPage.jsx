@@ -129,9 +129,7 @@ export default function LoginPage() {
     ssoSource === "flowtask" && !!ssoToken,
   );
 
-  useEffect(() => {
-    setWindowControlsColor("#000000");
-  }, []);
+
 
   /* ── FlowTask "Open Chat" SSO landing ──────────────────────────────────
      FlowTask redirects here as /login?token=...&source=flowtask&workspaceId=...

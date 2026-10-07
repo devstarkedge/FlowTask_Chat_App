@@ -15,6 +15,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { handleDownload } from '../../utils/handleDownload'
+import { setWindowControlsColor, updateWindowControlsContrast } from '../../services/desktopService'
 import FilePreviewRenderer, {
   FilePreviewKindIcon,
   getFileDisplayName,
@@ -74,6 +75,17 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   }, []);
 
   useEffect(() => {
+    if (isDesktop) {
+      setWindowControlsColor('#ffffff');
+    }
+    return () => {
+      if (isDesktop) {
+        updateWindowControlsContrast();
+      }
+    };
+  }, [isDesktop]);
+
+  useEffect(() => {
     if (typeof window !== 'undefined' && window.electronAPI?.isMaximized) {
       window.electronAPI.isMaximized().then((max) => setIsMaximized(Boolean(max)));
     }
@@ -108,6 +120,13 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const currentFile = files[currentIndex] || file
   const info = useMemo(() => getFilePreviewInfo(currentFile), [currentFile])
   const fileName = getFileDisplayName(currentFile)
+
+  const uploaderName = typeof currentFile?.uploadedBy === 'string'
+    ? currentFile.uploadedBy
+    : (currentFile?.uploadedBy?.name || currentFile?.user?.name || currentFile?.sender?.name || null);
+
+  const uploadedDate = currentFile?.uploadedAt || currentFile?.createdAt;
+  const formattedDate = uploadedDate ? new Date(uploadedDate).toLocaleString() : null;
 
   const resetView = useCallback(() => {
     setZoom(1)
@@ -178,29 +197,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
 
   const content = (
     <div className="file-preview-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      {/* 1. Dedicated Window Controls Title Bar (Top Tier) */}
-      {isDesktop && (
-        <div className="file-preview-titlebar">
-          {!window.electronAPI?.hasNativeWindowControls && (
-            <div className="file-preview-window-controls">
-              <ToolbarBtn title="Minimize" icon={Minus} onClick={handleMinimizeWindow} />
-              <ToolbarBtn
-                title={isMaximized ? "Restore" : "Maximize"}
-                icon={isMaximized ? Copy : Square}
-                onClick={handleMaximizeWindow}
-              />
-              <ToolbarBtn
-                title="Close Window"
-                icon={X}
-                onClick={handleCloseWindow}
-                className="file-preview-win-close"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 2. Media Preview Header (Second Tier) */}
+      {/* Media Preview Header */}
       <div
         className={`file-preview-topbar ${isDesktop ? 'is-desktop' : ''}`}
         style={{
@@ -251,6 +248,24 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <ToolbarBtn title="Download" icon={Download} onClick={() => handleDownload(currentFile)} />
             <ToolbarBtn title="Close Preview" icon={X} onClick={onClose} />
           </div>
+
+          {isDesktop && !window.electronAPI?.hasNativeWindowControls && (
+            <div className="file-preview-window-controls" style={{ marginLeft: 12 }}>
+              <div className="file-preview-divider" />
+              <ToolbarBtn title="Minimize" icon={Minus} onClick={handleMinimizeWindow} />
+              <ToolbarBtn
+                title={isMaximized ? "Restore" : "Maximize"}
+                icon={isMaximized ? Copy : Square}
+                onClick={handleMaximizeWindow}
+              />
+              <ToolbarBtn
+                title="Close Window"
+                icon={X}
+                onClick={handleCloseWindow}
+                className="file-preview-win-close"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -260,17 +275,17 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             type="button"
             onClick={prev}
             className="file-preview-nav-btn"
-            style={{ left: 16 }}
+            style={{ left: 20 }}
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={22} />
           </button>
           <button
             type="button"
             onClick={next}
             className="file-preview-nav-btn"
-            style={{ right: 16 }}
+            style={{ right: 20 }}
           >
-            <ChevronRight size={20} />
+            <ChevronRight size={22} />
           </button>
         </>
       )}
@@ -282,8 +297,8 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
-          height: `calc(100vh - ${isDesktop ? 96 : 64}px)`,
-          marginTop: isDesktop ? 96 : 64,
+          height: 'calc(100vh - 52px)',
+          marginTop: 52,
           padding: '24px 48px',
           boxSizing: 'border-box',
           position: 'relative',

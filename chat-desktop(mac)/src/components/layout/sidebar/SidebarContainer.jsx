@@ -6,13 +6,13 @@ import { forwardRef } from 'react'
  * header slot, and scrollable content area.
  */
 const SidebarContainer = forwardRef(function SidebarContainer(
-  { header, subHeader, children, className = '', style, ...rest },
+  { header, subHeader, children, className = '', style, isCollapsed = false, ...rest },
   ref,
 ) {
   return (
     <nav
       ref={ref}
-      className={`context-sidebar ${className}`}
+      className={`context-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${className}`}
       style={style}
       {...rest}
     >

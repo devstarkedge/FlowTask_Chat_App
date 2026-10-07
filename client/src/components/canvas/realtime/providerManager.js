@@ -37,6 +37,8 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
   let isDestroyed = false;
   let consecutiveFailures = 0;
   const maxConsecutiveFailures = 3;
+  let authFailureCount = 0;
+  const maxAuthFailures = 3;
 
   const scheduleReconnect = () => {
     if (isDestroyed || reconnectAttempts >= maxReconnectAttempts) {
@@ -94,7 +96,8 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
     onConnect: () => {
       logger.info('[COLLAB MANAGER] provider connected', { key });
       reconnectAttempts = 0;
-      consecutiveFailures = 0;  // Reset on successful connection
+      consecutiveFailures = 0;
+      authFailureCount = 0;
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -108,11 +111,9 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
         if (consecutiveFailures < maxConsecutiveFailures) {
           scheduleReconnect();
         } else {
-          // Log only once at the exact limit to prevent console spam
           if (consecutiveFailures === maxConsecutiveFailures) {
             logger.error('[COLLAB MANAGER] too many disconnects, stopping reconnection', { key, failures: consecutiveFailures });
           }
-          // Force the provider to stop its own internal reconnect loop
           try {
             provider.disconnect();
           } catch (e) {}
@@ -130,7 +131,13 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
     },
     onAwarenessChange: () => logger.debug('[COLLAB MANAGER] awareness changed', { key }),
     onAuthenticationFailed: async () => {
-      logger.warn('[COLLAB MANAGER] provider authentication failed — attempting token refresh', { key });
+      authFailureCount++;
+      if (authFailureCount > maxAuthFailures) {
+        logger.error('[COLLAB MANAGER] max authentication failures reached, stopping auth reconnect loop', { key, failures: authFailureCount });
+        try { provider.disconnect(); } catch (e) {}
+        return;
+      }
+      logger.warn('[COLLAB MANAGER] provider authentication failed — attempting token refresh', { key, attempt: authFailureCount });
       if (authRetryInProgress) return;
       authRetryInProgress = true;
       try {
@@ -144,7 +151,6 @@ async function createProvider({ workspaceId, canvasId, url, tokenGetter }) {
             logger.info('[COLLAB MANAGER] reconnected provider after token refresh', { key });
           } catch (err) {
             logger.warn('[COLLAB MANAGER] reconnect after token refresh failed', { key, err: err?.message || err });
-            scheduleReconnect();
           }
         }
       } catch (err) {

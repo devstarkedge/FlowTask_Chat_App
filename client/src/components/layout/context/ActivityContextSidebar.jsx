@@ -633,6 +633,7 @@ export default function ActivityContextSidebar({
   selectedNotificationId,
   onSelectNotification,
   onAutoSelect,
+  isCollapsed = false,
 }) {
   const {
     notifications, unreadCount, isLoading, hasMore,
@@ -780,7 +781,7 @@ export default function ActivityContextSidebar({
   );
 
   return (
-    <SidebarContainer subHeader={subHeader} aria-label="Activity notifications">
+    <SidebarContainer subHeader={subHeader} isCollapsed={isCollapsed} aria-label="Activity notifications">
       <StyleInjector />
 
       <div

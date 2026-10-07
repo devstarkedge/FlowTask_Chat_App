@@ -65,9 +65,7 @@ const PLANS = [
 ];
 
 export default function PricingPage() {
-  useEffect(() => {
-    setWindowControlsColor("#ffffff");
-  }, []);
+
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
 

@@ -835,3 +835,8 @@
           padding: 8px 12px;
       }
   }
+
+  /* ═══ ELECTRON DESKTOP OVERRIDES ═══════════════════════════════════ */
+  body.is-electron .cwp-nav-inner {
+      padding-right: 140px;
+  }

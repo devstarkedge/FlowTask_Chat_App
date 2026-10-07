@@ -82,6 +82,7 @@ export default function NavigationSidebar({
   onToggleAllThreads,
   onToggleNotifications,
   showAllThreads = false,
+  isCollapsed = false,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -245,7 +246,7 @@ export default function NavigationSidebar({
   }, [categories, channels]);
 
   const projectChannels = channels.filter(
-    (c) => c.type === "project" && c.visibility !== "private" && !c.isArchived && !categorizedChannelIds.has(String(c._id)),
+    (c) => c.type === "project" && !c.isArchived && !categorizedChannelIds.has(String(c._id)),
   );
   
   const publicChannels = channels.filter(
@@ -264,11 +265,9 @@ export default function NavigationSidebar({
   
   const privateChannels = channels.filter(
     (c) =>
-      ((c.type === "private" && c.visibility !== "public") || c.visibility === "private") &&
-      c.type !== "dm" &&
-      c.type !== "system" &&
-      c.type !== "self" &&
+      c.type === "private" &&
       !c.isArchived &&
+      c.type !== "project" &&
       !categorizedChannelIds.has(String(c._id)),
   );
 
@@ -493,7 +492,7 @@ export default function NavigationSidebar({
 
   return (
     <>
-      <SidebarContainer header={header} aria-label="Channels sidebar">
+      <SidebarContainer header={header} isCollapsed={isCollapsed} aria-label="Channels sidebar">
         {channelSync?.workspaceId === activeWorkspaceId
           && ['partial', 'failed'].includes(channelSync.status) && (
           <div

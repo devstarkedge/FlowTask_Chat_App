@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 import { Camera, Image as ImageIcon, Mic, Video, FileText, Smile, Layers, Clock, X } from 'lucide-react-native';
 import MediaLibrary from '../utils/safeMediaLibrary';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureCapturePermission } from '../utils/capturePermissions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
@@ -33,7 +35,7 @@ export default function MediaPickerSheet({
   useEffect(() => {
     if (visible) {
       (async () => {
-        const res = await MediaLibrary.requestPermissionsAsync();
+        const res = await MediaLibrary.getPermissionsAsync();
         if (res?.granted || res?.status === 'granted') {
           setHasPermission(true);
           loadRecentPhotos();
@@ -58,11 +60,8 @@ export default function MediaPickerSheet({
   };
 
   const handleLaunchCamera = async (mediaTypes = ['images']) => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      alert('Camera permission is required.');
-      return;
-    }
+    if (!await ensureCapturePermission(ImagePicker.getCameraPermissionsAsync, ImagePicker.requestCameraPermissionsAsync, 'Camera')) return;
+    try {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes,
       quality: 0.8,
@@ -71,9 +70,11 @@ export default function MediaPickerSheet({
       onPickFiles(result.assets);
       onClose();
     }
+    } catch { Alert.alert('Camera Unavailable', 'Unable to open the camera. Please try again.'); }
   };
 
   const handleLaunchLibrary = async () => {
+    try {
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
       selectionLimit: 10,
@@ -83,6 +84,7 @@ export default function MediaPickerSheet({
       onPickFiles(result.assets);
       onClose();
     }
+    } catch { Alert.alert('Photos Unavailable', 'Unable to open the photo picker. Please try again.'); }
   };
 
   const handlePickDocument = async () => {

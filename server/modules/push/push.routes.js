@@ -9,14 +9,16 @@ const router = Router()
 router.get('/publicKey', ctrl.getPublicKey)
 
 // Push endpoints require auth + workspace
-router.use(protect, resolveWorkspace)
+router.use(protect)
+// Tokens belong to an account/installation, not to the currently selected workspace.
+router.post('/fcm-token', ctrl.registerFCMToken)
+router.delete('/fcm-token', ctrl.removeFCMToken)
+router.use(resolveWorkspace)
 router.get('/status', ctrl.getStatus)
 router.post('/subscribe', ctrl.subscribe)
 router.post('/unsubscribe', ctrl.unsubscribe)
 
 // FCM token management
-router.post('/fcm-token', ctrl.registerFCMToken)
-router.delete('/fcm-token', ctrl.removeFCMToken)
 
 // Multi-device push dismissal
 router.post('/dismiss', ctrl.dismissNotification)

@@ -314,6 +314,7 @@ async function startServer() {
     }
 
     // 7d. Initialize background job queues and start project channel sync recovery loop
+    await import('./services/notificationQueue.service.js');
     const { initQueues } = await import('./services/jobQueue.service.js');
     await initQueues();
     if (env.FLOWTASK_ENABLED) {

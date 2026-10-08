@@ -191,6 +191,7 @@ const ChatScreen = ({ route, navigation }) => {
   const { data: channelMembers = [], error: channelMembersError } = useChannelMembers(channelId);
   const markAsRead = useChannelStore((s) => s.markAsRead);
   const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { data: workspaceMembers = [] } = useWorkspaceMembers(activeWorkspaceId);
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
   const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
@@ -805,8 +806,6 @@ const ChatScreen = ({ route, navigation }) => {
     channelId, channelName, maxBubbleWidth, showMessageActions, addReaction,
     removeReaction, setEmojiPickerTarget, navigation, handleReplyPreviewPress
   ]);
-
-  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <AppScreen 

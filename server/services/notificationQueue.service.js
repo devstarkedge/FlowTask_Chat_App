@@ -26,9 +26,9 @@ export const notificationQueue = {
     // Dynamically import jobQueue.service to avoid circular deps during boot
     const { addJob } = await import('./jobQueue.service.js');
     return addJob(QUEUE_NAME, { message, channel, options }, {
-      // Small delay helps avoid race conditions where the socket message
-      // hasn't reached the client before the push notification does.
-      delay: 100,
+      // Foreground clients deduplicate by notification ID. A delay here drops
+      // every notification in the queue's no-Redis fallback.
+      backgroundOnly: true,
       jobId: `notif-${message._id}`,
       removeOnComplete: true,
       removeOnFail: 100,

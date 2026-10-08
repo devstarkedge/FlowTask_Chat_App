@@ -370,7 +370,7 @@ class MessageService {
       }).catch((err) => {
         logger.error('Failed to enqueue notification job', { messageId: message._id, error: err.message });
       });
-    }).catch(() => {});
+    }).catch((err) => logger.error('Notification queue could not load', { messageId: message._id, code: err.code || 'QueueImportFailed' }));
 
     // Remove draft for this conversation (non-blocking)
     this._removeDraftOnSend(authorId, channelId, actualThreadId, wsId).catch(() => {});

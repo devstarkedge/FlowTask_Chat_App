@@ -20,8 +20,9 @@ const AudioRecorderUI = ({
   onCancel,
   onSend,
   colors,
+  initialLocked = false,
 }) => {
-  const [isLocked, setIsLocked] = useState(false);
+  const [isLocked, setIsLocked] = useState(initialLocked);
   const pan = useRef(new Animated.ValueXY()).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;

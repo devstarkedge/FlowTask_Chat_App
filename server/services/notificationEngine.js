@@ -283,15 +283,20 @@ class NotificationEngine {
     // Prefer in-memory socket.activeChannelId (set synchronously by window:focus)
     // over the async DB chatPreferences.activeWindowChannel field.
     const recipient = await userRepository.findById(recipientIdStr);
+    const isOnline = recipient?.socketIds?.length > 0;
     const activeWindowChannel = recipient?.chatPreferences?.activeWindowChannel?.toString?.()
       || recipient?.chatPreferences?.activeWindowChannel
       || null;
     let isViewingSameChat = false;
+    let socketFocusChecked = false;
+    let hasFocusedConversation = false;
     const io = getIO();
     if (io && workspaceId) {
       try {
         const userRoom = buildRoomName(workspaceId, 'user', recipientIdStr);
         const sockets = await io.in(userRoom).fetchSockets();
+        socketFocusChecked = true;
+        hasFocusedConversation = sockets.some(s => Boolean(s.activeChannelId));
         isViewingSameChat = sockets.some(
           (s) => s.activeChannelId && String(s.activeChannelId) === channelIdStr
         );
@@ -302,17 +307,18 @@ class NotificationEngine {
         });
       }
     }
-    if (!isViewingSameChat && activeWindowChannel) {
+    if (!socketFocusChecked && isOnline && activeWindowChannel) {
       isViewingSameChat = String(activeWindowChannel) === channelIdStr;
     }
 
-    const isOnline = recipient?.socketIds?.length > 0;
     const isAway = recipient?.onlineStatus === 'away';
     const isOffline = !isOnline;
     // "Blurred" means no focused conversation on any connected client.
     // Do NOT treat missing activeWindowChannel alone as blurred when sockets
     // already report the user is viewing this chat.
-    const isWindowBlurred = !isViewingSameChat && !activeWindowChannel;
+    const isWindowBlurred = socketFocusChecked
+      ? !hasFocusedConversation
+      : !isViewingSameChat && !activeWindowChannel;
 
     // 9. Build notification title
     const title = this._buildTitle(notificationType, senderName, channelName, convType, isThreadReply);
@@ -325,7 +331,6 @@ class NotificationEngine {
       threadId: threadId?.toString() || null,
       type: isDM ? 'dm' : isThreadReply ? 'thread' : 'channel',
     };
-
     // 11. Build bundle key for low-priority grouping
     const bundleKey = priority === NOTIFICATION_PRIORITIES.LOW
       ? `${convType}:${channelIdStr}`
@@ -472,7 +477,7 @@ class NotificationEngine {
       if (channel.type === CHANNEL_TYPES.DM) {
         // DM: get the other participant
         return (channel.dmParticipants || [])
-          .map((p) => p.toString())
+          .map((p) => (p?._id || p).toString())
           .filter((p) => p !== senderIdStr);
       }
 
@@ -623,6 +628,7 @@ class NotificationEngine {
       emitToUser(recipientId, SOCKET_EVENTS.NOTIFICATION, {
         notification: {
           _id: notification._id,
+          workspaceId: notification.workspaceId,
           type: notification.type,
           priority: notification.priority,
           category: notification.category,
@@ -659,6 +665,7 @@ class NotificationEngine {
    * @private
    */
   async _sendPush(recipientId, notification, recipient, prefs) {
+    let accepted = 0;
     // Skip if no push channel is enabled
     if (!prefs.global?.desktopPush && !prefs.global?.mobilePush) return;
 
@@ -683,10 +690,8 @@ class NotificationEngine {
     // Send via Web Push (VAPID) — desktop browsers
     if (prefs.global?.desktopPush) {
       try {
-        await pushService.sendToUser(recipientId, payload);
-        await Notification.findByIdAndUpdate(notification._id, {
-          $set: { pushSentAt: new Date() },
-        });
+        const result = await pushService.sendToUser(recipientId, payload);
+        accepted += result.sent || 0;
       } catch (err) {
         logger.warn('NotificationEngine: web push failed', {
           recipientId, error: err?.message,
@@ -697,7 +702,8 @@ class NotificationEngine {
     // Send via FCM — Android/iOS when Firebase is configured
     if (prefs.global?.mobilePush) {
       try {
-        await pushService.sendViaFCM(recipientId, payload);
+        const result = await pushService.sendViaFCM(recipientId, payload);
+        accepted += result.sent || 0;
       } catch (err) {
         logger.warn('NotificationEngine: FCM push failed', {
           recipientId, error: err?.message,
@@ -708,12 +714,16 @@ class NotificationEngine {
     // Send via Expo Push — mobile app (expo-server-sdk)
     if (prefs.global?.mobilePush) {
       try {
-        await pushService.sendViaExpo(recipientId, payload);
+        const result = await pushService.sendViaExpo(recipientId, payload);
+        accepted += result.sent || 0;
       } catch (err) {
         logger.warn('NotificationEngine: Expo push failed', {
           recipientId, error: err?.message,
         });
       }
+    }
+    if (accepted > 0) {
+      await Notification.findByIdAndUpdate(notification._id, { $set: { pushSentAt: new Date() } });
     }
   }
 

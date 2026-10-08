@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import './src/i18n';
-import { Keyboard, Dimensions } from "react-native";
+import { Keyboard, Dimensions, AppState } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -11,9 +11,10 @@ import { useAuthStore } from "./src/stores/authStore";
 import { useThemeStore } from "./src/stores/themeStore";
 import { usePreferencesStore } from "./src/stores/preferencesStore";
 import { useWorkspaceStore } from "./src/stores/workspaceStore";
+import { useChatStore } from "./src/stores/chatStore";
 import { connectSocket, disconnectSocket } from "./src/services/socket";
 import { initNetworkMonitor, destroyNetworkMonitor } from "./src/services/networkMonitor";
-import { registerForPushNotifications, setNavigationRef } from "./src/services/pushNotificationService";
+import { registerForPushNotifications, setNavigationRef, handlePushNavigationReady } from "./src/services/pushNotificationService";
 import { conversationPresence } from "./src/services/conversationPresence";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import Toast from "react-native-toast-message";
@@ -109,6 +110,17 @@ export default function App() {
   useEffect(() => {
     if (accessToken && activeWorkspaceId) {
       registerForPushNotifications();
+      handlePushNavigationReady();
+      const appState = AppState.addEventListener('change', state => {
+        if (state === 'active') {
+          registerForPushNotifications();
+          handlePushNavigationReady();
+        }
+      });
+      const unsubscribeNetwork = useChatStore.subscribe((state, previous) => {
+        if (state.connectionStatus === 'connected' && previous.connectionStatus !== 'connected') registerForPushNotifications();
+      });
+      return () => { appState.remove(); unsubscribeNetwork(); };
     }
   }, [accessToken, activeWorkspaceId]);
 
@@ -125,7 +137,7 @@ export default function App() {
           <ErrorBoundary>
             <ThemeProvider>
               <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                <NavigationContainer ref={navigationRef} linking={linking}>
+                <NavigationContainer ref={navigationRef} linking={linking} onReady={handlePushNavigationReady} onStateChange={handlePushNavigationReady}>
                   <AppNavigator />
                   <GlobalToastProvider />
                 </NavigationContainer>

@@ -4,18 +4,28 @@ import userRepository from '../modules/users/user.repository.js'
 import logger from '../utils/logger.js'
 import firebaseAdmin from '../config/firebaseAdmin.js'
 import { IOS_NOTIFICATION_SOUND } from '../../shared/notificationSounds.js'
+import { Expo } from 'expo-server-sdk'
+import { createHash } from 'node:crypto'
+import { addJob, registerQueue } from './jobQueue.service.js'
 
 // Expo Push Notifications SDK (for mobile app push)
-let Expo;
-try {
-  const mod = await import('expo-server-sdk');
-  Expo = mod.Expo;
-} catch {
-  Expo = null;
-}
 
 // Singleton Expo push client
-const _expoClient = Expo ? new Expo({ accessToken: env.EXPO_ACCESS_TOKEN || undefined }) : null;
+const _expoClient = new Expo({ accessToken: env.EXPO_ACCESS_TOKEN || undefined });
+const RECEIPT_QUEUE = 'expo_push_receipts';
+const tokenFingerprint = token => createHash('sha256').update(token).digest('hex');
+registerQueue(RECEIPT_QUEUE, async job => {
+  try {
+    await checkExpoReceipts(job.data.userId, job.data.pending, job.data.notificationId);
+  } catch (error) {
+    logger.error('Expo receipt request failed', {
+      userId: job.data.userId, notificationId: job.data.notificationId,
+      code: error.code || 'RequestFailed', status: error.statusCode,
+    });
+    // The shared queue logger records thrown messages; do not pass provider text.
+    throw new Error('Expo receipt request failed');
+  }
+}, { concurrency: 2 });
 
 // Support CommonJS/ESM interop: web-push may export default in runtime
 const wp = webpush?.default ?? webpush;
@@ -100,7 +110,9 @@ export async function sendViaFCM(userId, payload) {
 
   try {
     const user = await userRepository.findById(userId)
-    const fcmTokens = user?.chatPreferences?.fcmTokens || []
+    const fcmTokens = (user?.chatPreferences?.fcmTokens || []).filter(
+      entry => entry.platform !== 'expo' && !Expo.isExpoPushToken(entry.token),
+    )
     if (fcmTokens.length === 0) return { sent: 0 }
 
     let sent = 0
@@ -241,30 +253,19 @@ export async function registerFCMToken(userId, { token, deviceId, platform }) {
 
   const ChatUser = (await import('../modules/users/ChatUser.model.js')).default
 
-  // Remove existing token with same deviceId (replace)
-  if (deviceId) {
-    await ChatUser.findByIdAndUpdate(userId, {
-      $pull: { 'chatPreferences.fcmTokens': { deviceId } },
-    })
-  }
-
-  // Also remove if this exact token already exists on another device
-  await ChatUser.findByIdAndUpdate(userId, {
+  // A physical installation must not keep receiving pushes for a previous account.
+  await ChatUser.updateMany({ _id: { $ne: userId }, 'chatPreferences.fcmTokens.token': token }, {
     $pull: { 'chatPreferences.fcmTokens': { token } },
   })
-
-  // Add new token
-  return ChatUser.findByIdAndUpdate(userId, {
-    $push: {
-      'chatPreferences.fcmTokens': {
-        token,
-        deviceId: deviceId || null,
-        platform: platform || 'web',
-        createdAt: new Date(),
-        lastSeenAt: new Date(),
-      },
-    },
-  }, { returnDocument: 'after' })
+  // Atomic replacement prevents duplicate entries on concurrent registrations.
+  const conditions = [{ $ne: ['$$entry.token', { $literal: token }] }]
+  if (deviceId && deviceId !== 'unknown') conditions.push({ $ne: ['$$entry.deviceId', { $literal: deviceId }] })
+  return ChatUser.findByIdAndUpdate(userId, [{ $set: {
+    'chatPreferences.fcmTokens': { $concatArrays: [
+      { $filter: { input: { $ifNull: ['$chatPreferences.fcmTokens', []] }, as: 'entry', cond: { $and: conditions } } },
+      { $literal: [{ token, deviceId: deviceId || null, platform: platform || 'web', createdAt: new Date(), lastSeenAt: new Date() }] },
+    ] },
+  } }], { returnDocument: 'after', updatePipeline: true })
 }
 
 /**
@@ -288,10 +289,6 @@ export async function removeFCMToken(userId, token) {
  * @returns {{ sent: number }}
  */
 export async function sendViaExpo(userId, payload) {
-  if (!_expoClient) {
-    return { sent: 0, reason: 'expo_sdk_not_available' };
-  }
-
   try {
     const user = await userRepository.findById(userId);
     const allTokens = user?.chatPreferences?.fcmTokens || [];
@@ -300,13 +297,14 @@ export async function sendViaExpo(userId, payload) {
       .filter((t) => t.platform === 'expo' && t.token)
       .map((t) => t.token);
 
-    if (expoTokens.length === 0) return { sent: 0 };
+    logger.debug('Expo token lookup', { userId, notificationId: payload.data?.notificationId, devices: expoTokens.length });
+    if (expoTokens.length === 0) return { sent: 0, reason: 'no_expo_tokens' };
 
     // Build Expo push messages
     const messages = [];
     for (const token of expoTokens) {
       if (!Expo.isExpoPushToken(token)) {
-        logger.warn('Invalid Expo push token', { userId, token: token.slice(0, 20) });
+        logger.warn('Invalid Expo push token', { userId, provider: 'expo' });
         continue;
       }
       messages.push({
@@ -330,20 +328,25 @@ export async function sendViaExpo(userId, payload) {
 
     for (const chunk of chunks) {
       try {
-        const receipts = await _expoClient.sendPushNotificationsAsync(chunk);
-        for (let i = 0; i < receipts.length; i++) {
-          const receipt = receipts[i];
+        const tickets = await _expoClient.sendPushNotificationsAsync(chunk);
+        const pendingReceipts = [];
+        for (let i = 0; i < tickets.length; i++) {
+          const receipt = tickets[i];
           if (receipt.status === 'ok') {
             sent++;
+            if (receipt.id) pendingReceipts.push({ id: receipt.id, tokenHash: tokenFingerprint(chunk[i].to) });
           } else if (receipt.status === 'error') {
-            if (receipt.details?.error === 'DeviceNotRegistered' || receipt.details?.error === 'InvalidCredentials') {
+            if (receipt.details?.error === 'DeviceNotRegistered') {
               expiredTokens.push(chunk[i].to);
             }
-            logger.warn('Expo push receipt error', { userId, error: receipt.message });
+            logger.warn('Expo push ticket error', { userId, notificationId: payload.data?.notificationId, code: receipt.details?.error || 'UnknownError' });
           }
         }
+        if (pendingReceipts.length) {
+          scheduleReceiptCheck(userId, pendingReceipts, payload.data?.notificationId);
+        }
       } catch (err) {
-        logger.error('Expo push chunk failed', { userId, error: err.message });
+        logger.error('Expo push chunk failed', { userId, code: err.code || 'RequestFailed', status: err.statusCode });
       }
     }
 
@@ -352,11 +355,56 @@ export async function sendViaExpo(userId, payload) {
       await removeFCMToken(userId, token);
     }
 
+    logger.debug('Expo push tickets processed', { userId, notificationId: payload.data?.notificationId, devices: messages.length, accepted: sent });
     return { sent };
   } catch (error) {
-    logger.error('sendViaExpo failed', { userId, error: error.message });
+    logger.error('sendViaExpo failed', { userId, code: error.code || 'RequestFailed' });
     return { sent: 0 };
   }
+}
+
+// Tickets acknowledge enqueueing; receipts report the FCM/APNs handoff.
+// Never include device tokens or provider messages (which may echo tokens) in logs.
+export async function checkExpoReceipts(userId, pending, notificationId) {
+  const entriesById = new Map(pending.map(entry => [entry.id, entry]));
+  for (const ids of _expoClient.chunkPushNotificationReceiptIds([...entriesById.keys()])) {
+    const receipts = await _expoClient.getPushNotificationReceiptsAsync(ids);
+    for (const id of ids) {
+      const receipt = receipts[id];
+      const code = receipt?.details?.error;
+      logger[receipt?.status === 'ok' ? 'debug' : 'warn']('Expo delivery receipt', {
+        userId, notificationId, receiptId: id, status: receipt?.status || 'missing', code,
+      });
+      if (code === 'DeviceNotRegistered') {
+        const entry = entriesById.get(id);
+        const user = await userRepository.findById(userId);
+        const token = (user?.chatPreferences?.fcmTokens || []).find(item =>
+          item.platform === 'expo' && tokenFingerprint(item.token) === entry.tokenHash,
+        )?.token;
+        if (token) await removeFCMToken(userId, token);
+      }
+    }
+  }
+}
+
+async function scheduleReceiptCheck(userId, pending, notificationId) {
+  // Queue receipt checks durably when Redis is available. Job data uses token
+  // fingerprints so the queue's failure logger cannot expose private tokens.
+  try {
+    const job = await addJob(RECEIPT_QUEUE, { userId, pending, notificationId }, {
+      delay: 15 * 60 * 1000, removeOnComplete: true, removeOnFail: 50,
+    });
+    if (job) return;
+  } catch {
+    logger.warn('Expo receipt queue unavailable; using process fallback', { userId, notificationId });
+  }
+  // No Redis requirement: a non-blocking follow-up is also available on small deployments.
+  const timer = setTimeout(() => {
+    checkExpoReceipts(userId, pending, notificationId).catch(error => {
+      logger.error('Expo receipt request failed', { userId, notificationId, code: error.code || 'RequestFailed' });
+    });
+  }, 15 * 60 * 1000);
+  timer.unref?.();
 }
 
 // ─── Multi-Device Push Management ────────────────────────────────────────────

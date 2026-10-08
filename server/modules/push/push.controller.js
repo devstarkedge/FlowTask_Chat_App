@@ -7,6 +7,7 @@ import Notification from '../notifications/Notification.model.js'
 import NotificationPreference from '../notifications/NotificationPreference.model.js'
 import { emitToUser } from '../../sockets/socketManager.js'
 import { SOCKET_EVENTS } from '../../config/constants.js'
+import { Expo } from 'expo-server-sdk'
 
 function extractDeviceMetadata(body = {}, req) {
   return {
@@ -118,12 +119,20 @@ export const getPublicKey = (_req, res) => {
 // Register or update an FCM token for the authenticated user
 export const registerFCMToken = asyncHandler(async (req, res) => {
   const { token, deviceId, platform } = req.body || {}
-  if (!token) {
+  if (typeof token !== 'string' || !token.trim()) {
     return res.status(400).json({ success: false, error: { message: 'FCM token is required' } })
   }
 
+  if (platform && !['web', 'android', 'ios', 'desktop', 'expo'].includes(platform)) {
+    return res.status(400).json({ success: false, error: { message: 'Invalid push platform' } })
+  }
+  if ((platform === 'expo') !== Expo.isExpoPushToken(token)) {
+    return res.status(400).json({ success: false, error: { message: 'Push token type does not match platform' } })
+  }
+
   const userId = req.user._id
-  await pushService.registerFCMToken(userId, { token, deviceId, platform })
+  const user = await pushService.registerFCMToken(userId, { token, deviceId, platform })
+  if (!user) return res.status(404).json({ success: false, error: { message: 'Push account not found' } })
 
   logger.info('FCM token registered', { userId: userId.toString(), platform, deviceId })
   res.json({ success: true, message: 'FCM token registered' })

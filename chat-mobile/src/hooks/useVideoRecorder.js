@@ -1,18 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import { Camera } from 'expo-camera';
 import logger from '../utils/logger';
+import { ensureCapturePermission, showCapturePermissionDenied } from '../utils/capturePermissions';
 
-let expoAudio;
-if (Platform.OS !== 'web') {
-  try {
-    expoAudio = require('expo-audio');
-  } catch (e) {
-    logger.warn('Failed to load expo-audio module', e);
-  }
-}
-
-export const useVideoRecorder = () => {
+export const useVideoRecorder = (contextId) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [videoUri, setVideoUri] = useState(null);
@@ -22,34 +14,36 @@ export const useVideoRecorder = () => {
 
   const cameraRef = useRef(null);
   const timerRef = useRef(null);
+  const generation = useRef(0);
+  const mounted = useRef(true);
+  const preparing = useRef(false);
 
-  useEffect(() => {
-    (async () => {
+  const preparePermissions = useCallback(async () => {
+    if (preparing.current) return false;
+    preparing.current = true;
+    const attempt = generation.current;
       try {
+        let granted = false;
         if (Platform.OS === 'web') {
           if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             stream.getTracks().forEach((track) => track.stop());
-            setHasPermissions(true);
-          } else {
-            setHasPermissions(false);
+            granted = true;
           }
         } else {
-          const cameraStatus = await Camera.requestCameraPermissionsAsync();
-          let micGranted = false;
-          if (expoAudio?.requestRecordingPermissionsAsync) {
-            const micStatus = await expoAudio.requestRecordingPermissionsAsync();
-            micGranted = micStatus.status === 'granted';
-          } else {
-            micGranted = true;
-          }
-          setHasPermissions(cameraStatus.status === 'granted' && micGranted);
+          granted = await ensureCapturePermission(Camera.getCameraPermissionsAsync, Camera.requestCameraPermissionsAsync, 'Camera');
+          if (granted && mounted.current && generation.current === attempt) granted = await ensureCapturePermission(Camera.getMicrophonePermissionsAsync, Camera.requestMicrophonePermissionsAsync, 'Microphone');
         }
+        if (!mounted.current || generation.current !== attempt) return false;
+        setHasPermissions(granted);
+        return granted;
       } catch (err) {
         logger.error('Failed to get video/mic permissions', err);
-        setHasPermissions(false);
+        if (mounted.current && generation.current === attempt) { setHasPermissions(false); showCapturePermissionDenied('Camera', false); }
+        return false;
+      } finally {
+        preparing.current = false;
       }
-    })();
   }, []);
 
   const clearTimer = () => {
@@ -60,7 +54,8 @@ export const useVideoRecorder = () => {
   };
 
   const startRecording = useCallback(async () => {
-    if (!cameraRef.current || !hasPermissions) return;
+    if (!cameraRef.current || !hasPermissions || isRecording) return;
+    const attempt = generation.current;
     try {
       setIsRecording(true);
       setRecordingDuration(0);
@@ -78,14 +73,13 @@ export const useVideoRecorder = () => {
       
       const data = await videoRecordPromise;
       clearTimer();
-      setVideoUri(data.uri);
-      setIsRecording(false);
+      if (mounted.current && generation.current === attempt) { setVideoUri(data?.uri || null); setIsRecording(false); }
     } catch (err) {
       logger.error('Failed to start video recording', err);
-      setIsRecording(false);
+      if (mounted.current && generation.current === attempt) setIsRecording(false);
       clearTimer();
     }
-  }, [hasPermissions]);
+  }, [hasPermissions, isRecording]);
 
   const stopRecording = useCallback(() => {
     if (!cameraRef.current || !isRecording) return;
@@ -96,6 +90,7 @@ export const useVideoRecorder = () => {
   }, [isRecording]);
 
   const cancelRecording = useCallback(() => {
+    generation.current++;
     if (!cameraRef.current && !isRecording) {
       setVideoUri(null);
       return;
@@ -124,8 +119,12 @@ export const useVideoRecorder = () => {
   }, []);
 
   useEffect(() => {
-    return () => clearTimer();
-  }, []);
+    mounted.current = true;
+    setIsRecording(false); setVideoUri(null); setHasPermissions(null);
+    const cleanup = () => { generation.current++; clearTimer(); try { cameraRef.current?.stopRecording(); } catch {} };
+    const subscription = AppState.addEventListener('change', state => { if (state !== 'active' && cameraRef.current) { cleanup(); setIsRecording(false); setVideoUri(null); setHasPermissions(false); } });
+    return () => { mounted.current = false; subscription.remove(); cleanup(); };
+  }, [contextId]);
 
   return {
     cameraRef,
@@ -133,6 +132,7 @@ export const useVideoRecorder = () => {
     recordingDuration,
     videoUri,
     hasPermissions,
+    preparePermissions,
     cameraType,
     flashMode,
     startRecording,

@@ -199,9 +199,10 @@ const MessageComposer = React.memo(function MessageComposer({
   const keyboardHeight = useKeyboardState((state) => state.height);
   // Subtract keyboard height on both platforms so the composer doesn't grow taller than available space.
   const imeInset = keyboardHeight || 0;
-  const audioRecorder = useAudioRecorder();
-  const videoRecorder = useVideoRecorder();
+  const audioRecorder = useAudioRecorder(channelId);
+  const videoRecorder = useVideoRecorder(channelId);
   const [showVideoModal, setShowVideoModal] = useState(false);
+  useEffect(() => { setShowVideoModal(false); }, [channelId]);
   const [previewFile, setPreviewFile] = useState(null);
 
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
@@ -1185,9 +1186,20 @@ const MessageComposer = React.memo(function MessageComposer({
         </View>
       )}
 
-      <VideoRecorderModal
+      {audioRecorder.isRecording && <AudioRecorderUI
+        initialLocked
+        {...audioRecorder}
+        onStart={audioRecorder.startRecording}
+        onPause={audioRecorder.pauseRecording}
+        onResume={audioRecorder.resumeRecording}
+        onStop={() => {}}
+        onCancel={audioRecorder.cancelRecording}
+        onSend={async () => { const clip = await audioRecorder.stopRecording(); if (clip) await handleMediaSend(clip.uri, 'audio', clip.duration); }}
+        colors={colors}
+      />}
+      {showVideoModal && videoRecorder.hasPermissions && <VideoRecorderModal
         visible={showVideoModal}
-        onClose={() => setShowVideoModal(false)}
+        onClose={() => { videoRecorder.cancelRecording(); setShowVideoModal(false); }}
         cameraRef={videoRecorder.cameraRef}
         isRecording={videoRecorder.isRecording}
         recordingDuration={videoRecorder.recordingDuration}
@@ -1205,7 +1217,7 @@ const MessageComposer = React.memo(function MessageComposer({
           videoRecorder.cancelRecording();
         }}
         colors={colors}
-      />
+      />}
 
       {/* Media Picker Sheet */}
       <MediaPickerSheet
@@ -1217,7 +1229,7 @@ const MessageComposer = React.memo(function MessageComposer({
         onOpenRecentCanvases={() => setShowRecentCanvases(true)}
         onOpenRecentFiles={() => setShowRecentFiles(true)}
         onRecordAudio={audioRecorder.startRecording}
-        onRecordVideo={() => setShowVideoModal(true)}
+        onRecordVideo={async () => { if (await videoRecorder.preparePermissions()) setShowVideoModal(true); }}
       />
 
       {/* Recent Canvases Modal */}

@@ -14,6 +14,10 @@ try {
 }
 
 export const isMediaLibraryAvailable = () => isAvailable;
+export const getPermissionsAsync = async () => {
+  try { return await MediaLibraryModule?.getPermissionsAsync?.() || { status: 'undetermined', granted: false }; }
+  catch { return { status: 'undetermined', granted: false }; }
+};
 
 export const requestPermissionsAsync = async () => {
   if (isAvailable && MediaLibraryModule?.requestPermissionsAsync) {
@@ -62,6 +66,7 @@ export const getAssetInfoAsync = async (assetId) => {
 export const SortBy = MediaLibraryModule?.SortBy || { creationTime: 'creationTime' };
 
 export default {
+  getPermissionsAsync,
   isAvailable: isMediaLibraryAvailable,
   requestPermissionsAsync,
   getAssetsAsync,

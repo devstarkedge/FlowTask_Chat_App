@@ -563,6 +563,7 @@ export const connectSocket = async () => {
           threadId: notification.threadId,
           type: notification.conversationType || notification.type,
           notificationId: notification._id,
+          workspaceId: notification.workspaceId || notification.deepLink?.workspaceId,
         },
       });
     }

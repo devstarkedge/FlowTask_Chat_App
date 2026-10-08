@@ -99,6 +99,9 @@ export const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     console.log('[Logout] Starting complete logout cleanup...');
+    // Remove the installation while its token and authenticated session still exist.
+    const { unregisterPushNotifications } = await import('../services/pushNotificationService');
+    await unregisterPushNotifications();
     try {
       const refreshToken = get().refreshToken;
       if (refreshToken) {
@@ -126,7 +129,7 @@ export const useAuthStore = create((set, get) => ({
     console.log('[Logout] Clearing all AsyncStorage keys...');
     try {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      const keys = await AsyncStorage.getAllKeys();
+      const keys = (await AsyncStorage.getAllKeys()).filter(key => key !== 'push_installation_id');
       console.log('[Logout] Found AsyncStorage keys to remove:', keys);
       if (keys.length > 0) {
         await AsyncStorage.multiRemove(keys);
@@ -143,13 +146,6 @@ export const useAuthStore = create((set, get) => ({
 
     // Clear all other stores to prevent data leakage between sessions
     try {
-      console.log('[Logout] Unregistering push notifications...');
-      const { unregisterPushNotifications } = await import('../services/pushNotificationService');
-      await unregisterPushNotifications().catch((err) => {
-        console.log('[Logout] Push notification unregistration failed:', err?.message);
-      });
-      console.log('[Logout] Push notification token and listeners successfully cleared.');
-
       console.log('[Logout] Resetting in-memory Zustand store states...');
       const { useChannelStore } = await import('./channelStore');
       const { useChatStore } = await import('./chatStore');

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, SafeAreaView } from 'react-native';
-import { Camera, CameraView } from 'expo-camera';
+import { CameraView } from 'expo-camera';
 import AppVideo from './common/AppVideo';
 import { X, FlipHorizontal, Zap, ZapOff, Circle, Square, Send, RotateCcw } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -28,8 +28,9 @@ const VideoRecorderModal = ({
   onRetake,
   colors,
 }) => {
+  if (!visible) return null;
   return (
-    <Modal visible={visible} animationType="slide" transparent={false}>
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
         {!videoUri ? (
           <View style={styles.cameraContainer}>

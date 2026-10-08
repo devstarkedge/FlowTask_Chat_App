@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useAuthStore } from "../stores/authStore";
 import { useUIStore } from "../stores/uiStore";
@@ -7,13 +7,15 @@ import { useThreadStore } from "../stores/threadStore";
 import { useLaterStore } from "../stores/laterStore";
 import { useDraftStore } from "../stores/draftStore";
 import { useScheduledStore } from "../stores/scheduledStore";
-import { categoryAPI } from "../services/api";
+import { categoryAPI, getWorkspaceContextVersion } from "../services/api";
 import { useTranslation } from "../utils/i18n";
 import { useShallow } from 'zustand/react/shallow';
 import { useChannels } from '../hooks/queries/useChannels';
 
 export const useHomeData = (navigation) => {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const activeWorkspaceIdRef = useRef(activeWorkspace?._id);
+  activeWorkspaceIdRef.current = activeWorkspace?._id;
   const user = useAuthStore((s) => s.user);
   const { t } = useTranslation();
   const { enabledHomeCards, toggleHomeCard } = useUIStore(
@@ -75,14 +77,18 @@ export const useHomeData = (navigation) => {
 
   const loadData = useCallback((options = {}) => {
     const silent = options?.silent === true;
-    if (!activeWorkspace?._id) return Promise.resolve();
+    const workspaceId = activeWorkspace?._id;
+    const contextVersion = getWorkspaceContextVersion();
+    if (!workspaceId) return Promise.resolve();
     setError(null);
 
     const channelFetchOptions = silent ? { silent: true } : undefined;
     const threadFetchOptions = silent ? { silent: true } : undefined;
     
     const promises = [
-      fetchChannels?.(channelFetchOptions).catch((err) => setError(err.message)),
+      fetchChannels?.(channelFetchOptions).catch((err) => {
+        if (activeWorkspaceIdRef.current === workspaceId && getWorkspaceContextVersion() === contextVersion) setError(err.message);
+      }),
       fetchThreads?.(1, threadFetchOptions).catch(console.error),
       fetchSavedMessages?.().catch(console.error),
       fetchDrafts?.(activeWorkspace?._id).catch(console.error),
@@ -90,7 +96,7 @@ export const useHomeData = (navigation) => {
       fetchCategories?.().catch(console.error),
       categoryAPI.getDepartments()
         .then(res => {
-          if (res.data && res.data.data) {
+          if (activeWorkspaceIdRef.current === workspaceId && getWorkspaceContextVersion() === contextVersion && res.data && res.data.data) {
             setDepartments(res.data.data);
           }
         })
@@ -108,6 +114,7 @@ export const useHomeData = (navigation) => {
   ]);
 
   useEffect(() => {
+    setDepartments([]);
     loadData();
   }, [loadData]);
 

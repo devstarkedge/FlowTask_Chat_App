@@ -7,11 +7,11 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useWorkspaces } from '../hooks/queries/useWorkspaces';
+import WorkspaceAvatar from '../components/WorkspaceAvatar';
 import { LogOut, Plus, CircleChevronRight, Briefcase } from 'lucide-react-native';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -20,7 +20,7 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
 const WorkspaceSelectorScreen = ({ navigation }) => {
-  const { switchWorkspace } = useWorkspaceStore();
+  const { switchWorkspace, isSwitchingWorkspace } = useWorkspaceStore();
   const { data: workspaces = [], isLoading, refetch: fetchWorkspaces } = useWorkspaces();
   const { logout, user } = useAuthStore();
   const { colors } = useThemeStore();
@@ -49,14 +49,19 @@ const WorkspaceSelectorScreen = ({ navigation }) => {
     );
   };
 
+  const handleSelectWorkspace = async (workspaceId) => {
+    try {
+      await switchWorkspace(workspaceId);
+      // AppNavigation replaces this conditional branch with Main automatically.
+    } catch (error) {
+      Alert.alert('Unable to switch workspace', error?.userMessage || error?.message || 'Please try again.');
+    }
+  };
+
   const renderWorkspaceItem = ({ item }) => (
-    <TouchableOpacity style={styles.workspaceCard} onPress={() => switchWorkspace(item._id)} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.workspaceCard} onPress={() => handleSelectWorkspace(item._id)} disabled={isSwitchingWorkspace} activeOpacity={0.7}>
       <View style={[styles.workspaceIcon, { overflow: 'hidden' }]}>
-        {item.logo ? (
-          <Image source={{ uri: item.logo }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
-        ) : (
-          <Text style={styles.workspaceIconText}>{item.name?.substring(0, 1).toUpperCase() || 'W'}</Text>
-        )}
+        <WorkspaceAvatar workspace={item} size={scale(48)} />
       </View>
       <View style={styles.workspaceInfo}>
         <Text style={styles.workspaceName}>{item.name}</Text>

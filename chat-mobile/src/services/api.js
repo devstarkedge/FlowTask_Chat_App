@@ -21,6 +21,7 @@ const api = axios.create({
 // In-memory token cache to avoid async AsyncStorage reads on every request
 let cachedToken = null;
 let cachedWorkspaceId = null;
+let workspaceContextVersion = 0;
 let cachedFlowtaskToken = null;
 
 /**
@@ -47,8 +48,13 @@ export const setCachedToken = (token) => {
  * Update cached workspace ID after workspace switch.
  */
 export const setCachedWorkspaceId = (workspaceId) => {
-  cachedWorkspaceId = workspaceId || null;
+  const nextWorkspaceId = workspaceId || null;
+  if (nextWorkspaceId !== cachedWorkspaceId) workspaceContextVersion += 1;
+  cachedWorkspaceId = nextWorkspaceId;
 };
+
+// IDs alone cannot identify a stale response after switching A -> B -> A.
+export const getWorkspaceContextVersion = () => workspaceContextVersion;
 
 /**
  * Resolve workspace ID for API headers.
@@ -74,6 +80,7 @@ export const resolveWorkspaceId = () => {
  * Clear all cached values on logout.
  */
 export const clearApiCache = () => {
+  workspaceContextVersion += 1;
   cachedToken = null;
   cachedWorkspaceId = null;
   cachedFlowtaskToken = null;
@@ -84,7 +91,7 @@ api.interceptors.request.use((config) => {
   if (cachedToken) {
     config.headers.Authorization = `Bearer ${cachedToken}`;
   }
-  const workspaceId = resolveWorkspaceId();
+  const workspaceId = config.headers['X-Workspace-Id'] || resolveWorkspaceId();
   if (workspaceId) {
     config.headers['X-Workspace-Id'] = workspaceId;
   }
@@ -287,22 +294,22 @@ export const authAPI = {
 export const workspaceAPI = {
   mine: () => api.get('/workspaces/mine'),
   create: (data) => api.post('/workspaces', data),
-  get: (id) => api.get(`/workspaces/${id}`),
+  get: (id, config = {}) => api.get(`/workspaces/${id}`, config),
   update: (id, data) => api.patch(`/workspaces/${id}`, data),
   delete: (id) => api.delete(`/workspaces/${id}`),
   joinByInviteCode: (inviteCode) => api.post('/workspaces/join', { inviteCode }),
   inviteByEmail: (workspaceId, payload) =>
     api.post(`/workspaces/${workspaceId}/invite-email`, payload, { timeout: 45000 }),
   leave: (workspaceId) => api.post(`/workspaces/${workspaceId}/leave`),
-  getMembers: (id, params) => api.get(`/workspaces/${id}/members`, { params }),
+  getMembers: (id, params, config = {}) => api.get(`/workspaces/${id}/members`, { ...config, params }),
   updateMemberRole: (workspaceId, memberId, role) =>
     api.patch(`/workspaces/${workspaceId}/members/${memberId}`, { role }),
   removeMember: (workspaceId, memberId) =>
     api.delete(`/workspaces/${workspaceId}/members/${memberId}`),
 
   // ── Invite management ──
-  getAllInvites: (workspaceId, params = {}) =>
-    api.get(`/workspaces/${workspaceId}/invites`, { params }),
+  getAllInvites: (workspaceId, params = {}, config = {}) =>
+    api.get(`/workspaces/${workspaceId}/invites`, { ...config, params }),
   getPendingInvites: (workspaceId) =>
     api.get(`/workspaces/${workspaceId}/invites/pending`),
   resendInvite: (workspaceId, inviteId) =>
@@ -321,20 +328,20 @@ export const workspaceAPI = {
     api.patch(`/workspaces/${workspaceId}/settings/domain-restrictions`, payload),
   updateGuestSettings: (workspaceId, payload) =>
     api.patch(`/workspaces/${workspaceId}/settings/guest-settings`, payload),
-  getSecuritySettings: (workspaceId) =>
-    api.get(`/workspaces/${workspaceId}/settings/security`),
+  getSecuritySettings: (workspaceId, config = {}) =>
+    api.get(`/workspaces/${workspaceId}/settings/security`, config),
   updateSecuritySettings: (workspaceId, payload) =>
     api.patch(`/workspaces/${workspaceId}/settings/security`, payload),
-  getNotificationSettings: (workspaceId) =>
-    api.get(`/workspaces/${workspaceId}/settings/notifications`),
+  getNotificationSettings: (workspaceId, config = {}) =>
+    api.get(`/workspaces/${workspaceId}/settings/notifications`, config),
   updateNotificationSettings: (workspaceId, payload) =>
     api.patch(`/workspaces/${workspaceId}/settings/notifications`, payload),
-  getIntegrationSettings: (workspaceId) =>
-    api.get(`/workspaces/${workspaceId}/settings/integrations`),
+  getIntegrationSettings: (workspaceId, config = {}) =>
+    api.get(`/workspaces/${workspaceId}/settings/integrations`, config),
   updateIntegrationSettings: (workspaceId, payload) =>
     api.patch(`/workspaces/${workspaceId}/settings/integrations`, payload),
-  getBilling: (workspaceId) =>
-    api.get(`/workspaces/${workspaceId}/billing`),
+  getBilling: (workspaceId, config = {}) =>
+    api.get(`/workspaces/${workspaceId}/billing`, config),
   upgradePlan: (workspaceId, plan) =>
     api.post(`/workspaces/${workspaceId}/upgrade-plan`, { plan }),
   getActiveSessions: (workspaceId) =>
@@ -345,7 +352,7 @@ export const workspaceAPI = {
 
 // Channel API
 export const channelAPI = {
-  list: () => api.get('/channels'),
+  list: (config = {}) => api.get('/channels', config),
   create: (data) => api.post('/channels', data),
   createDM: (userId) => api.post('/channels/dm', { targetUserId: userId }),
   archive: (id) => api.post(`/channels/${id}/archive`),
@@ -510,7 +517,7 @@ export const usersAPI = {
   setPresence: (status) => api.put('/users/presence', { status }),
   setCustomStatus: (data) => api.put('/users/status', data),
   updateUser: (id, data) => api.patch(`/users/${id}`, data),
-  getChannelMembers: (channelId) => api.get(`/channels/${channelId}/members`),
+  getChannelMembers: (channelId, config = {}) => api.get(`/channels/${channelId}/members`, config),
   getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),
   pauseNotifications: (data) => api.post('/users/dnd/pause', data),
   resumeNotifications: () => api.post('/users/dnd/resume'),

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { laterAPI, resolveWorkspaceId } from '../services/api';
+import { laterAPI, resolveWorkspaceId, getWorkspaceContextVersion } from '../services/api';
 import logger from '../utils/logger';
 
 export const useLaterStore = create(
@@ -13,13 +13,16 @@ export const useLaterStore = create(
       savedMessageIds: [],
 
       fetchSavedMessages: async () => {
-        if (!resolveWorkspaceId()) {
+        const workspaceId = resolveWorkspaceId();
+        const contextVersion = getWorkspaceContextVersion();
+        if (!workspaceId) {
           logger.warn('[LaterStore] Skipping fetchSavedMessages — no active workspace');
           return;
         }
         set({ isLoading: true });
         try {
           const { data } = await laterAPI.list();
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           const messages = data.data?.messages || [];
           const ids = messages.map(m => m.messageId?._id).filter(Boolean);
           set({ 
@@ -29,6 +32,7 @@ export const useLaterStore = create(
             isLoading: false 
           });
         } catch (error) {
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           set({ isLoading: false, savedMessages: [], savedCount: 0 });
           logger.error('Failed to fetch saved messages:', error);
         }

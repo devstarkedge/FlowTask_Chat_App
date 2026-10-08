@@ -53,11 +53,17 @@ import Toast from 'react-native-toast-message';
 import { useThemeStore } from '../../stores/themeStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAuthStore } from '../../stores/authStore';
-import { workspaceAPI, fileAPI } from '../../services/api';
+import { workspaceAPI, fileAPI, getWorkspaceContextVersion } from '../../services/api';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import WorkspaceAvatar from '../../components/WorkspaceAvatar';
 import ENV from '../../config/environment';
 import { useWorkspaceMembers } from '../../hooks/queries/useWorkspaceMembers';
+import { useWorkspaceDetails, useWorkspaceSetting } from '../../hooks/queries/useWorkspaceSettings';
+import { getWorkspaceOrigin, normalizeWorkspaceMembers, getWorkspaceMemberActions, mergeWorkspaceDetails } from '../../utils/workspaceSettings';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../queries/queryKeys';
+import MembersTab from '../../components/workspace/WorkspaceMembersSection';
+import WorkspaceInviteOptions from '../../components/workspace/WorkspaceInviteOptions';
 
 /* ───────────────────────────────────────
    TAB CONFIG
@@ -71,37 +77,33 @@ const TABS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
 ];
 
-const ROLE_COLORS = {
-  owner: '#f59e0b',
-  admin: '#8b5cf6',
-  member: '#38bdf8',
-  guest: '#9ca3af',
-};
-
 /* ───────────────────────────────────────
    MAIN COMPONENT
    ─────────────────────────────────────── */
 export default function WorkspaceSettingsScreen({ navigation }) {
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  return <WorkspaceSettingsContent key={workspaceId || 'no-workspace'} navigation={navigation} />;
+}
+
+function WorkspaceSettingsContent({ navigation }) {
   const { colors } = useThemeStore();
   const user = useAuthStore((s) => s.user);
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
-  const { data: members = [], isLoading: membersLoading, refetch: refetchMembers } = useWorkspaceMembers(activeWorkspaceId);
+  const { data: rawMembers = [], isLoading: membersLoading, error: membersError, refetch: refetchMembers } = useWorkspaceMembers(activeWorkspaceId);
+  const members = useMemo(() => normalizeWorkspaceMembers(rawMembers, activeWorkspaceId), [rawMembers, activeWorkspaceId]);
+  const details = useWorkspaceDetails(activeWorkspaceId);
+  const queryClient = useQueryClient();
+  const contextVersion = getWorkspaceContextVersion();
+  const isCurrentWorkspace = () => useWorkspaceStore.getState().activeWorkspaceId === activeWorkspaceId && getWorkspaceContextVersion() === contextVersion;
+  const currentWorkspace = mergeWorkspaceDetails(activeWorkspace, details.data, activeWorkspaceId);
+  const workspaceOrigin = getWorkspaceOrigin(currentWorkspace);
   const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
   const leaveWorkspace = useWorkspaceStore((s) => s.leaveWorkspace);
 
   const [activeTab, setActiveTab] = useState('general');
   const [refreshing, setRefreshing] = useState(false);
   const [isRemovingWorkspace, setIsRemovingWorkspace] = useState(false);
-
-  const [workspaceData, setWorkspaceData] = useState(null);
-  const [securitySettings, setSecuritySettings] = useState(null);
-  const [notificationSettings, setNotificationSettings] = useState(null);
-  const [integrationSettings, setIntegrationSettings] = useState(null);
-  const [billing, setBilling] = useState(null);
-  const [loadingSecurity, setLoadingSecurity] = useState(false);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
-  const [loadingIntegrations, setLoadingIntegrations] = useState(false);
 
   const userRole = useMemo(() => {
     const m = members.find((m) => (m.userId?._id || m.userId) === user?._id);
@@ -111,6 +113,12 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   const isOwner = userRole === 'owner';
   const isAdmin = isOwner || userRole === 'admin';
   const canManage = isAdmin;
+  const canManageMembership = canManage && workspaceOrigin === 'independent';
+  const canManageAccess = canManage && currentWorkspace?.source === 'independent';
+  const security = useWorkspaceSetting(activeWorkspaceId, 'security', canManage && activeTab === 'security');
+  const notifications = useWorkspaceSetting(activeWorkspaceId, 'notifications', canManage && activeTab === 'notifications');
+  const integrations = useWorkspaceSetting(activeWorkspaceId, 'integrations', canManage && activeTab === 'integrations');
+  const billingQuery = useWorkspaceSetting(activeWorkspaceId, 'billing', canManage);
 
   // ── Redirect if unauthorized ──
   useEffect(() => {
@@ -121,95 +129,45 @@ export default function WorkspaceSettingsScreen({ navigation }) {
     }
   }, [canManage, membersLoading, activeWorkspace, navigation]);
 
-  // ── Load workspace data ──
-  useEffect(() => {
-    loadWorkspaceData();
-  }, [activeWorkspaceId]);
-
-  useEffect(() => {
-    if (activeTab === 'security') loadSecuritySettings();
-    if (activeTab === 'notifications') loadNotificationSettings();
-    if (activeTab === 'integrations') loadIntegrationSettings();
-  }, [activeTab]);
-
-  const loadWorkspaceData = async () => {
-    if (!activeWorkspaceId) return;
-    try {
-      const { data } = await workspaceAPI.get(activeWorkspaceId);
-      setWorkspaceData(data.data);
-      const bill = await workspaceAPI.getBilling(activeWorkspaceId);
-      setBilling(bill.data?.data);
-    } catch (e) {
-      // fallback to store data
-      setWorkspaceData(activeWorkspace);
-    }
-  };
-
-  const loadSecuritySettings = async () => {
-    if (!activeWorkspaceId || !canManage) return;
-    setLoadingSecurity(true);
-    try {
-      const { data } = await workspaceAPI.getSecuritySettings(activeWorkspaceId);
-      setSecuritySettings(data.data);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Failed to load security settings' });
-    } finally {
-      setLoadingSecurity(false);
-    }
-  };
-
-  const loadNotificationSettings = async () => {
-    if (!activeWorkspaceId || !canManage) return;
-    setLoadingNotifications(true);
-    try {
-      const { data } = await workspaceAPI.getNotificationSettings(activeWorkspaceId);
-      setNotificationSettings(data.data);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Failed to load notification settings' });
-    } finally {
-      setLoadingNotifications(false);
-    }
-  };
-
-  const loadIntegrationSettings = async () => {
-    if (!activeWorkspaceId) return;
-    setLoadingIntegrations(true);
-    try {
-      const { data } = await workspaceAPI.getIntegrationSettings(activeWorkspaceId);
-      setIntegrationSettings(data.data);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Failed to load integration settings' });
-    } finally {
-      setLoadingIntegrations(false);
-    }
+  const loadWorkspaceData = () => details.refetch();
+  const handleWorkspaceUpdated = async (updated) => {
+    if (!isCurrentWorkspace()) return;
+    await queryClient.cancelQueries({ queryKey: queryKeys.workspaceDetails(activeWorkspaceId) });
+    if (!isCurrentWorkspace()) return;
+    const merged = mergeWorkspaceDetails(currentWorkspace, updated, activeWorkspaceId);
+    if (!merged) return;
+    queryClient.setQueryData(queryKeys.workspaceDetails(activeWorkspaceId), merged);
+    queryClient.setQueryData(queryKeys.workspaces, (old = []) => old.map(item => item._id === activeWorkspaceId ? { ...item, ...merged } : item));
+    useWorkspaceStore.setState({ activeWorkspace: merged });
   };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([
-      refetchMembers(),
-      loadWorkspaceData(),
-    ]);
-    setRefreshing(false);
-  }, [activeWorkspaceId]);
-
-  const currentWorkspace = workspaceData || activeWorkspace;
+    try {
+      await Promise.all([refetchMembers(), details.refetch(), billingQuery.refetch()]);
+    } finally {
+      if (isCurrentWorkspace()) setRefreshing(false);
+    }
+  }, [activeWorkspaceId, contextVersion, refetchMembers, details.refetch, billingQuery.refetch]);
   const inviteLink = currentWorkspace
     ? `${ENV.CLIENT_URL}/invite/${currentWorkspace.inviteCode || currentWorkspace._id || activeWorkspaceId}`
     : '';
 
   const copyInviteLink = async () => {
+    if (!canManageMembership || !isCurrentWorkspace()) return;
     await Clipboard.setStringAsync(inviteLink);
     Toast.show({ type: 'success', text1: 'Invite link copied' });
   };
 
   const shareInviteLink = async () => {
+    if (!canManageMembership || !isCurrentWorkspace()) return;
     try {
-      await Share.share({ message: `Join my workspace on FlowTask: ${inviteLink}` });
+      await Share.share({ message: `Join my workspace on TaskChat: ${inviteLink}` });
     } catch (error) {}
   };
 
   const copyInviteCode = async () => {
+    if (!canManageMembership || !isCurrentWorkspace()) return;
     if (currentWorkspace?.inviteCode) {
       await Clipboard.setStringAsync(currentWorkspace.inviteCode);
       Toast.show({ type: 'success', text1: 'Invite code copied' });
@@ -217,16 +175,20 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const handleRegenerateInviteCode = async () => {
+    if (!canManageMembership || !isCurrentWorkspace()) return;
     Alert.alert('Regenerate Code', 'This will invalidate the current invite code. Continue?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Regenerate',
         onPress: async () => {
+          if (!canManageMembership || !isCurrentWorkspace()) return;
           try {
             await workspaceAPI.regenerateInviteCode(activeWorkspaceId);
+            if (!isCurrentWorkspace()) return;
             Toast.show({ type: 'success', text1: 'Invite code regenerated' });
             loadWorkspaceData();
           } catch (e) {
+            if (!isCurrentWorkspace()) return;
             Toast.show({ type: 'error', text1: 'Failed to regenerate code' });
           }
         },
@@ -235,7 +197,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const handleLeaveWorkspace = () => {
-    if (isRemovingWorkspace) return;
+    if (isRemovingWorkspace || !canManageAccess || !isCurrentWorkspace()) return;
 
     const title = isOwner ? 'Delete Workspace' : 'Leave Workspace';
     const message = isOwner
@@ -249,6 +211,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
         text: confirmText,
         style: 'destructive',
         onPress: async () => {
+          if (!isCurrentWorkspace()) return;
           setIsRemovingWorkspace(true);
           try {
             const result = isOwner
@@ -281,17 +244,22 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const handleRemoveMember = (memberId, memberName) => {
+    const member = members.find(item => item.userId._id === memberId);
+    if (!isCurrentWorkspace() || !getWorkspaceMemberActions(currentWorkspace, member, user?._id, canManage).canRemove) return;
     Alert.alert('Remove Member', `${memberName} will lose access to this workspace.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
+          if (!isCurrentWorkspace()) return;
           try {
             await workspaceAPI.removeMember(activeWorkspaceId, memberId);
+            if (!isCurrentWorkspace()) return;
             Toast.show({ type: 'success', text1: 'Member removed' });
             refetchMembers();
           } catch (e) {
+            if (!isCurrentWorkspace()) return;
             Toast.show({ type: 'error', text1: 'Failed to remove member' });
           }
         },
@@ -300,16 +268,21 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const handleUpdateRole = (memberId, role) => {
+    const member = members.find(item => item.userId._id === memberId);
+    if (!isCurrentWorkspace() || !getWorkspaceMemberActions(currentWorkspace, member, user?._id, canManage).canEditRole) return;
     Alert.alert('Update Role', `Change this member's role to ${role}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Change',
         onPress: async () => {
+          if (!isCurrentWorkspace()) return;
           try {
             await workspaceAPI.updateMemberRole(activeWorkspaceId, memberId, role);
+            if (!isCurrentWorkspace()) return;
             Toast.show({ type: 'success', text1: `Role changed to ${role}` });
             refetchMembers();
           } catch (e) {
+            if (!isCurrentWorkspace()) return;
             Toast.show({ type: 'error', text1: 'Failed to update role' });
           }
         },
@@ -318,31 +291,41 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   };
 
   const handleSaveSecurity = async (updates) => {
+    if (!canManage || !isCurrentWorkspace()) return;
     try {
       await workspaceAPI.updateSecuritySettings(activeWorkspaceId, updates);
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'success', text1: 'Security settings saved' });
-      loadSecuritySettings();
+      security.refetch();
     } catch (e) {
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'error', text1: 'Failed to save security settings' });
     }
   };
 
   const handleSaveNotifications = async (updates) => {
+    if (!canManage || !isCurrentWorkspace()) return;
     try {
       await workspaceAPI.updateNotificationSettings(activeWorkspaceId, updates);
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'success', text1: 'Notification settings saved' });
-      loadNotificationSettings();
+      notifications.refetch();
     } catch (e) {
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'error', text1: 'Failed to save notification settings' });
     }
   };
 
   const handleSaveIntegration = async (updates) => {
+    if (!canManage || !isCurrentWorkspace()) return;
     try {
       await workspaceAPI.updateIntegrationSettings(activeWorkspaceId, updates);
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'success', text1: 'Integration settings saved' });
-      loadIntegrationSettings();
+      integrations.refetch();
+      details.refetch();
     } catch (e) {
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'error', text1: 'Failed to save integration settings' });
     }
   };
@@ -358,6 +341,7 @@ export default function WorkspaceSettingsScreen({ navigation }) {
       </Text>
     </TouchableOpacity>
   );
+  const selectedSettings = { security, notifications, integrations }[activeTab];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -383,10 +367,26 @@ export default function WorkspaceSettingsScreen({ navigation }) {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {activeTab === 'general' && (
+        {!currentWorkspace && (
+          <SettingsNotice colors={colors} message={details.isLoading ? 'Loading workspace...' : 'Select a workspace to view its settings.'} />
+        )}
+        {currentWorkspace && workspaceOrigin === 'flowtask' && (
+          <SettingsNotice colors={colors} message="Synced with FlowTask. Workspace membership and roles are managed by FlowTask." />
+        )}
+        {currentWorkspace && !workspaceOrigin && (
+          <SettingsNotice colors={colors} message="Workspace source is unavailable. Refresh workspace details before managing membership." onRetry={loadWorkspaceData} />
+        )}
+        {details.error && (
+          <SettingsNotice colors={colors} message="Failed to refresh workspace details." onRetry={loadWorkspaceData} />
+        )}
+        {selectedSettings?.error && (
+          <SettingsNotice colors={colors} message={`Failed to load ${activeTab} settings.`} onRetry={selectedSettings.refetch} />
+        )}
+        {currentWorkspace && activeTab === 'general' && (
           <GeneralTab
-            workspace={workspaceData || activeWorkspace}
-            billing={billing}
+            workspace={currentWorkspace}
+            memberCount={membersLoading || membersError ? currentWorkspace.memberCount : members.length}
+            billing={billingQuery.data}
             canManage={canManage}
             isOwner={isOwner}
             userRole={userRole}
@@ -394,25 +394,32 @@ export default function WorkspaceSettingsScreen({ navigation }) {
             onLeave={handleLeaveWorkspace}
             isRemovingWorkspace={isRemovingWorkspace}
             onRefresh={loadWorkspaceData}
+            onWorkspaceUpdated={handleWorkspaceUpdated}
+            canLeave={canManageAccess}
+            isCurrentWorkspace={isCurrentWorkspace}
           />
         )}
         {activeTab === 'members' && (
           <MembersTab
             members={members}
             loading={membersLoading}
+            error={membersError}
+            onRetry={refetchMembers}
             currentUserId={user?._id}
             canManage={canManage}
             colors={colors}
             onRemove={handleRemoveMember}
             onUpdateRole={handleUpdateRole}
             navigation={navigation}
-            isFlowTaskWorkspace={currentWorkspace?.source === 'flowtask'}
+            workspace={currentWorkspace}
+            isCurrentWorkspace={isCurrentWorkspace}
           />
         )}
         {activeTab === 'invite' && (
           <InviteTab
             workspace={currentWorkspace}
-            canManage={canManage}
+            canManage={canManageMembership}
+            isOwner={isOwner}
             inviteLink={inviteLink}
             colors={colors}
             onCopyLink={copyInviteLink}
@@ -420,30 +427,32 @@ export default function WorkspaceSettingsScreen({ navigation }) {
             onCopyCode={copyInviteCode}
             onRegenerate={handleRegenerateInviteCode}
             navigation={navigation}
+            onRefresh={loadWorkspaceData}
+            isCurrentWorkspace={isCurrentWorkspace}
           />
         )}
-        {activeTab === 'integrations' && (
+        {activeTab === 'integrations' && !integrations.error && (
           <IntegrationsTab
-            settings={integrationSettings}
-            loading={loadingIntegrations}
+            settings={integrations.data}
+            loading={integrations.isLoading}
             canManage={canManage}
             colors={colors}
             onSave={handleSaveIntegration}
           />
         )}
-        {activeTab === 'security' && (
+        {activeTab === 'security' && !security.error && (
           <SecurityTab
-            settings={securitySettings}
-            loading={loadingSecurity}
+            settings={security.data}
+            loading={security.isLoading}
             canManage={canManage}
             colors={colors}
             onSave={handleSaveSecurity}
           />
         )}
-        {activeTab === 'notifications' && (
+        {activeTab === 'notifications' && !notifications.error && (
           <NotificationsTab
-            settings={notificationSettings}
-            loading={loadingNotifications}
+            settings={notifications.data}
+            loading={notifications.isLoading}
             canManage={canManage}
             colors={colors}
             onSave={handleSaveNotifications}
@@ -454,10 +463,19 @@ export default function WorkspaceSettingsScreen({ navigation }) {
   );
 }
 
+function SettingsNotice({ colors, message, onRetry }) {
+  return (
+    <View style={{ padding: moderateScale(14), marginBottom: verticalScale(12), borderRadius: moderateScale(12), backgroundColor: colors.card }}>
+      <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>{message}</Text>
+      {onRetry && <TouchableOpacity onPress={onRetry}><Text style={{ color: colors.primary, fontWeight: '600' }}>Retry</Text></TouchableOpacity>}
+    </View>
+  );
+}
+
 /* ───────────────────────────────────────
    GENERAL TAB
    ─────────────────────────────────────── */
-function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, onLeave, isRemovingWorkspace, onRefresh }) {
+function GeneralTab({ workspace, memberCount, billing, canManage, isOwner, userRole, colors, onLeave, isRemovingWorkspace, onRefresh, onWorkspaceUpdated, canLeave, isCurrentWorkspace }) {
   const [name, setName] = useState(workspace?.name || '');
   const [description, setDescription] = useState(workspace?.description || '');
   const [logo, setLogo] = useState(workspace?.logo || null);
@@ -471,6 +489,7 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
   }, [workspace?.name, workspace?.description, workspace?.logo]);
 
   const handlePickLogo = async () => {
+    if (!canManage || !isCurrentWorkspace()) return;
     if (Platform.OS !== 'web') {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permission.status !== 'granted') {
@@ -485,6 +504,7 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
       quality: 0.8,
     });
     const asset = result.assets?.[0];
+    if (!isCurrentWorkspace()) return;
     if (result.canceled || !asset?.uri) return;
     if (asset.fileSize && asset.fileSize > 2 * 1024 * 1024) {
       Toast.show({ type: 'error', text1: 'Logo must be 2 MB or smaller' });
@@ -499,9 +519,11 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
       const uploadRes = await fileAPI.uploadFiles('000000000000000000000000', formData, null, true);
       const uploaded = uploadRes?.data?.data?.files?.[0] || uploadRes?.data?.files?.[0];
       if (!uploaded?.url) throw new Error('Upload returned no URL');
+      if (!isCurrentWorkspace()) return;
       setLogo(uploaded.url);
       Toast.show({ type: 'success', text1: 'Logo ready', text2: 'Save changes to synchronize it' });
     } catch (error) {
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'error', text1: 'Failed to upload workspace logo' });
     } finally {
       setUploadingLogo(false);
@@ -509,13 +531,16 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
   };
 
   const handleSave = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || saving || !canManage || !isCurrentWorkspace()) return;
     setSaving(true);
     try {
-      await workspaceAPI.update(workspace?._id, { name: name.trim(), description: description.trim(), logo });
+      const { data } = await workspaceAPI.update(workspace?._id, { name: name.trim(), description: description.trim(), logo });
+      if (!isCurrentWorkspace()) return;
+      await onWorkspaceUpdated(data?.data);
       Toast.show({ type: 'success', text1: 'Workspace updated' });
       onRefresh();
     } catch (e) {
+      if (!isCurrentWorkspace()) return;
       Toast.show({ type: 'error', text1: 'Failed to update workspace' });
     }
     setSaving(false);
@@ -554,7 +579,7 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
 
       {/* Info Cards */}
       <View style={styles.infoGrid}>
-        <InfoCard label="Members" value={String(workspace?.memberCount ?? 0)} icon={Users} color="#06b6d4" colors={colors} />
+        <InfoCard label="Members" value={memberCount == null ? '—' : String(memberCount)} icon={Users} color="#06b6d4" colors={colors} />
         <InfoCard label="Slug" value={workspace?.slug || '—'} icon={Link2} color="#6366f1" colors={colors} />
         <InfoCard label="Plan" value={planLabel} icon={Zap} color={planColor} colors={colors} />
         <InfoCard label="Role" value={userRole?.charAt(0).toUpperCase() + userRole?.slice(1) || 'Member'} icon={Crown} color="#f59e0b" colors={colors} />
@@ -609,7 +634,7 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
         <TouchableOpacity
           style={[styles.leaveButton, isRemovingWorkspace && { opacity: 0.6 }]}
           onPress={onLeave}
-          disabled={isRemovingWorkspace}
+          disabled={isRemovingWorkspace || !canLeave}
         >
           {isRemovingWorkspace ? (
             <ActivityIndicator size="small" color="#ef4444" />
@@ -624,6 +649,7 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
               : (isOwner ? 'Delete Workspace' : 'Leave Workspace')}
           </Text>
         </TouchableOpacity>
+        {!canLeave && <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>{getWorkspaceOrigin(workspace) === 'flowtask' ? 'Workspace access is managed by FlowTask. Use FlowTask to leave or delete this workspace.' : 'Workspace access cannot be changed until its source and your permissions are confirmed.'}</Text>}
       </View>
     </View>
   );
@@ -632,139 +658,14 @@ function GeneralTab({ workspace, billing, canManage, isOwner, userRole, colors, 
 /* ───────────────────────────────────────
    MEMBERS TAB
    ─────────────────────────────────────── */
-function MembersTab({ members, loading, currentUserId, canManage, colors, onRemove, onUpdateRole, navigation, isFlowTaskWorkspace }) {
-  const [showRolePicker, setShowRolePicker] = useState(null);
-  const [search, setSearch] = useState('');
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return members;
-    const q = search.toLowerCase();
-    return members.filter((m) => {
-      const name = (m.name || m.userId?.name || '').toLowerCase();
-      const email = (m.email || m.userId?.email || '').toLowerCase();
-      return name.includes(q) || email.includes(q);
-    });
-  }, [members, search]);
-
-  return (
-    <View style={styles.tabContent}>
-      {/* Search */}
-      <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Search size={16} color={colors.textTertiary} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.textPrimary }]}
-          placeholder="Search members..."
-          placeholderTextColor={colors.textTertiary}
-          value={search}
-          onChangeText={setSearch}
-        />
-      </View>
-
-      {/* Total */}
-      <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
-        {members.length} {members.length === 1 ? 'member' : 'members'}
-      </Text>
-
-      {/* Invite Button */}
-      {canManage && !isFlowTaskWorkspace && (
-        <TouchableOpacity
-          style={[styles.inviteButton, { backgroundColor: colors.primary }]}
-          onPress={() => navigation.navigate('InviteManagement')}
-        >
-          <UserPlus size={16} color="#fff" />
-          <Text style={styles.inviteButtonText}>Invite People</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Member List */}
-      {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
-      ) : (
-        filtered.map((m) => {
-          const memberUser = m.userId && typeof m.userId === 'object' ? m.userId : { _id: m.userId };
-          const memberId = memberUser._id || m.userId;
-          const isCurrent = memberId === currentUserId;
-          const name = m.name || memberUser.name || 'Unknown';
-          const email = m.email || memberUser.email || '';
-          const role = m.role || 'member';
-          const roleColor = ROLE_COLORS[role] || '#38bdf8';
-
-          return (
-            <View key={m._id || memberId} style={[styles.memberItem, { borderBottomColor: colors.border }]}>
-              <View style={[styles.mAvatar, { backgroundColor: roleColor }]}>
-                <Text style={styles.mAvatarText}>{name.charAt(0).toUpperCase()}</Text>
-              </View>
-              <View style={styles.mInfo}>
-                <View style={styles.mNameRow}>
-                  <Text style={[styles.mName, { color: colors.textPrimary }]} numberOfLines={1}>{name}</Text>
-                  {isCurrent && <Text style={[styles.youBadge, { color: colors.primary }]}>you</Text>}
-                </View>
-                {email ? <Text style={[styles.mEmail, { color: colors.textSecondary }]} numberOfLines={1}>{email}</Text> : null}
-                <View style={[styles.roleBadge, { backgroundColor: roleColor + '20' }]}>
-                  <Text style={[styles.roleText, { color: roleColor }]}>{role}</Text>
-                </View>
-              </View>
-              {canManage && !isCurrent && role !== 'owner' && (
-                <TouchableOpacity
-                  style={styles.mAction}
-                  onPress={() => setShowRolePicker(showRolePicker === memberId ? null : memberId)}
-                >
-                  <ChevronRight size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })
-      )}
-
-      {/* Role Picker Modal */}
-      <Modal visible={!!showRolePicker} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowRolePicker(null)}
-        >
-          <View style={[styles.roleModal, { backgroundColor: colors.card }]}>
-            <Text style={[styles.roleModalTitle, { color: colors.textPrimary }]}>Change Role</Text>
-            {['admin', 'member', 'guest'].map((role) => (
-              <TouchableOpacity
-                key={role}
-                style={styles.roleOption}
-                onPress={() => {
-                  onUpdateRole(showRolePicker, role);
-                  setShowRolePicker(null);
-                }}
-              >
-                <Text style={[styles.roleOptionText, { color: colors.textPrimary }]}>
-                  Make {role.charAt(0).toUpperCase() + role.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            <View style={[styles.roleDivider, { backgroundColor: colors.border }]} />
-            <TouchableOpacity
-              style={styles.roleOptionDanger}
-              onPress={() => {
-                const member = members.find((m) => (m.userId?._id || m.userId) === showRolePicker);
-                const name = member?.name || member?.userId?.name || 'this member';
-                onRemove(showRolePicker, name);
-                setShowRolePicker(null);
-              }}
-            >
-              <UserMinus size={16} color="#ef4444" />
-              <Text style={styles.roleOptionDangerText}>Remove Member</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
-  );
-}
 
 /* ───────────────────────────────────────
    INVITE TAB
    ─────────────────────────────────────── */
-function InviteTab({ workspace, canManage, inviteLink, colors, onCopyLink, onShareLink, onCopyCode, onRegenerate, navigation }) {
-  const isFlowTaskWorkspace = workspace?.source === 'flowtask';
+function InviteTab({ workspace, canManage, isOwner, inviteLink, colors, onCopyLink, onShareLink, onCopyCode, onRegenerate, navigation, onRefresh, isCurrentWorkspace }) {
+  const origin = getWorkspaceOrigin(workspace);
+  const isFlowTaskWorkspace = origin === 'flowtask';
 
   if (isFlowTaskWorkspace) {
     return (
@@ -776,6 +677,7 @@ function InviteTab({ workspace, canManage, inviteLink, colors, onCopyLink, onSha
       </View>
     );
   }
+  if (!origin) return <SettingsNotice colors={colors} message="Confirm the workspace source before inviting members." onRetry={onRefresh} />;
 
   return (
     <View style={styles.tabContent}>
@@ -838,6 +740,7 @@ function InviteTab({ workspace, canManage, inviteLink, colors, onCopyLink, onSha
           </TouchableOpacity>
         </>
       )}
+      <WorkspaceInviteOptions workspace={workspace} canManage={canManage} isOwner={isOwner} colors={colors} onRefresh={onRefresh} isCurrentWorkspace={isCurrentWorkspace} />
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { scheduledAPI, resolveWorkspaceId } from '../services/api';
+import { scheduledAPI, resolveWorkspaceId, getWorkspaceContextVersion } from '../services/api';
 import logger from '../utils/logger';
 
 export const useScheduledStore = create(
@@ -21,13 +21,16 @@ export const useScheduledStore = create(
       },
 
       fetchScheduledMessages: async () => {
-        if (!resolveWorkspaceId()) {
+        const workspaceId = resolveWorkspaceId();
+        const contextVersion = getWorkspaceContextVersion();
+        if (!workspaceId) {
           logger.warn('[ScheduledStore] Skipping fetchScheduledMessages — no active workspace');
           return;
         }
         set({ isLoading: true });
         try {
           const { data } = await scheduledAPI.list();
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           const messages = data?.data?.messages || [];
           set({ 
             scheduledMessages: messages, 
@@ -35,6 +38,7 @@ export const useScheduledStore = create(
             isLoading: false 
           });
         } catch (error) {
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           set({ isLoading: false, scheduledMessages: [], scheduledCount: 0 });
           logger.error('Failed to fetch scheduled messages:', error);
         }

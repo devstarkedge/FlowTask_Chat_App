@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { channelAPI, usersAPI, readReceiptAPI, categoryAPI, resolveWorkspaceId } from '../services/api';
+import { channelAPI, usersAPI, readReceiptAPI, categoryAPI, resolveWorkspaceId, getWorkspaceContextVersion } from '../services/api';
 import { getSocket } from '../services/socket';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
@@ -34,8 +34,12 @@ export const useChannelStore = create(
       isLoading: false,
 
       fetchCategories: async () => {
+        const workspaceId = resolveWorkspaceId();
+        const contextVersion = getWorkspaceContextVersion();
+        if (!workspaceId) return;
         try {
           const { data } = await categoryAPI.list();
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           set({ categories: data.data || [] });
         } catch (error) {
           logger.error('Failed to fetch categories:', error);
@@ -70,8 +74,12 @@ export const useChannelStore = create(
       },
 
       fetchUnreads: async () => {
+        const workspaceId = resolveWorkspaceId();
+        const contextVersion = getWorkspaceContextVersion();
+        if (!workspaceId) return;
         try {
           const { data } = await readReceiptAPI.getUnread();
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           const unreads = {};
           // Collect channel-level updates from populated channelId objects
           // (mirrors web app behaviour: server populates lastMessageAt + lastMessagePreview

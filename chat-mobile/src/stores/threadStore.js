@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
-import { threadAPI, resolveWorkspaceId } from '../services/api';
+import { threadAPI, resolveWorkspaceId, getWorkspaceContextVersion } from '../services/api';
 import { useAuthStore } from './authStore';
 import api from '../services/api';
 import logger from '../utils/logger';
@@ -19,7 +19,9 @@ export const useThreadStore = create(
 
       fetchThreads: async (page = 1, options = {}) => {
         const silent = options?.silent === true;
-        if (!resolveWorkspaceId()) {
+        const workspaceId = resolveWorkspaceId();
+        const contextVersion = getWorkspaceContextVersion();
+        if (!workspaceId) {
           logger.warn('[ThreadStore] Skipping fetchThreads — no active workspace');
           return;
         }
@@ -27,6 +29,7 @@ export const useThreadStore = create(
         if (page === 1 && !silent) set({ isLoading: true });
         try {
           const { data } = await threadAPI.getMyThreads({ page, limit: 20 });
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           const raw = data.data?.threads || [];
           
           set((state) => {
@@ -50,6 +53,7 @@ export const useThreadStore = create(
             };
           });
         } catch (error) {
+          if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           set({ isLoading: false });
           if (page === 1) {
             set({ threads: [], unreadThreadCount: 0 });

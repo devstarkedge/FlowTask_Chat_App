@@ -188,12 +188,19 @@ const ChatScreen = ({ route, navigation }) => {
   const user = useAuthStore(useShallow((s) => s.user));
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const { data: channels = [] } = useChannels(activeWorkspaceId);
-  const { data: channelMembers = [] } = useChannelMembers(channelId);
+  const { data: channelMembers = [], error: channelMembersError } = useChannelMembers(channelId);
   const markAsRead = useChannelStore((s) => s.markAsRead);
   const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
   const { data: workspaceMembers = [] } = useWorkspaceMembers(activeWorkspaceId);
   const toggleSaveMessage = useLaterStore((s) => s.toggleSaveMessage);
   const isMessageSaved = useLaterStore((s) => s.isMessageSaved);
+
+  useEffect(() => {
+    if (channelMembersError) {
+      logger.error('Failed to load channel members:', channelMembersError);
+      Toast.show({ type: 'error', text1: 'Unable to load channel members', text2: channelMembersError.userMessage || channelMembersError.message });
+    }
+  }, [channelMembersError]);
 
   const [text, setText] = useState("");
   const [showOptions, setShowOptions] = useState(false);
@@ -452,7 +459,7 @@ const ChatScreen = ({ route, navigation }) => {
     [channels, channelId]
   );
 
-  // Full user objects from fetchMembers — has avatar, name, onlineStatus
+  // Full user objects from useChannelMembers — has avatar, name, onlineStatus
   const channelMembersArr = Array.isArray(channelMembers) ? channelMembers : [];
 
   const memberCount = useMemo(
@@ -514,6 +521,7 @@ const ChatScreen = ({ route, navigation }) => {
   const { height } = useWindowDimensions();
 
   useEffect(() => {
+    let cancelled = false;
     const initData = async () => {
       if (!channelId) return;
 
@@ -529,24 +537,33 @@ const ChatScreen = ({ route, navigation }) => {
       // and loads the *next older* page using the stored cursor, meaning the latest
       // messages are never re-fetched and the chat stays stale.
       try {
-        await refetchMessages();
+        const result = await refetchMessages();
+        if (result.error && !cancelled) {
+          logger.error('Failed to load channel messages:', result.error);
+        }
       } catch (err) {
+        if (cancelled) return;
         if (err?.response?.status === 403) {
           try {
             const currentUser = useAuthStore.getState().user;
             await channelAPI.addMember(channelId, currentUser._id);
+            if (cancelled) return;
             Toast.show({ type: 'success', text1: `Joined ${channelName || 'channel'}` });
             await refetchMessages();
+            queryClient.invalidateQueries({ queryKey: queryKeys.channelMembers(channelId) });
           } catch (joinErr) {
             logger.error('Failed to auto-join channel:', joinErr);
           }
+        } else {
+          logger.error('Failed to load channel messages:', err);
         }
       }
-
-      fetchMembers(channelId);
     };
-    initData();
-  }, [channelId]); // eslint-disable-line react-hooks/exhaustive-deps
+    initData().catch((err) => {
+      if (!cancelled) logger.error('Failed to initialize channel:', err);
+    });
+    return () => { cancelled = true; };
+  }, [channelId, channelName, refetchMessages]);
 
   // Track active conversation for unread/push/receipts parity with web
   useEffect(() => {

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import storage from '../services/storage';
 import logger from '../utils/logger';
-import { workspaceAPI, setCachedWorkspaceId } from '../services/api';
+import { workspaceAPI, setCachedWorkspaceId, getWorkspaceContextVersion } from '../services/api';
 import { queryClient } from '../queries/queryClient';
 import { queryKeys } from '../queries/queryKeys';
 
@@ -42,6 +42,7 @@ export const useWorkspaceStore = create(
       activeWorkspace: null,
       presenceMap: {},
       isLoading: false,
+      isSwitchingWorkspace: false,
       error: null,
 
       fetchWorkspaces: async (skipAutoSelect = false) => {
@@ -88,47 +89,50 @@ export const useWorkspaceStore = create(
       },
 
       switchWorkspace: async (workspaceId) => {
-        if (!workspaceId) return;
-        let workspaces = queryClient.getQueryData(queryKeys.workspaces) || [];
-        if (workspaces.length === 0) {
-          // Fallback if cache is empty
-          try {
+        if (!workspaceId) throw new Error('No workspace selected');
+        // Finish startup hydration before any write can replace persisted context.
+        if (!useWorkspaceStore.persist.hasHydrated()) await useWorkspaceStore.persist.rehydrate();
+        if (get().isSwitchingWorkspace) throw new Error('A workspace switch is already in progress. Please try again.');
+        set({ isSwitchingWorkspace: true });
+        try {
+          let workspaces = queryClient.getQueryData(queryKeys.workspaces) || [];
+          if (workspaces.length === 0) {
             workspaces = await get().fetchWorkspaces(true);
-          } catch (e) {}
-        }
-        
-        let workspace = workspaces.find((w) => w._id === workspaceId);
-        
-        // If not found in cache, force a fresh server fetch and retry
-        if (!workspace) {
-          try {
+          }
+          let workspace = workspaces.find((w) => w._id === workspaceId);
+          if (!workspace) {
             logger.info('[WorkspaceStore] Workspace not in cache, forcing server refetch…');
-            await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
             const freshList = await get().fetchWorkspaces(true);
             workspace = freshList.find((w) => w._id === workspaceId);
-          } catch (e) {
-            logger.warn('[WorkspaceStore] Refetch during switchWorkspace failed', e);
           }
-        }
-        
-        if (workspace) {
-          // Set header cache BEFORE any follow-up API calls
+          if (!workspace) throw new Error('Workspace is no longer available. Please refresh and try again.');
+
+          // Persist before publishing: a failed write must keep the previous context.
+          await storage.setItem('active_workspace_id', workspaceId);
+          const previousWorkspaceId = get().activeWorkspaceId;
+          if (previousWorkspaceId) {
+            await queryClient.cancelQueries({ queryKey: queryKeys.channels(previousWorkspaceId) });
+          }
+          // Set header cache BEFORE publishing state or making follow-up API calls.
           setCachedWorkspaceId(workspaceId);
           set({
             activeWorkspaceId: workspaceId,
             activeWorkspace: workspace,
+            members: [],
+            presenceMap: {},
           });
-          await storage.setItem('active_workspace_id', workspaceId);
           logger.info('[WorkspaceStore] Switched to workspace:', workspace.name);
 
           // Trigger full context refresh
           await get().refreshWorkspaceContext();
-        } else {
-          logger.error('[WorkspaceStore] switchWorkspace failed: workspace not found for id', workspaceId);
+          return workspace;
+        } finally {
+          set({ isSwitchingWorkspace: false });
         }
       },
 
       refreshWorkspaceContext: async () => {
+        const wid = get().activeWorkspaceId;
         try {
           // Import stores dynamically to avoid circular dependencies
           const { useChannelStore } = await import('./channelStore');
@@ -138,33 +142,41 @@ export const useWorkspaceStore = create(
           const { useScheduledStore } = await import('./scheduledStore');
           const { useChatStore } = await import('./chatStore');
           const { disconnectSocket, connectSocket } = await import('../services/socket');
+          if (get().activeWorkspaceId !== wid) return;
 
           // Disconnect and reconnect socket with new workspace context
           disconnectSocket();
 
           // Clear existing state via proper store actions
-          useChannelStore.setState({ activeChannelId: null, unreads: {} });
+          useChannelStore.setState({ activeChannelId: null, unreads: {}, categories: [], starredIds: [], pinnedIds: [] });
           useChatStore.setState({ messagesByChannel: {}, hasMore: {}, typingByChannel: {} });
+          useThreadStore.getState().clearThreads?.();
+          useLaterStore.getState().clearSavedMessages?.();
+          useScheduledStore.getState().clearScheduledMessages?.();
+          // Drafts are stored per workspace; preserve them and update only the count.
+          await useDraftStore.getState().fetchDrafts?.(wid);
 
           // Reconnect socket
           await connectSocket();
 
           // Channels are managed by TanStack Query (useChannels hook), not the store.
           // Invalidate the cache so the next render of useChannels refetches automatically.
-          const wid = get().activeWorkspaceId;
           if (wid) {
             queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMembers(wid) });
           }
 
           // Refresh other store-managed data in parallel
-          await Promise.all([
+          // Selection must not wait for remote Home-card requests to finish.
+          Promise.all([
             useThreadStore.getState().fetchThreads?.() || Promise.resolve(),
             useLaterStore.getState().fetchSavedMessages?.() || Promise.resolve(),
-            useDraftStore.getState().fetchDrafts?.(get().activeWorkspaceId) || Promise.resolve(),
             useScheduledStore.getState().fetchScheduledMessages?.() || Promise.resolve(),
-          ]);
-
-          logger.info('[WorkspaceStore] Context refreshed successfully');
+          ]).then(() => {
+            logger.info('[WorkspaceStore] Context refreshed successfully');
+          }).catch((error) => {
+            logger.error('[WorkspaceStore] Failed to refresh workspace data:', error);
+          });
         } catch (error) {
           logger.error('[WorkspaceStore] Failed to refresh context:', error);
         }
@@ -372,14 +384,17 @@ export const useWorkspaceStore = create(
 
       fetchMembers: async (workspaceId) => {
         if (!workspaceId) return;
+        const contextVersion = getWorkspaceContextVersion();
         set({ isLoading: true, error: null });
         try {
           const { data } = await workspaceAPI.getMembers(workspaceId);
           const members = data.data?.members || data.data || [];
+          if (get().activeWorkspaceId !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return members;
           set({ members, isLoading: false });
           logger.info('[WorkspaceStore] Fetched members:', members.length);
           return members;
         } catch (error) {
+          if (get().activeWorkspaceId !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
           const msg = error.response?.data?.error?.message || error.response?.data?.message || error.userMessage || 'Failed to fetch members';
           set({ isLoading: false, error: msg });
           logger.error('[WorkspaceStore] Fetch members error:', msg);

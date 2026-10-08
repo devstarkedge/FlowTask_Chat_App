@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SvgUri } from 'react-native-svg';
 import { useThemeStore } from '../stores/themeStore';
+import { normalizeMediaUrl } from '../utils/mediaUtils';
+import logger from '../utils/logger';
 
 const defaultGradients = (colors) => [
   [colors.primary, colors.primaryHover || colors.primary],
@@ -34,27 +37,37 @@ const WorkspaceAvatar = ({
 }) => {
   const { colors } = useThemeStore();
   
-  const workspaceLogo = workspace?.logo;
+  const workspaceLogo = normalizeMediaUrl(workspace?.logo);
+  const [failedLogo, setFailedLogo] = useState(null);
   const workspaceName = workspace?.name || 'W';
   const initial = workspaceName[0]?.toUpperCase() || 'W';
   const gradient = getWorkspaceGradient(workspaceName, colors, index);
+  const handleLogoError = useCallback(() => {
+    setFailedLogo(workspaceLogo);
+    logger.warn('Failed to load workspace logo', { workspaceId: workspace?._id });
+  }, [workspaceLogo, workspace?._id]);
+  const isSvg = /\.svg(?:[?#]|$)/i.test(workspaceLogo) || /^data:image\/svg\+xml/i.test(workspaceLogo);
 
-  if (workspaceLogo) {
+  if (workspaceLogo && failedLogo !== workspaceLogo) {
     return (
-      <View style={style}>
-        <Image
-          source={{ uri: workspaceLogo }}
-          style={[
-            styles.logo,
-            {
-              width: size,
-              height: size,
-              borderRadius: size * 0.25,
-              borderWidth: showBorder ? 2 : 0,
-                borderColor: showBorder ? `${colors.messageTextSent}80` : 'transparent',
-            },
-          ]}
-        />
+      <View
+        style={[
+          styles.logoFrame,
+          {
+            width: size,
+            height: size,
+            borderRadius: size * 0.25,
+            borderWidth: showBorder ? 2 : 0,
+            borderColor: showBorder ? `${colors.messageTextSent}80` : 'transparent',
+          },
+          style,
+        ]}
+      >
+        {isSvg ? (
+          <SvgUri uri={workspaceLogo} width={size} height={size} onError={handleLogoError} accessibilityLabel={`${workspaceName} logo`} />
+        ) : (
+          <Image source={{ uri: workspaceLogo }} style={styles.logo} onError={handleLogoError} accessibilityLabel={`${workspaceName} logo`} />
+        )}
       </View>
     );
   }
@@ -90,7 +103,12 @@ const WorkspaceAvatar = ({
 
 const styles = StyleSheet.create({
   logo: {
+    width: '100%',
+    height: '100%',
     resizeMode: 'cover',
+  },
+  logoFrame: {
+    overflow: 'hidden',
   },
   gradient: {
     justifyContent: 'center',

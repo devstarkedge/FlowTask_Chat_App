@@ -14,7 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useThemeStore } from "../stores/themeStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useChannels } from "../hooks/queries/useChannels";
-import { workspaceAPI } from "../services/api";
+import { workspaceAPI, getWorkspaceContextVersion } from "../services/api";
 import ENV from "../config/environment";
 import * as Clipboard from "expo-clipboard";
 import Toast from "react-native-toast-message";
@@ -36,6 +36,9 @@ import {
 } from "lucide-react-native";
 import logger from "../utils/logger";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import { getWorkspaceOrigin, mergeWorkspaceDetails } from '../utils/workspaceSettings';
+import { useWorkspaceDetails } from '../hooks/queries/useWorkspaceSettings';
+import { useQueryClient } from '@tanstack/react-query';
 
 
 const PLAN_FEATURES = {
@@ -45,10 +48,21 @@ const PLAN_FEATURES = {
 };
 
 export default function InviteManagementScreen({ navigation }) {
+  const workspaceId = useWorkspaceStore(s => s.activeWorkspaceId);
+  return <InviteManagementContent key={workspaceId || 'no-workspace'} navigation={navigation} />;
+}
+
+function InviteManagementContent({ navigation }) {
   const { colors, effectiveTheme } = useThemeStore();
   const insets = useSafeAreaInsets();
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const activeWorkspace   = useWorkspaceStore((s) => s.activeWorkspace);
+  const details = useWorkspaceDetails(activeWorkspaceId);
+  const queryClient = useQueryClient();
+  const currentWorkspace = mergeWorkspaceDetails(activeWorkspace, details.data, activeWorkspaceId);
+  const workspaceOrigin = getWorkspaceOrigin(currentWorkspace);
+  const contextVersion = getWorkspaceContextVersion();
+  const isCurrentWorkspace = () => useWorkspaceStore.getState().activeWorkspaceId === activeWorkspaceId && getWorkspaceContextVersion() === contextVersion;
   const { data: channels = [] } = useChannels(activeWorkspaceId);
 
   const [emails, setEmails] = useState([]);
@@ -65,7 +79,7 @@ export default function InviteManagementScreen({ navigation }) {
 
   const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
-  const userRole = activeWorkspace?.role || "member";
+  const userRole = currentWorkspace?.role || "member";
   const canManage = ['owner', 'admin'].includes(userRole);
 
   // Redirect if unauthorized
@@ -89,9 +103,9 @@ export default function InviteManagementScreen({ navigation }) {
 
   // Invite Link
   const inviteLink = useMemo(() => {
-    const inviteCode = activeWorkspace?.inviteCode || activeWorkspaceId;
+    const inviteCode = currentWorkspace?.inviteCode || activeWorkspaceId;
     return `${ENV.CLIENT_URL}/invite/${inviteCode}`;
-  }, [activeWorkspace, activeWorkspaceId]);
+  }, [currentWorkspace?.inviteCode, activeWorkspaceId]);
 
   const addEmailChip = () => {
     const trimmed = emailInput.trim().toLowerCase();
@@ -131,13 +145,16 @@ export default function InviteManagementScreen({ navigation }) {
   };
 
   const copyInviteLink = async () => {
+    if (!canManage || workspaceOrigin !== 'independent' || !isCurrentWorkspace()) return;
     await Clipboard.setStringAsync(inviteLink);
+    if (!isCurrentWorkspace()) return;
     setLinkCopied(true);
     Toast.show({ type: "success", text1: "Invite link copied!" });
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
   const handleSend = async () => {
+    if (!canManage || workspaceOrigin !== 'independent' || !isCurrentWorkspace()) return;
     let finalEmails = [...emails];
     if (emailInput.trim()) {
       const trimmed = emailInput.trim().toLowerCase();
@@ -176,10 +193,13 @@ export default function InviteManagementScreen({ navigation }) {
         )
       );
 
+      if (!isCurrentWorkspace()) return;
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
       const rejected = results.filter((r) => r.status === "rejected");
 
       if (succeeded > 0) {
+        await queryClient.invalidateQueries({ queryKey: ['workspaceInvites', activeWorkspaceId] });
+        if (!isCurrentWorkspace()) return;
         Toast.show({
           type: "success",
           text1: "Invitations Sent",
@@ -201,14 +221,15 @@ export default function InviteManagementScreen({ navigation }) {
         });
       }
     } catch (err) {
+      if (!isCurrentWorkspace()) return;
       logger.error("Failed to send invitations:", err);
       Toast.show({ type: "error", text1: "Error sending invitations" });
     } finally {
-      setSending(false);
+      if (isCurrentWorkspace()) setSending(false);
     }
   };
 
-  const plan = activeWorkspace?.plan || "free";
+  const plan = currentWorkspace?.plan || "free";
   const guestAccess = PLAN_FEATURES[plan]?.guestAccess ?? false;
 
   const selectedChannelsNames = useMemo(() => {
@@ -219,17 +240,17 @@ export default function InviteManagementScreen({ navigation }) {
       .join(", ");
   }, [channels, selectedChannels]);
 
-  const isFlowTaskWorkspace = activeWorkspace?.source === 'flowtask';
+  const isFlowTaskWorkspace = workspaceOrigin === 'flowtask';
 
-  // For FlowTask workspaces, only allow guest invites.
-  useEffect(() => {
-    if (isFlowTaskWorkspace) {
-      setIsGuest(true);
-      setIsAdmin(false);
-    }
-  }, [isFlowTaskWorkspace]);
-
-  // ... (existing code, let's just replace the JSX parts directly in the return block)
+  if (workspaceOrigin !== 'independent') {
+    return <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={styles.header}><HeaderBackButton onPress={() => navigation.goBack()} /><Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Workspace Invitations</Text></View>
+      <View style={{ padding: moderateScale(20), gap: verticalScale(12) }}>
+        <Text style={{ color: colors.textSecondary }}>{isFlowTaskWorkspace ? "Workspace membership and roles are managed by FlowTask. Please use FlowTask's workspace invitation flow." : 'Workspace source is unavailable. Refresh workspace details before inviting members.'}</Text>
+        {!isFlowTaskWorkspace && <TouchableOpacity onPress={() => details.refetch()}><Text style={{ color: colors.primary }}>Retry</Text></TouchableOpacity>}
+      </View>
+    </SafeAreaView>;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>

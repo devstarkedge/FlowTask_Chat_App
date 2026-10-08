@@ -106,13 +106,15 @@ const badgeStyles = StyleSheet.create({
 // ─── Workspace Switcher Screen Wrapper ──────────────────────────────────────
 
 function WorkspaceSwitcherScreen({ navigation }) {
-  const [visible, setVisible] = React.useState(true);
   return (
-    <WorkspaceSwitcher
-      visible={visible}
-      onClose={() => navigation.goBack()}
-      navigation={navigation}
-    />
+    <View style={{ flex: 1 }} collapsable={false}>
+      <WorkspaceSwitcher
+        visible
+        onClose={() => navigation.goBack()}
+        onWorkspaceSelected={() => navigation.popTo('Main', { screen: 'HomeTab' })}
+        navigation={navigation}
+      />
+    </View>
   );
 }
 
@@ -274,6 +276,7 @@ export default function AppNavigation() {
               headerShown: false,
               animation: "fade",
               presentation: "transparentModal",
+              contentStyle: { flex: 1, backgroundColor: "transparent" },
             }}
           />
           <Stack.Screen

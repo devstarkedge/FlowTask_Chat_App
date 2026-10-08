@@ -28,8 +28,9 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import useResponsive from '../hooks/useResponsive';
 import api from '../services/api';
 import { useWorkspaces } from '../hooks/queries/useWorkspaces';
+import logger from '../utils/logger';
 
-const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
+const WorkspaceSwitcher = ({ visible, onClose, onWorkspaceSelected = onClose, navigation }) => {
   const { width } = useResponsive();
   const SIDEBAR_WIDTH = Math.min(width * 0.82, 360);
   const insets = useSafeAreaInsets();
@@ -37,28 +38,34 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
     activeWorkspace,
     switchWorkspace,
     fetchWorkspaces,
-    isLoading,
-    error,
   } = useWorkspaceStore();
   // Workspaces live in the TanStack Query cache (populated by store's fetchWorkspaces),
   // not in the zustand store — read them via the query hook (same key, keeps in sync).
-  const { data: workspaces = [] } = useWorkspaces();
+  const { data: workspaces = [], isLoading, error } = useWorkspaces();
   const { colors } = useThemeStore();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const [actionMenuVisible, setActionMenuVisible] = useState(null);
   const [addWorkspaceVisible, setAddWorkspaceVisible] = useState(false);
   const [unreadByWorkspace, setUnreadByWorkspace] = useState({});
+  const switchingRef = useRef(false);
+  const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     if (visible) {
-      fetchWorkspaces();
+      fetchWorkspaces().catch((err) => {
+        logger.error('Failed to refresh workspaces:', err);
+      });
       // Workspace-level unread badges (parity with web WorkspaceSwitcher)
       api
         .get('/notifications/unread-counts-all')
-        .then(({ data }) => setUnreadByWorkspace(data?.data?.counts ?? {}))
+        .then(({ data }) => {
+          if (!cancelled) setUnreadByWorkspace(data?.data?.counts ?? {});
+        })
         .catch(() => {});
     }
-  }, [visible]);
+    return () => { cancelled = true; };
+  }, [visible, fetchWorkspaces]);
 
   useEffect(() => {
     Animated.timing(slideAnim, {
@@ -86,10 +93,21 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
     );
   };
 
-  const handleWorkspaceSwitch = (workspaceId) => {
-    if (workspaceId === activeWorkspace?._id) { onClose(); return; }
-    switchWorkspace(workspaceId);
-    onClose();
+  const handleWorkspaceSwitch = async (workspaceId) => {
+    if (switchingRef.current) return;
+    switchingRef.current = true;
+    setSwitchingWorkspaceId(workspaceId);
+    try {
+      if (workspaceId !== activeWorkspace?._id) await switchWorkspace(workspaceId);
+    } catch (err) {
+      logger.error('Failed to switch workspace:', err);
+      Alert.alert('Unable to switch workspace', err?.userMessage || err?.message || 'Please try again.');
+      return;
+    } finally {
+      switchingRef.current = false;
+      setSwitchingWorkspaceId(null);
+    }
+    onWorkspaceSelected();
   };
 
 
@@ -97,10 +115,11 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
   if (!visible) return null;
 
   return (
-    <View style={styles.overlay}>
+    <View style={styles.overlay} collapsable={false}>
       <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose} />
 
       <Animated.View
+        collapsable={false}
         style={[
           styles.sidebar,
           {
@@ -121,14 +140,21 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
 
         {/* Workspace list (scrollable) */}
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
-          {isLoading ? (
+          {isLoading && workspaces.length === 0 ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
-          ) : error ? (
+          ) : error && workspaces.length === 0 ? (
             <View style={styles.errorBox}>
-              <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
-              <TouchableOpacity onPress={fetchWorkspaces}>
+              <Text style={[styles.errorText, { color: colors.error }]}>{error.userMessage || error.message || 'Failed to load workspaces'}</Text>
+              <TouchableOpacity onPress={() => fetchWorkspaces().catch((err) => logger.error('Failed to retry workspaces:', err))}>
+                <Text style={{ color: colors.primary, fontWeight: "600" }}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : workspaces.length === 0 ? (
+            <View style={styles.errorBox}>
+              <Text style={[styles.errorText, { color: colors.textSecondary }]}>No workspaces found</Text>
+              <TouchableOpacity onPress={() => fetchWorkspaces().catch((err) => logger.error('Failed to retry workspaces:', err))}>
                 <Text style={{ color: colors.primary, fontWeight: "600" }}>Retry</Text>
               </TouchableOpacity>
             </View>
@@ -142,6 +168,7 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
                     <TouchableOpacity
                       style={[styles.wsCard, { backgroundColor: isActive ? colors.backgroundTertiary : "transparent" }]}
                       onPress={() => handleWorkspaceSwitch(ws._id)}
+                      disabled={!!switchingWorkspaceId}
                       activeOpacity={0.7}
                     >
                       <View style={styles.avatarWrap}>
@@ -240,11 +267,11 @@ const WorkspaceSwitcher = ({ visible, onClose, navigation }) => {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     zIndex: 1100,
   },
   backdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   sidebar: {
     position: "absolute",
@@ -254,6 +281,7 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   headerRow: {
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -261,10 +289,12 @@ const styles = StyleSheet.create({
     paddingVertical: verticalScale(14),
   },
   title: {
+    flex: 1,
     fontSize: moderateScale(22),
     fontWeight: "800",
   },
   closeBtn: {
+    flexShrink: 0,
     padding: moderateScale(4),
   },
   scrollContent: {
@@ -309,6 +339,7 @@ const styles = StyleSheet.create({
   },
   wsInfo: {
     flex: 1,
+    minWidth: 0,
     marginLeft: scale(10),
   },
   wsName: {
@@ -329,6 +360,7 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(8),
   },
   footerOptions: {
+    flexShrink: 0,
     paddingHorizontal: scale(4),
   },
   footerRow: {
@@ -341,6 +373,7 @@ const styles = StyleSheet.create({
     marginHorizontal: scale(4),
   },
   footerLabel: {
+    flex: 1,
     fontSize: moderateScale(15),
     fontWeight: "500",
   },

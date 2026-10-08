@@ -4,11 +4,12 @@ import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useNotificationPrefStore } from '../stores/notificationPrefStore';
-import api, { channelAPI, notificationPrefAPI, usersAPI, directoriesAPI, workspaceAPI, categoryAPI } from '../services/api';
+import api, { channelAPI, notificationPrefAPI, directoriesAPI, workspaceAPI, categoryAPI } from '../services/api';
 import logger from '../utils/logger';
 import { isChatAppChannel } from '../utils/channelOrigin';
 import Toast from 'react-native-toast-message';
 import { useChannels } from './queries/useChannels';
+import { useChannelMembers } from './queries/useChannelMembers';
 
 export const useChannelDetails = (channelId, channelName, navigation) => {
   const createDM = useChannelStore((s) => s.createDM);
@@ -23,8 +24,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const channel = channels.find((c) => c._id === channelId);
   const isOneToOneDM = channel?.type === 'dm' && (channel?.dmParticipants?.length || 0) <= 2;
 
-  const [members, setMembers] = useState([]);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const { data: members = [], isLoading: isLoadingMembers, refetch: refetchMembers, error: membersError } = useChannelMembers(channelId);
   const [showMembersList, setShowMembersList] = useState(false);
   const isMutedStore = useNotificationPrefStore((s) => !!s.mutedChannels?.[channelId]);
   const [isMutedLocal, setIsMutedLocal] = useState(false);
@@ -40,19 +40,12 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const [isSearchingMembers, setIsSearchingMembers] = useState(false);
   const [addingMemberId, setAddingMemberId] = useState(null);
 
-  const fetchMembers = useCallback(async () => {
-    setIsLoadingMembers(true);
-    try {
-      const res = await usersAPI.getChannelMembers(channelId);
-      const data = res.data?.data || res.data;
-      const list = Array.isArray(data) ? data : data?.members || [];
-      setMembers(Array.isArray(list) ? list : []);
-    } catch (err) {
-      logger.error('Failed to load channel members:', err);
-    } finally {
-      setIsLoadingMembers(false);
+  useEffect(() => {
+    if (membersError) {
+      logger.error('Failed to load channel members:', membersError);
+      Toast.show({ type: 'error', text1: 'Unable to load channel members', text2: membersError.userMessage || membersError.message });
     }
-  }, [channelId]);
+  }, [membersError]);
 
   const fetchNotificationPrefs = useCallback(async () => {
     try {
@@ -68,10 +61,9 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
 
   useEffect(() => {
     if (channelId) {
-      fetchMembers();
       fetchNotificationPrefs();
     }
-  }, [channelId, fetchMembers, fetchNotificationPrefs]);
+  }, [channelId, fetchNotificationPrefs]);
 
   useEffect(() => {
     if (!showAddMemberModal) return;
@@ -154,7 +146,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
       await channelAPI.addMember(channelId, userId);
       Alert.alert("Success", "Members added successfully.");
       Toast.show({ type: 'success', text1: `${userName} added to channel` });
-      fetchMembers();
+      await refetchMembers();
       setMemberSearchResults(prev => prev.filter(m => m._id !== userId));
     } catch (err) {
       logger.error('Failed to add member:', err);

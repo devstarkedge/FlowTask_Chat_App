@@ -7,11 +7,6 @@
     "scheme": "flowtaskchat",
     "icon": "./assets/Vector.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/Vector.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mohitgahlyan.chatmobilejs",
@@ -38,11 +33,6 @@
       ]
     },
     "android": {
-      "splash": {
-        "image": "./assets/Vector.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
-      },
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/Vector.png"

@@ -1,10 +1,9 @@
 import { useEffect, Suspense, lazy } from 'react'
-import { Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
-import { isDesktopApp, setWindowControlsColor } from './services/desktopService'
 
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
@@ -86,95 +85,11 @@ function SmartAuthRedirect() {
   return <AuthenticatedDefaultRedirect />
 }
 
-function useTitlebarContrast() {
-  const location = useLocation()
-
-  useEffect(() => {
-    if (!isDesktopApp() || !window.electronAPI?.setTitleBarOverlay) return
-
-    const updateContrast = () => {
-      const sampleX = Math.max(10, window.innerWidth - 30)
-      const sampleY = 15
-      let el = document.elementFromPoint(sampleX, sampleY)
-      let bg = 'transparent'
-
-      while (el && el !== document.documentElement) {
-        const style = window.getComputedStyle(el)
-        const color = style.backgroundColor
-        if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') {
-          bg = color
-          break
-        }
-        el = el.parentElement
-      }
-
-      if (bg === 'transparent') {
-        const bodyStyle = window.getComputedStyle(document.body)
-        bg = bodyStyle.backgroundColor || '#ffffff'
-      }
-
-      let r = 255, g = 255, b = 255
-      const match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-      if (match) {
-        r = parseInt(match[1], 10)
-        g = parseInt(match[2], 10)
-        b = parseInt(match[3], 10)
-      } else if (bg.startsWith('#')) {
-        const hex = bg.replace('#', '')
-        if (hex.length === 3) {
-          r = parseInt(hex[0] + hex[0], 16)
-          g = parseInt(hex[1] + hex[1], 16)
-          b = parseInt(hex[2] + hex[2], 16)
-        } else if (hex.length >= 6) {
-          r = parseInt(hex.substring(0, 2), 16)
-          g = parseInt(hex.substring(2, 4), 16)
-          b = parseInt(hex.substring(4, 6), 16)
-        }
-      }
-
-      const luminance = (r * 299 + g * 587 + b * 114) / 1000
-      const symbolColor = luminance > 128 ? '#0f172a' : '#ffffff'
-
-      setWindowControlsColor(symbolColor)
-    }
-
-    updateContrast()
-    const timer1 = setTimeout(updateContrast, 50)
-    const timer2 = setTimeout(updateContrast, 200)
-
-    window.addEventListener('resize', updateContrast)
-    window.addEventListener('themeChanged', updateContrast)
-
-    const observer = new MutationObserver(updateContrast)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] })
-    if (document.body) {
-      observer.observe(document.body, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] })
-    }
-
-    let unsubMax = null
-    if (window.electronAPI?.onMaximizedChange) {
-      unsubMax = window.electronAPI.onMaximizedChange(() => {
-        setTimeout(updateContrast, 50)
-      })
-    }
-
-    return () => {
-      clearTimeout(timer1)
-      clearTimeout(timer2)
-      window.removeEventListener('resize', updateContrast)
-      window.removeEventListener('themeChanged', updateContrast)
-      observer.disconnect()
-      if (unsubMax) unsubMax()
-    }
-  }, [location.pathname])
-}
-
 function App() {
   const { user, isInitialized } = useAuthStore()
   const hydrateFromPreferences = useThemeStore((s) => s.hydrateFromPreferences)
 
   usePresenceTracker()
-  useTitlebarContrast()
 
   useEffect(() => {
     const state = useAuthStore.getState()

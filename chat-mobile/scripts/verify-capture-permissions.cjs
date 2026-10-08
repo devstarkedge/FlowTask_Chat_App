@@ -119,11 +119,22 @@ const click = async label => React.act(async () => { const button = [...document
     'expo-image-picker': { ...camera.Camera, launchCameraAsync: async () => { calls.push('photo-camera'); return { canceled: true }; }, launchImageLibraryAsync: async () => { calls.push('photo-picker'); return { canceled: true }; } },
     'expo-document-picker': { getDocumentAsync: async () => { calls.push('document-picker'); return { canceled: true }; } },
   }).default;
-  calls = []; await React.act(async () => root.render(React.createElement(sheet, { visible: true, colors: {}, onClose() {} })));
+  let modal, reopenSheet;
+  native.Modal = props => { modal = props; return props.visible ? React.createElement('div', {}, props.children) : null; };
+  function SheetHarness() {
+    const [visible, setVisible] = React.useState(true); reopenSheet = () => setVisible(true);
+    return React.createElement(sheet, { visible, colors: {}, onClose: () => setVisible(false) });
+  }
+  const choose = async label => {
+    await click(label); assert.equal(modal.visible, false);
+    await React.act(async () => { modal.onDismiss(); });
+    await React.act(async () => reopenSheet());
+  };
+  calls = []; await React.act(async () => root.render(React.createElement(SheetHarness)));
   assert.deepEqual(calls, ['library-check']);
-  await click('View Library'); await click('Upload a File');
-  assert.deepEqual(calls, ['library-check', 'photo-picker', 'document-picker']);
-  cameraStatus = granted; await click('icon-Camera'); assert.ok(calls.includes('photo-camera')); assert.ok(!calls.includes('mic-get')); assert.ok(!calls.includes('camera-request'));
+  await choose('View Library'); await choose('Upload a File');
+  assert.deepEqual(calls.filter(call => call !== 'library-check'), ['photo-picker', 'document-picker']);
+  cameraStatus = granted; await choose('icon-Camera'); assert.ok(calls.includes('photo-camera')); assert.ok(!calls.includes('mic-get')); assert.ok(!calls.includes('camera-request'));
   console.log('PASS hidden camera remains unmounted; attachment menu checks existing photo access only; photo picker/documents request no camera/microphone; photo capture checks camera only');
   await React.act(async () => root.unmount()); dom.window.close();
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
+  Platform,
   FlatList,
   Image,
 } from 'react-native';
@@ -13,6 +14,7 @@ import { Camera, Image as ImageIcon, Mic, Video, FileText, Smile, Layers, Clock,
 import MediaLibrary from '../utils/safeMediaLibrary';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureCapturePermission } from '../utils/capturePermissions';
+import logger from '../utils/logger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
@@ -27,84 +29,123 @@ export default function MediaPickerSheet({
   onOpenRecentFiles,
   onRecordAudio,
   onRecordVideo,
+  contextId,
 }) {
   const [photos, setPhotos] = useState([]);
-  const [hasPermission, setHasPermission] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(visible);
+  const [isBusy, setIsBusy] = useState(false);
+  const pendingAction = useRef(null), busy = useRef(false), mounted = useRef(true), generation = useRef(0);
   const insets = useSafeAreaInsets();
+  const trace = (action, stage) => logger.info('[MediaPicker]', { action, stage, platform: Platform.OS });
 
   useEffect(() => {
+    mounted.current = true;
+    busy.current = false;
+    setIsBusy(false);
+    return () => { mounted.current = false; generation.current++; pendingAction.current = null; };
+  }, [contextId]);
+
+  useEffect(() => { setSheetVisible(visible); }, [visible]);
+
+  const runPendingAction = async () => {
+    const pending = pendingAction.current;
+    if (!pending || !mounted.current) return;
+    pendingAction.current = null;
+    const attempt = generation.current;
+    const current = () => mounted.current && generation.current === attempt;
+    trace(pending.name, 'sheet_dismissed');
+    try {
+      const result = await pending.run(current);
+      if (current()) trace(pending.name, result === false ? 'cancelled_or_denied' : 'completed');
+    } catch (error) {
+      logger.warn('[MediaPicker] action failed', { action: pending.name, code: error?.code, message: error?.message });
+      if (current()) Alert.alert('Attachment Unavailable', `Unable to open ${pending.name}. Please try again.`);
+    } finally {
+      if (current()) { busy.current = false; setIsBusy(false); }
+    }
+  };
+
+  const dismissThenRun = (name, run) => {
+    if (busy.current) return;
+    busy.current = true;
+    setIsBusy(true);
+    pendingAction.current = { name, run };
+    trace(name, 'selected');
+    setSheetVisible(false);
+    onClose();
+  };
+
+  useEffect(() => {
+    // iOS keeps its presenter mounted through the dismissal animation.
+    // Android dismisses/removes the Dialog with the hidden-modal commit and
+    // never emits Modal.onDismiss. Do not wait for that iOS-only event there.
+    if (!sheetVisible && Platform.OS !== 'ios') void runPendingAction();
+  }, [sheetVisible]);
+
+  useEffect(() => {
+    let cancelled = false;
     if (visible) {
       (async () => {
         const res = await MediaLibrary.getPermissionsAsync();
-        if (res?.granted || res?.status === 'granted') {
-          setHasPermission(true);
-          loadRecentPhotos();
+        if (!cancelled && (res?.granted || res?.status === 'granted')) {
+          await loadRecentPhotos(() => !cancelled);
+        } else if (!cancelled) {
+          setPhotos([]);
         }
-      })();
+      })().catch(error => logger.warn('[MediaPicker] recent media unavailable', { code: error?.code }));
     }
+    return () => { cancelled = true; };
   }, [visible]);
 
-  const loadRecentPhotos = async () => {
+  const loadRecentPhotos = async (current) => {
     try {
       const { assets } = await MediaLibrary.getAssetsAsync({
         first: 20,
         mediaType: ['photo', 'video'],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       });
-      if (assets && assets.length) {
-        setPhotos(assets);
-      }
+      if (current()) setPhotos(assets || []);
     } catch (e) {
       console.log('Error loading photos', e);
     }
   };
 
-  const handleLaunchCamera = async (mediaTypes = ['images']) => {
-    if (!await ensureCapturePermission(ImagePicker.getCameraPermissionsAsync, ImagePicker.requestCameraPermissionsAsync, 'Camera')) return;
-    try {
+  const handleLaunchCamera = async (current) => {
+    trace('camera', 'permission_check');
+    if (!await ensureCapturePermission(ImagePicker.getCameraPermissionsAsync, ImagePicker.requestCameraPermissionsAsync, 'Camera') || !current()) return false;
+    trace('camera', 'picker_presenting');
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes,
+      mediaTypes: ['images'],
       quality: 0.8,
     });
-    if (!result.canceled) {
-      onPickFiles(result.assets);
-      onClose();
-    }
-    } catch { Alert.alert('Camera Unavailable', 'Unable to open the camera. Please try again.'); }
+    if (!current() || result.canceled) return false;
+    await onPickFiles(result.assets);
   };
 
-  const handleLaunchLibrary = async () => {
-    try {
+  const handleLaunchLibrary = async (current) => {
+    trace('photo library', 'picker_presenting');
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
       selectionLimit: 10,
       mediaTypes: ['images', 'videos'],
     });
-    if (!result.canceled) {
-      onPickFiles(result.assets);
-      onClose();
-    }
-    } catch { Alert.alert('Photos Unavailable', 'Unable to open the photo picker. Please try again.'); }
+    if (!current() || result.canceled) return false;
+    await onPickFiles(result.assets);
   };
 
-  const handlePickDocument = async () => {
-    try {
-      const DocumentPicker = require('expo-document-picker');
-      const result = await DocumentPicker.getDocumentAsync({
-        multiple: true,
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-      if (!result.canceled) {
-        onPickFiles(result.assets);
-        onClose();
-      }
-    } catch (e) {
-      console.log('Doc picker error', e);
-    }
+  const handlePickDocument = async (current) => {
+    trace('file picker', 'picker_presenting');
+    const DocumentPicker = require('expo-document-picker');
+    const result = await DocumentPicker.getDocumentAsync({
+      multiple: true,
+      type: '*/*',
+      copyToCacheDirectory: true,
+    });
+    if (!current() || result.canceled) return false;
+    await onPickFiles(result.assets);
   };
 
-  const handlePhotoSelect = async (asset) => {
+  const handlePhotoSelect = async (asset, current) => {
     let localUri = asset.uri;
     let fileName = asset.filename || asset.fileName || '';
     let mimeType = asset.mimeType || asset.type;
@@ -148,7 +189,8 @@ export default function MediaPickerSheet({
       else mimeType = asset.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
     }
 
-    onPickFiles([{
+    if (!current()) return false;
+    await onPickFiles([{
       uri: localUri,
       name: fileName,
       fileName,
@@ -156,7 +198,6 @@ export default function MediaPickerSheet({
       mimeType,
       size: asset.fileSize || 0,
     }]);
-    onClose();
   };
 
   const renderPhotoItem = ({ item }) => {
@@ -164,7 +205,8 @@ export default function MediaPickerSheet({
       return (
         <TouchableOpacity
           style={[styles.cameraBtn, { borderColor: colors.border }]}
-          onPress={() => handleLaunchCamera()}
+          disabled={isBusy}
+          onPress={() => dismissThenRun('camera', handleLaunchCamera)}
         >
           <Camera size={28} color={colors.textSecondary} />
         </TouchableOpacity>
@@ -173,7 +215,8 @@ export default function MediaPickerSheet({
     return (
       <TouchableOpacity
         style={styles.photoThumb}
-        onPress={() => handlePhotoSelect(item)}
+        disabled={isBusy}
+        onPress={() => dismissThenRun('recent photo', current => handlePhotoSelect(item, current))}
       >
         <Image source={{ uri: item.uri }} style={styles.photoImg} />
       </TouchableOpacity>
@@ -184,10 +227,11 @@ export default function MediaPickerSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={sheetVisible}
       transparent={true}
       animationType="slide"
       onRequestClose={onClose}
+      onDismiss={() => { void runPendingAction(); }}
     >
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
@@ -198,8 +242,10 @@ export default function MediaPickerSheet({
           </View>
           
           <View style={styles.header}>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Photos & Videos</Text>
-            <TouchableOpacity onPress={handleLaunchLibrary}>
+            <TouchableOpacity disabled={isBusy} onPress={() => dismissThenRun('photo library', handleLaunchLibrary)}>
+              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Photos & Videos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={isBusy} onPress={() => dismissThenRun('photo library', handleLaunchLibrary)}>
               <Text style={[styles.headerAction, { color: colors.primary }]}>View Library</Text>
             </TouchableOpacity>
           </View>
@@ -220,50 +266,44 @@ export default function MediaPickerSheet({
               icon={Mic}
               label="Record an Audio Clip"
               colors={colors}
-              onPress={() => {
-                onClose();
-                onRecordAudio?.();
-              }}
+              disabled={isBusy}
+              onPress={() => dismissThenRun('audio recorder', onRecordAudio)}
             />
             <OptionRow
               icon={Video}
               label="Record a Video Clip"
               colors={colors}
-              onPress={() => {
-                onClose();
-                onRecordVideo?.();
-              }}
+              disabled={isBusy}
+              onPress={() => dismissThenRun('video recorder', onRecordVideo)}
             />
             <OptionRow
               icon={FileText}
               label="Upload a File"
               colors={colors}
-              onPress={handlePickDocument}
+              disabled={isBusy}
+              onPress={() => dismissThenRun('file picker', handlePickDocument)}
             />
             <OptionRow
               icon={Smile}
               label="Add a GIF"
               colors={colors}
-              onPress={() => { onClose(); onOpenGifPicker(); }}
+              disabled={isBusy}
+              onPress={() => dismissThenRun('GIF picker', onOpenGifPicker)}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <OptionRow
               icon={Layers}
               label="Recent Canvases"
               colors={colors}
-              onPress={() => {
-                onClose();
-                onOpenRecentCanvases?.();
-              }}
+              disabled={isBusy}
+              onPress={() => dismissThenRun('recent canvases', onOpenRecentCanvases)}
             />
             <OptionRow
               icon={Clock}
               label="Recent Files"
               colors={colors}
-              onPress={() => {
-                onClose();
-                onOpenRecentFiles?.();
-              }}
+              disabled={isBusy}
+              onPress={() => dismissThenRun('recent files', onOpenRecentFiles)}
             />
           </View>
         </View>
@@ -272,8 +312,8 @@ export default function MediaPickerSheet({
   );
 }
 
-const OptionRow = ({ icon: Icon, label, colors, onPress }) => (
-  <TouchableOpacity style={styles.optionRow} onPress={onPress}>
+const OptionRow = ({ icon: Icon, label, colors, onPress, disabled }) => (
+  <TouchableOpacity style={styles.optionRow} onPress={onPress} disabled={disabled}>
     <View style={styles.optionIcon}>
       <Icon size={20} color={colors.textPrimary} strokeWidth={1.5} />
     </View>

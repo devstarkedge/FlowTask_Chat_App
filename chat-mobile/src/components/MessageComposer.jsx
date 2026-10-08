@@ -202,7 +202,7 @@ const MessageComposer = React.memo(function MessageComposer({
   const audioRecorder = useAudioRecorder(channelId);
   const videoRecorder = useVideoRecorder(channelId);
   const [showVideoModal, setShowVideoModal] = useState(false);
-  useEffect(() => { setShowVideoModal(false); }, [channelId]);
+  useEffect(() => { setShowVideoModal(false); setShowMediaPicker(false); }, [channelId]);
   const [previewFile, setPreviewFile] = useState(null);
 
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
@@ -1221,6 +1221,7 @@ const MessageComposer = React.memo(function MessageComposer({
 
       {/* Media Picker Sheet */}
       <MediaPickerSheet
+        contextId={channelId}
         visible={showMediaPicker}
         onClose={() => setShowMediaPicker(false)}
         colors={colors}
@@ -1229,7 +1230,7 @@ const MessageComposer = React.memo(function MessageComposer({
         onOpenRecentCanvases={() => setShowRecentCanvases(true)}
         onOpenRecentFiles={() => setShowRecentFiles(true)}
         onRecordAudio={audioRecorder.startRecording}
-        onRecordVideo={async () => { if (await videoRecorder.preparePermissions()) setShowVideoModal(true); }}
+        onRecordVideo={async (current) => { if (await videoRecorder.preparePermissions() && current()) setShowVideoModal(true); }}
       />
 
       {/* Recent Canvases Modal */}

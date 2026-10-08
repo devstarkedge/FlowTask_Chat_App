@@ -123,6 +123,11 @@ export default function MediaPickerSheet({
   };
 
   const handleLaunchLibrary = async (current) => {
+    if (Platform.OS !== 'web') {
+      trace('photo library', 'permission_check');
+      const granted = await ensureCapturePermission(MediaLibrary.getPermissionsAsync, MediaLibrary.requestPermissionsAsync, 'Photo Library');
+      if (!granted || !current()) return false;
+    }
     trace('photo library', 'picker_presenting');
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,

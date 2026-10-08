@@ -115,7 +115,7 @@ const click = async label => React.act(async () => { const button = [...document
   const sheet = load('src/components/MediaPickerSheet.jsx', {
     'react-native': native, 'lucide-react-native': icons, '../utils/responsive': responsive, '../utils/capturePermissions': permissions,
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
-    '../utils/safeMediaLibrary': { __esModule: true, default: { getPermissionsAsync: async () => { calls.push('library-check'); return { granted: false }; }, getAssetsAsync: async () => ({ assets: [] }) } },
+    '../utils/safeMediaLibrary': { __esModule: true, default: { getPermissionsAsync: async () => { calls.push('library-check'); return { granted: false }; }, requestPermissionsAsync: async () => { calls.push('library-request'); return { granted: true }; }, getAssetsAsync: async () => ({ assets: [] }) } },
     'expo-image-picker': { ...camera.Camera, launchCameraAsync: async () => { calls.push('photo-camera'); return { canceled: true }; }, launchImageLibraryAsync: async () => { calls.push('photo-picker'); return { canceled: true }; } },
     'expo-document-picker': { getDocumentAsync: async () => { calls.push('document-picker'); return { canceled: true }; } },
   }).default;
@@ -133,7 +133,7 @@ const click = async label => React.act(async () => { const button = [...document
   calls = []; await React.act(async () => root.render(React.createElement(SheetHarness)));
   assert.deepEqual(calls, ['library-check']);
   await choose('View Library'); await choose('Upload a File');
-  assert.deepEqual(calls.filter(call => call !== 'library-check'), ['photo-picker', 'document-picker']);
+  assert.deepEqual(calls.filter(call => call !== 'library-check'), ['library-request', 'photo-picker', 'document-picker']);
   cameraStatus = granted; await choose('icon-Camera'); assert.ok(calls.includes('photo-camera')); assert.ok(!calls.includes('mic-get')); assert.ok(!calls.includes('camera-request'));
   console.log('PASS hidden camera remains unmounted; attachment menu checks existing photo access only; photo picker/documents request no camera/microphone; photo capture checks camera only');
   await React.act(async () => root.unmount()); dom.window.close();

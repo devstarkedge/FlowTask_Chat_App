@@ -51,7 +51,13 @@ async function verify(os) {
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
     '../utils/logger': { __esModule: true, default: { info: (...args) => logs.push(args), warn: (...args) => logs.push(args) } },
     '../utils/capturePermissions': permissions,
-    '../utils/safeMediaLibrary': { __esModule: true, default: { getPermissionsAsync: async () => { calls.push('existing-library-access'); return { granted: false }; } } },
+    '../utils/safeMediaLibrary': { __esModule: true, default: {
+      getPermissionsAsync: async () => {
+        if (nativeActive) { calls.push('existing-library-access'); return { granted: false }; }
+        return checked('gallery');
+      }, requestPermissionsAsync: () => requested('gallery'),
+      getAssetsAsync: async () => ({ assets: [] }), SortBy: { creationTime: 'creationTime' },
+    } },
     'expo-image-picker': { getCameraPermissionsAsync: () => checked('camera'), requestCameraPermissionsAsync: () => requested('camera'),
       launchCameraAsync: options => picker('camera', options), launchImageLibraryAsync: options => picker('library', options) },
     'expo-document-picker': { getDocumentAsync: options => picker('document', options) },
@@ -85,10 +91,18 @@ async function verify(os) {
   };
   await React.act(async () => root.render(React.createElement(Harness)));
   assert.deepEqual(calls, ['existing-library-access']); calls.length = 0;
-  await press('View Library'); assert.deepEqual(calls, ['close', 'library']); assert.deepEqual(selected.at(-1), assets);
+  await press('View Library'); assert.deepEqual(calls, ['close', 'gallery-get', 'library']); assert.deepEqual(selected.at(-1), assets);
   assert.ok(logs.some(args => args[1]?.stage === 'picker_presenting'));
-  await open(); await press('Photos & Videos'); assert.deepEqual(calls, ['close', 'library']);
-  await open(); pickerResult = { canceled: true }; await press('View Library'); assert.deepEqual(calls, ['close', 'library']);
+  await open(); await press('Photos & Videos'); assert.deepEqual(calls, ['close', 'gallery-get', 'library']);
+  await open(); pickerResult = { canceled: true }; await press('View Library'); assert.deepEqual(calls, ['close', 'gallery-get', 'library']);
+  await open(); permission = { status: 'undetermined', canAskAgain: true }; await press('View Library');
+  assert.deepEqual(calls, ['close', 'gallery-get', 'gallery-request', 'library']);
+  await open(); permission = { status: 'denied', canAskAgain: false }; await press('View Library');
+  assert.deepEqual(calls, ['close', 'gallery-get']); assert.equal(alerts.at(-1)[0], 'Permission Required');
+  assert.ok(alerts.at(-1)[2].some(button => button.text === 'Open Settings'));
+  await open(); permission = { status: 'undetermined' }; requestResult = { status: 'denied', canAskAgain: true };
+  await press('View Library'); assert.deepEqual(calls, ['close', 'gallery-get', 'gallery-request']);
+  permission = { status: 'granted' }; requestResult = { status: 'granted' };
   await open(); pickerError = new Error('native presentation failure'); await press('Upload a File');
   assert.equal(alerts.at(-1)[0], 'Attachment Unavailable'); pickerError = null; pickerResult = { canceled: false, assets };
   await open(); await press('Upload a File'); assert.deepEqual(calls, ['close', 'document']);

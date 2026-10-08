@@ -68,9 +68,10 @@ export async function downloadAndSaveFile(url, filename = 'download', mimeType =
 
     // 2. Handle Media Files (Images / Videos) -> Save directly to Photo Gallery
     if (isMedia) {
-      const permission = await MediaLibrary.requestPermissionsAsync();
+      // Saving an explicitly downloaded item needs add-only access on iOS.
+      const permission = await MediaLibrary.requestPermissionsAsync(true);
       if (permission.granted) {
-        await MediaLibrary.createAssetAsync(downloadedUri);
+        await MediaLibrary.saveToLibraryAsync(downloadedUri);
         Toast.show({
           type: 'success',
           text1: 'Saved to Gallery',

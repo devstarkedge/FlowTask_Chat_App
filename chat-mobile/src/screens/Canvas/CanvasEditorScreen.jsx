@@ -199,12 +199,6 @@ export default function CanvasEditorScreen({ route, navigation }) {
     } else if (optionType === 'callout') {
       sendEditorCommand('toggleBlockquote');
     } else if (optionType === 'image') {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission Denied', 'We need camera roll access to upload images.');
-        return;
-      }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,

@@ -4,7 +4,9 @@ let MediaLibraryModule = null;
 let isAvailable = false;
 
 try {
-  const mod = require('expo-media-library');
+  // SDK 57's root exports for these function-based asset APIs throw.
+  // Keep the existing adapter contract using Expo's supported legacy entrypoint.
+  const mod = require('expo-media-library/legacy');
   if (mod && (mod.requestPermissionsAsync || mod.getAssetsAsync)) {
     MediaLibraryModule = mod;
     isAvailable = true;
@@ -14,15 +16,15 @@ try {
 }
 
 export const isMediaLibraryAvailable = () => isAvailable;
-export const getPermissionsAsync = async () => {
-  try { return await MediaLibraryModule?.getPermissionsAsync?.() || { status: 'undetermined', granted: false }; }
+export const getPermissionsAsync = async (writeOnly = false, granularPermissions = ['photo', 'video']) => {
+  try { return await MediaLibraryModule?.getPermissionsAsync?.(writeOnly, granularPermissions) || { status: 'undetermined', granted: false }; }
   catch { return { status: 'undetermined', granted: false }; }
 };
 
-export const requestPermissionsAsync = async () => {
+export const requestPermissionsAsync = async (writeOnly = false, granularPermissions = ['photo', 'video']) => {
   if (isAvailable && MediaLibraryModule?.requestPermissionsAsync) {
     try {
-      return await MediaLibraryModule.requestPermissionsAsync();
+      return await MediaLibraryModule.requestPermissionsAsync(writeOnly, granularPermissions);
     } catch (e) {
       logger.warn('[SafeMediaLibrary] requestPermissionsAsync failed:', e?.message);
     }
@@ -52,6 +54,13 @@ export const createAssetAsync = async (uri) => {
   return null;
 };
 
+// Add-only gallery writes must not depend on read access or return a library
+// asset. Propagate failures so callers cannot report an unsuccessful save.
+export const saveToLibraryAsync = async (uri) => {
+  if (!MediaLibraryModule?.saveToLibraryAsync) throw new Error('Saving to the photo library is unavailable.');
+  return MediaLibraryModule.saveToLibraryAsync(uri);
+};
+
 export const getAssetInfoAsync = async (assetId) => {
   if (isAvailable && MediaLibraryModule?.getAssetInfoAsync) {
     try {
@@ -71,6 +80,7 @@ export default {
   requestPermissionsAsync,
   getAssetsAsync,
   createAssetAsync,
+  saveToLibraryAsync,
   getAssetInfoAsync,
   SortBy,
 };

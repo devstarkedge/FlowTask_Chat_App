@@ -490,13 +490,6 @@ function GeneralTab({ workspace, memberCount, billing, canManage, isOwner, userR
 
   const handlePickLogo = async () => {
     if (!canManage || !isCurrentWorkspace()) return;
-    if (Platform.OS !== 'web') {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (permission.status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow photo access to choose a workspace logo.');
-        return;
-      }
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,

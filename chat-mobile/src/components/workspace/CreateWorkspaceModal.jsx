@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
-  Platform,
   ScrollView,
   Image,
   Alert,
@@ -37,26 +36,8 @@ const CreateWorkspaceModal = ({ visible, onClose, onSuccess, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const requestPermission = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please grant photo library permissions to upload workspace logo.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-    }
-    return true;
-  };
-
   const handlePickImage = async () => {
     try {
-      const hasPermission = await requestPermission();
-      if (!hasPermission) return;
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,

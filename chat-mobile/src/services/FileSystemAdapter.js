@@ -30,9 +30,9 @@ export const FileSystemAdapter = {
 
   async saveToGallery(path) {
     try {
-      const permission = await MediaLibrary.requestPermissionsAsync();
+      const permission = await MediaLibrary.requestPermissionsAsync(true);
       if (permission.granted) {
-        return await MediaLibrary.createAssetAsync(path);
+        return await MediaLibrary.saveToLibraryAsync(path);
       }
     } catch (err) {
       // Permission request rejected or platform configuration issue

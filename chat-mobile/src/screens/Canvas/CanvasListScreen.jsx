@@ -76,12 +76,6 @@ export default function CanvasListScreen({ route, navigation }) {
   const [renameTitle, setRenameTitle] = useState('');
 
   const handlePickImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission Denied', 'Gallery access is required to upload a cover.');
-      return;
-    }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,

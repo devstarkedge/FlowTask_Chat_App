@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import storage from './storage';
 import ENV from '../config/environment';
 import logger from '../utils/logger';
+import { handleUserProfileUpdated } from './userProfileEvents';
 import {
   updateThreadReplyInCache,
   removeThreadReplyFromCache,
@@ -106,6 +107,7 @@ export const connectSocket = async () => {
     logger.info('[Socket] ✅ Connected to server');
     isConnecting = false;
     useChatStore.getState().setConnectionStatus('connected');
+    useAuthStore.getState().refreshUser().catch(error => logger.warn('[Socket] Profile refresh failed:', error?.message));
     
     // Join rooms for all channels
     const channels = queryClient.client.getQueryData(queryKeys.keys.channels(workspaceId)) || [];
@@ -750,20 +752,7 @@ export const connectSocket = async () => {
     logger.info('[Socket] Workspace member role updated', { userId, newRole, workspaceId });
   });
 
-  socket.on('user:profile_updated', ({ userId, updates, workspaceId }) => {
-    const currentUserId = useAuthStore.getState().user?._id;
-    if (userId === currentUserId) {
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser) {
-        useAuthStore.setState({
-          user: { ...currentUser, ...updates }
-        });
-      }
-    }
-    const { useWorkspaceStore } = require('../stores/workspaceStore');
-    useWorkspaceStore.getState().updateMemberProfile(userId, updates);
-    logger.info('[Socket] User profile updated', { userId, fields: Object.keys(updates || {}) });
-  });
+  socket.on('user:profile:updated', handleUserProfileUpdated);
 
   // ─── Canvas Events ──────────────────────────────────────────────────────────
   socket.on('canvas:title-updated', ({ canvasId, title }) => {

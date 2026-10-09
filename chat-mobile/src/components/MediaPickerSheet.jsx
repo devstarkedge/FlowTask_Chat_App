@@ -131,6 +131,7 @@ export default function MediaPickerSheet({
     trace('photo library', 'picker_presenting');
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
+      orderedSelection: true,
       selectionLimit: 10,
       mediaTypes: ['images', 'videos'],
     });
@@ -267,7 +268,7 @@ export default function MediaPickerSheet({
           </View>
 
           <View style={styles.optionsList}>
-            <OptionRow
+            {/* <OptionRow
               icon={Mic}
               label="Record an Audio Clip"
               colors={colors}
@@ -280,7 +281,7 @@ export default function MediaPickerSheet({
               colors={colors}
               disabled={isBusy}
               onPress={() => dismissThenRun('video recorder', onRecordVideo)}
-            />
+            /> */}
             <OptionRow
               icon={FileText}
               label="Upload a File"

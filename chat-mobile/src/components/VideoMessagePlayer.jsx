@@ -8,7 +8,6 @@ import logger from '../utils/logger';
 
 const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height, onLongPress }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef(null);
 
   const normalizedVideoUrl = normalizeMediaUrl(videoUrl);
@@ -29,25 +28,25 @@ const VideoMessagePlayer = ({ videoUrl, thumbnailUrl, colors, width, height, onL
         disabled={normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl}
       >
         {normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl ? (
-          <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+          <View style={[styles.previewFill, { alignItems: 'center', justifyContent: 'center' }]}>
              <Loader2 size={24} color="#FFF" />
           </View>
         ) : (
           <AppVideo
             sourceUri={normalizedVideoUrl}
             posterUri={normalizedThumbUrl}
-            style={StyleSheet.absoluteFillObject}
+            style={styles.previewFill}
             resizeMode="cover"
             shouldPlay={false}
             isMuted={true}
           />
         )}
-        <View style={styles.overlay}>
+        <View style={styles.overlay} pointerEvents="none">
           {normalizedVideoUrl === '/placeholder-loading' || !normalizedVideoUrl ? (
             <View style={[styles.playButtonContainer, { backgroundColor: 'transparent' }]} />
           ) : (
             <View style={[styles.playButtonContainer, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
-              <Play size={24} color="#FFF" fill="#FFF" style={{ marginLeft: 2 }} />
+              <Play size={24} color="#FFF" fill="#FFF" />
             </View>
           )}
         </View>
@@ -94,10 +93,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  previewFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   playButtonContainer: {
     width: scale(48),

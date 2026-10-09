@@ -40,8 +40,7 @@ const Avatar = React.memo(
     style,
   }) => {
     const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
-    const [imgError, setImgError] = useState(false);
-    const handleError = useCallback(() => setImgError(true), []);
+    const [failedUrl, setFailedUrl] = useState(null);
     const data = user || member || {};
 
     const isOnline = data.onlineStatus === "online";
@@ -56,6 +55,7 @@ const Avatar = React.memo(
       () => data.avatar || data.avatarUrl || data.profileImage || data.profilePicture || data.image || null,
       [data.avatar, data.avatarUrl, data.profileImage, data.profilePicture, data.image]
     );
+    const handleError = useCallback(() => setFailedUrl(avatarUrl), [avatarUrl]);
     const displayName =
       data?.name ||
       data?.displayName ||
@@ -74,7 +74,7 @@ const Avatar = React.memo(
 
     return (
       <View style={[styles.container, style]}>
-        {avatarUrl && !imgError ? (
+        {avatarUrl && failedUrl !== avatarUrl ? (
           <Image
             source={{ uri: avatarUrl }}
             resizeMode="cover"

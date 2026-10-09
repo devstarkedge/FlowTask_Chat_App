@@ -9,18 +9,19 @@ export function pellToTipTap(html) {
 
   // Replace <div> tags with <p>
   clean = clean
-    .replace(/<div([^>]*)>/gi, '<p$1>')
+    .replace(/<div(?=[\s/>])([^>]*)>/gi, '<p$1>')
     .replace(/<\/div>/gi, '</p>');
 
   // Normalize inline tags
   clean = clean
-    .replace(/<b([^>]*)>/gi, '<strong$1>')
+    // Match complete tag names: <br> is not <b>, and <img> is not <i>.
+    .replace(/<b(?=[\s/>])([^>]*)>/gi, '<strong$1>')
     .replace(/<\/b>/gi, '</strong>')
-    .replace(/<i([^>]*)>/gi, '<em$1>')
+    .replace(/<i(?=[\s/>])([^>]*)>/gi, '<em$1>')
     .replace(/<\/i>/gi, '</em>')
-    .replace(/<strike([^>]*)>/gi, '<s$1>')
+    .replace(/<strike(?=[\s/>])([^>]*)>/gi, '<s$1>')
     .replace(/<\/strike>/gi, '</s>')
-    .replace(/<del([^>]*)>/gi, '<s$1>')
+    .replace(/<del(?=[\s/>])([^>]*)>/gi, '<s$1>')
     .replace(/<\/del>/gi, '</s>');
 
   // Note: Aggressive paragraph-joining regex removed to preserve intentional newlines.

@@ -92,6 +92,32 @@ export function buildChatEditorHtml({
 
   html = html.replace(/<body([^>]*)>/i, `<body$1 class="${dark ? 'dark' : ''}">${boot}`);
 
+  // Intercept binary clipboard items before TipTap embeds them in document HTML.
+  const pasteBridge = `<script>
+    document.addEventListener('paste', function(event) {
+      var items = event.clipboardData && event.clipboardData.items;
+      if (!items) return;
+      var files = Array.from(items).filter(function(item) { return item.kind === 'file'; })
+        .map(function(item) { return item.getAsFile(); }).filter(Boolean);
+      if (!files.length) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      Promise.all(files.map(function(file) {
+        return new Promise(function(resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function() { resolve({ uri: reader.result, name: file.name || 'pasted-file', mimeType: file.type || 'application/octet-stream' }); };
+          reader.onerror = function() { reject(new Error('The clipboard file could not be read.')); };
+          reader.onabort = function() { reject(new Error('Clipboard reading was cancelled.')); };
+          reader.readAsDataURL(file);
+        });
+      })).then(function(files) { sendToRN('pasteFiles', { files: files }); })
+        .catch(function(error) { sendToRN('pasteError', { message: error.message }); });
+    }, true);
+  </script>`;
+  // The bundled editor also contains literal </body> strings inside JavaScript.
+  // Insert only at the document's closing body, never inside the bundle.
+  html = html.replace(/<\/body>(\s*<\/html>\s*)$/i, (_, tail) => `${pasteBridge}</body>${tail}`);
+
   return html;
 }
 

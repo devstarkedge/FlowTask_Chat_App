@@ -108,6 +108,19 @@ export default function App() {
 
   // Register for push notifications once auth + workspace are ready
   useEffect(() => {
+    if (!accessToken) return;
+    const refresh = () => useAuthStore.getState().refreshUser().catch(error => {
+      console.warn('[Profile] Current user refresh failed:', error?.message);
+    });
+    refresh();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') refresh();
+    });
+    return () => subscription.remove();
+  }, [accessToken, activeWorkspaceId]);
+
+  // Register for push notifications once auth + workspace are ready
+  useEffect(() => {
     if (accessToken && activeWorkspaceId) {
       registerForPushNotifications();
       handlePushNavigationReady();

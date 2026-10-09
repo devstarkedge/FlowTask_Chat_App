@@ -58,6 +58,8 @@ function handler(file, name, context) {
   assert.deepEqual(calls.at(-2), ['request', true, ['photo', 'video']]);
   assert.deepEqual(calls.at(-1), ['save', 'file:///photo.jpg']);
   const download = load('src/utils/fileDownload.js', {
+    '../config/environment': { __esModule: true, default: { API_BASE_URL: 'https://example.com/api/chat' } },
+    './mediaUtils': { normalizeMediaUrl: url => url },
     'expo-file-system/legacy': { cacheDirectory: 'file:///cache/', downloadAsync: async () => ({ status: 200, uri: 'file:///photo.jpg' }) },
     './safeMediaLibrary': { __esModule: true, default: media.default },
     'expo-sharing': {}, 'react-native': { Platform: { OS: 'ios' } },

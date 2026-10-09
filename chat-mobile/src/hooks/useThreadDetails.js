@@ -96,13 +96,14 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
           mentions: options?.mentions,
           parentMessageId: options?.parentMessageId,
           replyTo: options?.replyTo,
-          tempId: `temp-reply-${Date.now()}`
+          tempId: options?._clientMessageId || `temp-reply-${Date.now()}-${Math.random().toString(36).slice(2)}`
         });
       }
       setReplyingTo(null);
     } catch (err) {
       console.error('Failed to send reply:', err);
       Toast.show({ type: 'error', text1: 'Failed to send reply' });
+      throw err;
     }
   };
 

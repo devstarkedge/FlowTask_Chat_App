@@ -4,6 +4,8 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import logger from './logger';
+import ENV from '../config/environment';
+import { normalizeMediaUrl } from './mediaUtils';
 
 /**
  * Determines if a file is an image or video based on MIME type or extension.
@@ -32,11 +34,14 @@ export async function downloadAndSaveFile(url, filename = 'download', mimeType =
     return false;
   }
 
-  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeFilename = String(filename || 'download').replace(/[^a-zA-Z0-9._-]/g, '_');
   const tempUri = `${FileSystem.cacheDirectory}${Date.now()}_${safeFilename}`;
   const isMedia = isMediaFile(mimeType, safeFilename);
 
   try {
+    url = normalizeMediaUrl(url);
+    const parsedUrl = new URL(url);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('Invalid download URL');
     Toast.show({
       type: 'info',
       text1: 'Downloading...',
@@ -45,7 +50,7 @@ export async function downloadAndSaveFile(url, filename = 'download', mimeType =
 
     // 1. Download to temporary cache
     const headers = {};
-    const isInternalUrl = url && (url.includes('/api/chat') || url.includes('/messages/files/'));
+    const isInternalUrl = parsedUrl.origin === new URL(ENV.API_BASE_URL).origin;
     if (isInternalUrl) {
       try {
         const { useAuthStore } = require('../stores/authStore');
@@ -124,15 +129,10 @@ export async function downloadAndSaveFile(url, filename = 'download', mimeType =
       return true;
     }
 
-    Toast.show({
-      type: 'success',
-      text1: 'Downloaded',
-      text2: `${safeFilename} downloaded successfully.`,
-    });
-    return true;
+    throw new Error('Could not save to Gallery or open a save/share sheet. Enable photo access in Settings and try again.');
 
   } catch (err) {
-    logger.error('[FileDownload] Error downloading file:', err);
+    logger.error('[FileDownload] Error downloading file:', { message: err?.message });
     Toast.show({
       type: 'error',
       text1: 'Download Failed',

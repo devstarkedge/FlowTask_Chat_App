@@ -162,8 +162,8 @@ export const getMessageAttachments = (msg) => {
     const cleanName = getCleanFileName(rawName);
 
     return {
-      id: file._id || item._id || String(Math.random()),
-      _id: file._id || item._id || String(Math.random()),
+      id: file._id || file.id || item._id || item.id,
+      _id: file._id || file.id || item._id || item.id,
       originalFileName: cleanName,
       fileName: cleanName,
       originalName: cleanName,
@@ -173,6 +173,8 @@ export const getMessageAttachments = (msg) => {
       thumbnailUrl: thumbnailUrl || url,
       mimeType: file.mimeType || file.type || file.contentType || '',
       fileSize: file.fileSize || file.size || file.fileSizeBytes || 0,
+      width: file.width || file.metadata?.width,
+      height: file.height || file.metadata?.height,
       status: file.status || 'available',
     };
   };
@@ -187,20 +189,23 @@ export const getMessageAttachments = (msg) => {
     const optimisticAtts = msg.optimisticAttachments || [];
     if (optimisticAtts.length > 0) {
       list = list.map((fileObj, idx) => {
+        const match = optimisticAtts.find(o => String(o._id || o.id) === String(fileObj._id)) || optimisticAtts[idx];
+        const localPreviewUri = match?.localPreviewUri || match?._tempUri || match?.uri;
         if (fileObj.url?.includes('placeholder-loading') || fileObj.url?.includes('pending')) {
-           const match = optimisticAtts.find(o => o.originalName === fileObj.originalName) || optimisticAtts[idx];
-           if (match && match.url) {
-             return { ...fileObj, url: match.url, thumbnailUrl: match.thumbnailUrl || match.url, isOptimisticPreview: true };
+           if (localPreviewUri || match?.url) {
+             const preview = localPreviewUri || match.url;
+             return { ...fileObj, url: preview, thumbnailUrl: preview, localPreviewUri, isOptimisticPreview: true };
            }
         }
-        return fileObj;
+        return localPreviewUri ? { ...fileObj, localPreviewUri } : fileObj;
       });
     }
   }
 
   // 2. Check attachments / files / media if no references found
   if (list.length === 0) {
-    const rawAttachments = msg.attachments || msg.optimisticAttachments || msg.files || msg.media || [];
+    const rawAttachments = [msg.attachments, msg.optimisticAttachments, msg.files, msg.media]
+      .find(files => Array.isArray(files) && files.length > 0) || [];
     if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
       list = rawAttachments.map(extractFileObject).filter(Boolean);
     }

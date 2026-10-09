@@ -433,8 +433,8 @@ const ThreadDetailScreen = ({ route, navigation }) => {
           text={replyText}
           onChangeText={setReplyText}
           members={channelMembers}
-          onSend={(content, options) => {
-            handleSendReply(content, options);
+          onSend={async (content, options) => {
+            await handleSendReply(content, options);
             setTimeout(() => {
               flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { enqueueMessage } from '../../services/offlineQueue';
 import { useChatStore } from '../../stores/chatStore';
 import { fileAPI } from '../../services/api';
+import { orderMessageRecords } from '../../utils/messageTimeline';
 
 /**
  * useMessages — fetches channel messages using cursor-based pagination.
@@ -20,8 +21,8 @@ import { fileAPI } from '../../services/api';
  *   - pages[1].items  = 50 messages older than pages[0].items[0]
  *   - The correct "load more" cursor is pages[N].items[0]._id  (the OLDEST item)
  *
- * flatMap(page => page.items) therefore yields messages in a consistent
- * oldest-first order across all pages — callers can reverse() for inverted list.
+ * Callers reverse the page array before flattening and apply canonical _id
+ * ordering/deduplication before reversing records for an inverted list.
  */
 export const useMessages = (channelId, options = {}) => {
   const queryClient = useQueryClient();
@@ -51,7 +52,7 @@ export const useMessages = (channelId, options = {}) => {
       if (existingData?.pages) {
         const pageIndex = !pageParam
           ? 0
-          : existingData.pages.findIndex(p => p.nextCursor === pageParam);
+          : (existingData.pageParams?.findIndex(param => String(param) === String(pageParam)) ?? -1);
 
         if (pageIndex !== -1 && existingData.pages[pageIndex]?.items) {
           const existingItems = existingData.pages[pageIndex].items;
@@ -71,9 +72,7 @@ export const useMessages = (channelId, options = {}) => {
           });
 
           if (localOnly.length > 0) {
-            const combined = [...localOnly, ...apiMessages].sort(
-              (a, b) => new Date(a.createdAt) - new Date(b.createdAt) // oldest-first
-            );
+            const combined = orderMessageRecords([...localOnly, ...apiMessages]);
             // Deduplicate: prefer API version (already filtered above, but safety net)
             const seen = new Set();
             apiMessages = combined.filter(m => {
@@ -89,7 +88,7 @@ export const useMessages = (channelId, options = {}) => {
       // Filter out thread replies so they don't clutter the main chat screen.
       // A thread reply has threadId (and usually parentMessageId).
       // We still want to show regular inline quotes which might only have parentMessageId or replyTo without threadId.
-      apiMessages = apiMessages.filter(m => !m.threadId);
+      apiMessages = orderMessageRecords(apiMessages.filter(m => !m.threadId));
 
       return { items: apiMessages, hasMore, nextCursor };
     },
@@ -240,7 +239,7 @@ export const useSendMessage = () => {
         newPages[0] = {
           ...firstPage,
           // Append at the end (oldest-first order) so it shows as the latest message
-          items: [...firstPage.items.filter(m => m._id !== tempId), optimisticMessage],
+          items: orderMessageRecords([...firstPage.items.filter(m => m._id !== tempId), optimisticMessage]),
         };
         return { ...old, pages: newPages };
       });
@@ -307,7 +306,7 @@ export const useSendMessage = () => {
             }
             return m;
           });
-          return { ...page, items: newItems };
+          return { ...page, items: orderMessageRecords(newItems) };
         });
 
         // Safety net: if the optimistic item was already evicted (e.g. mid-flight
@@ -321,7 +320,7 @@ export const useSendMessage = () => {
             if (!alreadyPresent) {
               newPages[0] = {
                 ...firstPage,
-                items: [...firstPage.items, { ...serverMessage, pending: false, tempId }],
+                items: orderMessageRecords([...firstPage.items, { ...serverMessage, pending: false, tempId }]),
               };
             }
           }

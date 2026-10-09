@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ import { downloadAndSaveFile } from '../utils/fileDownload';
 import FileService from '../services/FileService';
 import FileClipboardService from '../services/FileClipboardService';
 import { getFileKind } from '../utils/mediaUtils';
+import { getDownloadableMedia } from '../utils/mediaDownload';
 
 
 const QUICK_EMOJIS = ['🎉', '👍', '😂', '🙂', '✅'];
@@ -108,7 +109,22 @@ const MessageActionSheet = ({
   const { emojiSkinTone } = usePreferencesStore();
   const { toggleFavorite, isFavorited } = useStarredStore();
   const insets = useSafeAreaInsets();
+  const [closingForDownload, setClosingForDownload] = useState(false);
+  const pendingDownload = useRef(null);
+  const runDownload = () => {
+    const media = pendingDownload.current;
+    if (!media) return;
+    pendingDownload.current = null;
+    onClose();
+    setClosingForDownload(false);
+    // The downloader owns starting/success/failure feedback and handles errors.
+    void downloadAndSaveFile(media.url, media.name, media.mime);
+  };
+  useEffect(() => {
+    if (closingForDownload && Platform.OS !== 'ios') runDownload();
+  }, [closingForDownload]);
   if (!message) return null;
+  const downloadableMedia = getDownloadableMedia(attachment, message);
 
   const isAuthor =
     message.authorId?._id === user?._id || message.authorId === user?._id;
@@ -163,30 +179,19 @@ const MessageActionSheet = ({
     }
   };
 
-  const handleDownloadAttachment = async () => {
-    if (!attachment) return;
-    const name = attachment.originalName || attachment.fileName || attachment.name || 'File';
-    const mime = attachment.mimeType || attachment.type || 'image/jpeg';
-    const url = attachment.url || attachment.secureUrl;
-    if (!url) {
-      Toast.show({ type: 'error', text1: 'Cannot download: file URL is missing' });
-      return;
-    }
-    Toast.show({ type: 'info', text1: 'Downloading...' });
-    onClose();
-    try {
-      await downloadAndSaveFile(url, name, mime);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: e.message || 'Download failed' });
-    }
+  const handleDownloadAttachment = () => {
+    if (!downloadableMedia || pendingDownload.current) return;
+    pendingDownload.current = downloadableMedia;
+    setClosingForDownload(true);
   };
 
   return (
     <Modal
-      visible={visible}
+      visible={visible && !closingForDownload}
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      onDismiss={runDownload}
       statusBarTranslucent={Platform.OS === 'android'}
     >
       <TouchableOpacity
@@ -274,6 +279,13 @@ const MessageActionSheet = ({
 
           {/* List Actions */}
           <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+
+            {downloadableMedia && (
+              <TouchableOpacity style={styles.listItem} onPress={handleDownloadAttachment} disabled={closingForDownload}>
+                <Download size={20} color={colors.textPrimary} />
+                <Text style={[styles.listItemText, { color: colors.textPrimary }]}>Download</Text>
+              </TouchableOpacity>
+            )}
 
             {!!onPin && (
               <TouchableOpacity

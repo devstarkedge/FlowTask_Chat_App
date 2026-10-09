@@ -1,5 +1,6 @@
 import { queryClient } from './queryClient';
 import { queryKeys } from './queryKeys';
+import { orderMessageRecords } from '../utils/messageTimeline';
 
 export const updateThreadReplyInCache = (replyId, updates) => {
   const queries = queryClient.getQueriesData({ queryKey: ['threadReplies'] });
@@ -171,7 +172,7 @@ export const reconcileMessageInCache = (channelId, tempId, serverMessage) => {
         // Keep only the first occurrence (the reconciled one)
         return arr.findIndex(x => String(x._id) === serverIdStr) === idx;
       });
-    return { ...page, items: newItems };
+    return { ...page, items: orderMessageRecords(newItems) };
   });
 
   // If tempId wasn't found (already evicted), ensure server message is present
@@ -182,7 +183,7 @@ export const reconcileMessageInCache = (channelId, tempId, serverMessage) => {
       if (!alreadyPresent) {
         newPages[0] = {
           ...firstPage,
-          items: [...firstPage.items, { ...serverMessage, pending: false, tempId }],
+          items: orderMessageRecords([...firstPage.items, { ...serverMessage, pending: false, tempId }]),
         };
       }
     }
@@ -218,7 +219,23 @@ export const markMessageFailedInCache = (channelId, tempId, error) => {
 export const addMessageToCache = (channelId, message) => {
   const queryKey = queryKeys.messages(channelId);
   const oldData = queryClient.getQueryData(queryKey);
-  if (!oldData || !oldData.pages) return;
+  if (!oldData?.pages?.length) {
+    queryClient.setQueryData(queryKey, {
+      pages: [{ items: [message], hasMore: false, nextCursor: null }], pageParams: [null],
+      _historyIncomplete: true,
+    });
+    // Seed the live record without pretending it is a complete history page.
+    queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
+    return;
+  }
+
+  const cachedItems = oldData.pages.flatMap(page => page.items || []);
+  const alias = message.tempId || message.clientMessageId;
+  if (alias && cachedItems.some(item => String(item._id) === String(alias))) {
+    reconcileMessageInCache(channelId, String(alias), message);
+    return;
+  }
+  if (cachedItems.some(item => String(item._id) === String(message._id))) return;
 
   const newPages = [...oldData.pages];
   if (newPages.length > 0) {
@@ -231,10 +248,11 @@ export const addMessageToCache = (channelId, message) => {
 
     newPages[0] = {
       ...firstPage,
-      // Append at end to maintain oldest-first order within the page
-      items: [...firstPage.items, message],
+      // Socket arrival can be out of order; use the same ordering as history.
+      items: orderMessageRecords([...firstPage.items, message]),
     };
     queryClient.setQueryData(queryKey, { ...oldData, pages: newPages });
+    if (oldData._historyIncomplete) queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
   }
 };
 

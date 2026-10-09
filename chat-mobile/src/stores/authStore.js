@@ -4,6 +4,9 @@ import { authAPI } from '../services/api';
 import { primeApiCache, setCachedToken, clearApiCache } from '../services/api';
 import { secureSet, secureGet, secureMultiRemove } from '../utils/secureStorage';
 
+let profileRequest = null;
+let profileRevision = 0;
+
 export const useAuthStore = create((set, get) => ({
   accessToken: null,
   refreshToken: null,
@@ -204,12 +207,38 @@ export const useAuthStore = create((set, get) => ({
   },
 
   updateUser: (updates) => {
+    profileRevision += 1;
     set((state) => {
       if (!state.user) return state;
       const updatedUser = { ...state.user, ...updates };
       storage.setItem('chat_user', JSON.stringify(updatedUser)).catch(() => {});
       return { user: updatedUser };
     });
+  },
+
+  refreshUser: () => {
+    const { accessToken, user } = get();
+    if (!accessToken || !user?._id) return Promise.resolve(null);
+    if (profileRequest?.token === accessToken) return profileRequest.promise;
+    const revision = profileRevision;
+    const request = { token: accessToken };
+    request.promise = authAPI.me().then(({ data }) => {
+      const latest = data?.data?.user;
+      const current = get();
+      // An older REST response must not replace a newer socket update or session.
+      if (latest?._id === user._id && current.user?._id === user._id && current.accessToken === accessToken && revision === profileRevision) {
+        get().updateUser(latest);
+        const { refreshProfileCaches } = require('../services/userProfileEvents');
+        refreshProfileCaches(latest._id, {
+          name: latest.name, avatar: latest.avatar, email: latest.email,
+          flowTaskProfileUpdatedAt: latest.flowTaskProfileUpdatedAt,
+        });
+        return latest;
+      }
+      return null;
+    }).finally(() => { if (profileRequest === request) profileRequest = null; });
+    profileRequest = request;
+    return request.promise;
   },
 
   deleteAccount: async (password) => {

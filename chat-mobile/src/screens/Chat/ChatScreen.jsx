@@ -30,6 +30,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { useShallow } from 'zustand/react/shallow';
 import ChatMessageItem from "../../components/ChatMessageItem";
+import { messagesFromPages } from '../../utils/messageTimeline';
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
@@ -169,9 +170,7 @@ const ChatScreen = ({ route, navigation }) => {
   // pages[0] = latest messages (oldest-to-newest within page).
   // pages[N] are older pages. Reversing the pages array before flattening
   // yields a consistent oldest-to-newest chronological order across all pages.
-  const messages = messagesData?.pages
-    ? [...messagesData.pages].reverse().flatMap(page => page.items)
-    : [];
+  const messages = useMemo(() => messagesFromPages(messagesData?.pages), [messagesData?.pages]);
   const { mutateAsync: sendMessage } = useSendMessage();
   const { mutateAsync: editMessage } = useEditMessage();
   const { mutateAsync: deleteMessage } = useDeleteMessage();
@@ -1007,7 +1006,7 @@ const ChatScreen = ({ route, navigation }) => {
             data={displayedMessages}
             extraData={{ highlightedMessageId, searchQuery, searchResults, currentMatch, colors }}
             renderItem={renderMessage}
-            keyExtractor={(item) => item.tempId || item._id || String(Math.random())}
+            keyExtractor={(item, index) => String(item._id || item.tempId || item.clientMessageId || `missing-message-${index}`)}
             inverted
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -1116,15 +1115,14 @@ const ChatScreen = ({ route, navigation }) => {
             onChangeText={setText}
             channelMembers={channelMembers}
             members={channelMembers}
-            onSend={(content, options) => {
+            onSend={async (content, options) => {
               if (editingMessage) {
-                editMessage({ messageId: editingMessage._id, channelId, content, htmlContent: options?.htmlContent, fileReferences: options?.fileReferences });
+                await editMessage({ messageId: editingMessage._id, channelId, content, htmlContent: options?.htmlContent, fileReferences: options?.fileReferences });
                 setEditingMessage(null);
               } else {
                 pendingAutoScroll.current = true;
-                sendMessage({ channelId, content, options, tempId: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` });
+                await sendMessage({ channelId, content, options, tempId: options?._clientMessageId || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` });
               }
-              setReplyingTo(null);
             }}
             onSchedule={handleSchedule}
             replyingTo={replyingTo}

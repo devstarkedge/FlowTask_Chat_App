@@ -46,7 +46,8 @@ function KindIcon({ kind, color, size = 22 }) {
 
 export default function MobileFileCard({ file, colors, onLongPress, isUploading = false }) {
   const [previewVisible, setPreviewVisible] = useState(false);
-  const [imgError, setImgError] = useState(false);
+  const [failedImageUri, setFailedImageUri] = useState(null);
+  const [loadedImageUri, setLoadedImageUri] = useState(null);
   const openPreview = useCallback(() => setPreviewVisible(true), []);
 
   if (!file) return null;
@@ -62,6 +63,9 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
 
   const rawThumb = file.thumbnailUrl || file.thumbUrl || file.previewUrl || (mime.startsWith('image/') || ext.match(/^(jpg|jpeg|png|gif|webp)$/i) ? rawUrl : null);
   const thumbUrl = resolved?.thumbUrl || normalizeMediaUrl(rawThumb);
+  const targetUri = thumbUrl || fileUrl;
+  const localPreviewUri = file.localPreviewUri;
+  const showLocalPreview = localPreviewUri && localPreviewUri !== targetUri && loadedImageUri !== targetUri;
 
   const kind = resolved?.kind || getFileKind(mime, name, fileUrl);
 
@@ -97,12 +101,12 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
     />
   );
 
-  if (kind === 'image' && imgError) {
+  if (kind === 'image' && failedImageUri === targetUri) {
     return (
       <>
         <TouchableOpacity
           style={[ms.card, { backgroundColor: colors.backgroundSecondary || colors.background, borderColor: colors.border }]}
-          onPress={() => { setImgError(false); }}
+          onPress={() => { setFailedImageUri(null); }}
           onLongPress={onLongPress}
           activeOpacity={0.75}
         >
@@ -126,7 +130,6 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
   }
 
   if (kind === 'image') {
-    const targetUri = thumbUrl || fileUrl;
     const isLocalUri = targetUri?.startsWith('file://') || targetUri?.startsWith('content://') || targetUri?.startsWith('ph://');
     const finalHeaders = isLocalUri ? undefined : imageHeaders;
 
@@ -141,19 +144,23 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
     return (
       <>
         <TouchableOpacity onPress={openPreview} onLongPress={onLongPress} activeOpacity={0.85} style={ms.imgThumbContainer}>
+          {showLocalPreview && (
+            <Image source={{ uri: localPreviewUri }} style={[ms.imgThumb, StyleSheet.absoluteFillObject]} resizeMode="cover" />
+          )}
           <Image
             source={finalHeaders ? { uri: targetUri, headers: finalHeaders } : { uri: targetUri }}
-            style={ms.imgThumb}
+            style={[ms.imgThumb, showLocalPreview && { opacity: 0 }]}
             resizeMode="cover"
+            onLoad={() => setLoadedImageUri(targetUri)}
             onError={(err) => {
               logger.warn('[MobileFileCard Image] onError FAILURE:', {
                 targetUri,
                 error: err?.nativeEvent?.error || err?.nativeEvent,
               });
-              setImgError(true);
+              setFailedImageUri(targetUri);
             }}
           />
-          {isUploading && (
+          {(isUploading || loadedImageUri !== targetUri) && (
             <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }]} pointerEvents="none">
               <ActivityIndicator color={colors.primary || '#1264a3'} size="large" />
             </View>

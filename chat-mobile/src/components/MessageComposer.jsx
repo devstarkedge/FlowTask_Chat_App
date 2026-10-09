@@ -22,6 +22,7 @@ import {
   Modal,
 } from "react-native";
 import AppVideo from "./common/AppVideo";
+import { sendMediaBatch, prepareMediaFile } from "../utils/mediaSendBatch";
 import {
   Plus,
   Clock,
@@ -41,6 +42,7 @@ import logger from "../utils/logger";
 import { buildReplyToSnapshot, resolveMessageSenderName, getMessagePlainText } from "../utils/replyUtils";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { pickMediaAndFiles } from '../utils/mediaUtils';
+import { consumeComposerAttachments, appendComposerAttachments, hasFileMarkers } from "../utils/composerAttachments";
 import FileClipboardService from '../services/FileClipboardService';
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -182,6 +184,8 @@ const MessageComposer = React.memo(function MessageComposer({
   const [showRecentCanvases, setShowRecentCanvases] = useState(false);
   const [showRecentFiles, setShowRecentFiles] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
+  const pendingFilesRef = useRef(pendingFiles);
+  pendingFilesRef.current = pendingFiles;
   const [showToolbar, setShowToolbar] = useState(false);
   const [mentionVisible, setMentionVisible] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -192,6 +196,7 @@ const MessageComposer = React.memo(function MessageComposer({
   const draftTimerRef = useRef(null);
   const lastSavedRef = useRef("");
   const [isSending, setIsSending] = useState(false);
+  const sendLock = useRef(false);
   const editorRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const latestContentRef = useRef({ html: '', text: '' });
@@ -245,7 +250,7 @@ const MessageComposer = React.memo(function MessageComposer({
         text: editingMessage.content || stripHtml(html),
       };
       onChangeText(html);
-      editorRef.current?.setContent(html);
+      editorRef.current?.setContent(html, latestContentRef.current.text);
       let existingFiles = [];
       const fileReferences = editingMessage.fileReferences?.filter((r) => r.fileId) || [];
       const rawFiles = editingMessage.files || editingMessage.attachments || [];
@@ -276,7 +281,7 @@ const MessageComposer = React.memo(function MessageComposer({
       const html = draft.html || markdownToHtml(draft.text || '');
       latestContentRef.current = { html, text: draft.text || stripHtml(html) };
       onChangeText(html);
-      editorRef.current?.setContent(html);
+      editorRef.current?.setContent(html, latestContentRef.current.text);
       
       if (draft.pendingFiles && draft.pendingFiles.length > 0) {
         // Any previously 'uploading' files should now be marked as 'failed' (interrupted) so they can be retried
@@ -326,56 +331,37 @@ const MessageComposer = React.memo(function MessageComposer({
     };
   }, [channelId]);
 
-  const handleEditorUpdate = useCallback(
-    async ({ html, text: plain, isEmpty }) => {
-      // Intercept file pastes
-      if (plain && plain.includes('[flowtask-file:')) {
-        const file = await FileClipboardService.resolveMarker(plain);
-        if (file) {
-          // It's a valid clipboard file! Add to attachments.
-          setPendingFiles(prev => {
-             // Don't add if it already exists
-             if (prev.some(f => f._id === file._id || (f.id && f.id === file.id))) return prev;
-             const fileId = file._id || file.id || file.fileId?._id || file.fileId;
-             return [...prev, { 
-                ...file,
-                _id: fileId,
-                id: fileId,
-                name: file.originalName || file.fileName || file.name,
-                url: file.url || file.secureUrl, 
-                _tempUri: file.url || file.secureUrl || String(Math.random()),
-                status: 'completed',
-                progress: 100,
-                uploading: false,
-                uploadFailed: false
-             }];
-          });
-
-          // Strip the marker from the editor text
-          const cleanHtml = html.replace(/\[flowtask-file:[a-zA-Z0-9]+\]/g, '');
-          editorRef.current?.setContent(cleanHtml);
-          return;
-        }
+  const pendingPasteRef = useRef(Promise.resolve());
+  const handleEditorUpdate = useCallback((update) => {
+    pendingPasteRef.current = pendingPasteRef.current.then(async () => {
+      const parsed = await consumeComposerAttachments(update, marker => FileClipboardService.resolveMarker(marker));
+      if (parsed.files.length) {
+        pendingFilesRef.current = appendComposerAttachments(pendingFilesRef.current, parsed.files);
+        setPendingFiles(pendingFilesRef.current);
       }
+      latestContentRef.current = { html: parsed.html, text: parsed.text };
+      onChangeText(parsed.html);
+      if (parsed.files.length) saveDraftNow(pendingFilesRef.current);
+      if (parsed.html !== update.html) editorRef.current?.setContent(parsed.html, parsed.text);
+      emitTyping(channelId, !!parsed.text.trim());
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (parsed.text.trim()) typingTimeoutRef.current = setTimeout(() => emitTyping(channelId, false), 3000);
+    }).catch(error => {
+      logger.warn('Attachment paste failed', { message: error.message });
+      Alert.alert('File could not be pasted', error.message);
+    });
+    return pendingPasteRef.current;
+  }, [onChangeText, channelId, saveDraftNow]);
 
-      latestContentRef.current = { html: html || '', text: plain || '' };
-      onChangeText(html || '');
-      if (!isEmpty) {
-        emitTyping(channelId, true);
-        
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => {
-          emitTyping(channelId, false);
-        }, 3000);
-      } else {
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-          emitTyping(channelId, false);
-        }
-      }
-    },
-    [onChangeText, channelId, setPendingFiles]
-  );
+  const handlePasteFiles = useCallback((files, error) => {
+    if (error) return Alert.alert('File could not be pasted', error);
+    const queued = appendComposerAttachments(pendingFilesRef.current, files.map(file => ({
+      ...file, _tempUri: file.uri, status: 'pending',
+    })));
+    pendingFilesRef.current = queued;
+    setPendingFiles(queued);
+    saveDraftNow(queued);
+  }, [saveDraftNow]);
 
   const handleEditorSelection = useCallback((state) => {
     setFormatState((prev) => {
@@ -458,83 +444,72 @@ const MessageComposer = React.memo(function MessageComposer({
     [],
   );
   // ─── Send ──────────────────────────────────────────────────────────────────
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
+    if (sendLock.current) return;
+    await pendingPasteRef.current;
+    if (sendLock.current) return;
+    const filesToSend = pendingFilesRef.current;
     const fromEditor = editorRef.current?.getContent?.() || latestContentRef.current;
     let htmlContent = (fromEditor.html || text || '').trim();
     let plainContent = (fromEditor.text || stripHtml(htmlContent)).trim();
-
     if (htmlContent && !/<[a-z][\s\S]*>/i.test(htmlContent)) {
       plainContent = htmlContent.trim();
       htmlContent = markdownToHtml(plainContent);
     }
-
-    if (!plainContent && pendingFiles.length === 0) return;
-
+    if (hasFileMarkers(plainContent) || hasFileMarkers(htmlContent)) {
+      Alert.alert('File could not be sent', 'Copy the file again from Files before sending.');
+      return;
+    }
+    if (!plainContent && filesToSend.length === 0) return;
     const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
     const baseOptions = {
       ...(replyTo ? { parentMessageId: replyingTo._id, replyTo } : {}),
       mentions: pendingMentions.length > 0 ? pendingMentions : undefined,
     };
-
+    sendLock.current = true;
     setIsSending(true);
     try {
-      // 1. Send text content if it exists
-      if (plainContent) {
-        onSend(plainContent, {
-          htmlContent: htmlContent || undefined,
-          ...baseOptions,
-        });
-      }
-
-      // 2. Send each file as an independent message
-      pendingFiles.forEach((f) => {
-        const isHttpUrl = (u) => /^https?:\/\//i.test(u);
-        const url = f.url || f._tempUri || f.secureUrl;
-        
-        if (f._id || f.id) {
-          // Already uploaded file
-          onSend("", {
-            ...baseOptions,
-            fileReferences: [String(f._id || f.id)],
-          });
-        } else {
-          // Local file - pass it as an optimistic attachment to be uploaded by the store
-          const attachmentObj = {
-            fileName: f.name || f.fileName || f.originalName || 'file',
-            originalName: f.originalName || f.name || f.fileName || 'file',
-            mimeType: f.mimeType || f.type || 'application/octet-stream',
-            fileSize: Number(f.fileSize) || 0,
-            url: url,
-            thumbnailUrl: f.thumbnailUrl || undefined,
-            source: 'chat_upload',
-            _tempUri: f._tempUri, // Pass temp URI for upload process
-          };
-          
-          onSend("", {
-            ...baseOptions,
-            attachments: [attachmentObj],
-            optimisticAttachments: [attachmentObj], // Show in UI immediately
-            _isPendingUpload: true, // Flag for the store to handle upload
-          });
-        }
-      });
-
+      let failedFiles = [];
       if (editingMessage) {
+        // Editing updates one existing record, including historical groups.
+        const files = [];
+        for (const file of filesToSend) files.push(await prepareMediaFile(file, channelId));
+        await onSend(plainContent, { ...baseOptions, htmlContent: htmlContent || undefined,
+          fileReferences: files.map(file => String(file._id || file.id)) });
         onCancelEdit?.();
       } else {
-        onCancelReply?.();
+        // Preserve the mobile caption convention: text once, before the files.
+        if (plainContent) await onSend(plainContent, { htmlContent: htmlContent || undefined, ...baseOptions });
+        failedFiles = await sendMediaBatch({ files: filesToSend, channelId, baseOptions, onSend,
+          onRemainingFiles: files => {
+            const selectedKeys = new Set(filesToSend.map(file => file._tempUri || file._id || file.id));
+            setPendingFiles(prev => [...files, ...prev.filter(file => !selectedKeys.has(file._tempUri || file._id || file.id))]);
+            saveDraftNow(files);
+          },
+          onProgress: (original, updates) => setPendingFiles(prev => prev.map(file =>
+            (file._tempUri || file._id || file.id) === (original._tempUri || original._id || original.id)
+              ? { ...file, ...updates } : file)),
+        });
+        if (!failedFiles.length) onCancelReply?.();
       }
-
       latestContentRef.current = { html: '', text: '' };
       editorRef.current?.clear();
       onChangeText('');
-      setPendingFiles([]);
+      const selectedKeys = new Set(filesToSend.map(file => file._tempUri || file._id || file.id));
+      setPendingFiles(prev => [...failedFiles, ...prev.filter(file => !selectedKeys.has(file._tempUri || file._id || file.id))]);
       setPendingMentions([]);
       clearDraft(channelId, activeWorkspaceId, null);
+      if (failedFiles.length) {
+        saveDraftNow(failedFiles);
+        Alert.alert('Some files could not be sent', `${failedFiles.length} file(s) remain in the composer. Retry or send them again.\n${failedFiles[0].error}`);
+      }
       lastSavedRef.current = '';
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       emitTyping(channelId, false);
+    } catch (error) {
+      Alert.alert('Message could not be sent', error?.message || 'Please try again.');
     } finally {
+      sendLock.current = false;
       setIsSending(false);
     }
   }, [
@@ -551,6 +526,7 @@ const MessageComposer = React.memo(function MessageComposer({
     members,
     onCancelReply,
     onCancelEdit,
+    saveDraftNow,
   ]);
 
   // ─── Schedule send ─────────────────────────────────────────────────────────
@@ -776,6 +752,10 @@ const MessageComposer = React.memo(function MessageComposer({
   const retryUpload = useCallback(async (index) => {
     const fileToRetry = pendingFiles[index];
     if (!fileToRetry || fileToRetry.status === 'completed') return;
+    if (fileToRetry._id || fileToRetry.id) {
+      setPendingFiles(prev => prev.map((file, i) => i === index ? { ...file, status: 'completed', uploadFailed: false } : file));
+      return;
+    }
     await uploadFilesToServer([fileToRetry]);
   }, [pendingFiles, uploadFilesToServer]);
 
@@ -828,7 +808,7 @@ const MessageComposer = React.memo(function MessageComposer({
       if (fileId) {
         setPendingFiles(prev => prev.filter(f => f._tempUri !== uri));
         const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
-        onSend("", {
+        await onSend("", {
           contentType: type,
           ...(replyTo
             ? {
@@ -1062,6 +1042,7 @@ const MessageComposer = React.memo(function MessageComposer({
               colors={colors}
               initialHtml={typeof text === 'string' && text.includes('<') ? text : ''}
               onUpdate={handleEditorUpdate}
+              onPasteFiles={handlePasteFiles}
               onSelectionChange={handleEditorSelection}
               onMentionQuery={(q) => {
                 setMentionQuery(q);
@@ -1270,9 +1251,10 @@ const MessageComposer = React.memo(function MessageComposer({
         visible={showGifPicker}
         onClose={() => setShowGifPicker(false)}
         colors={colors}
-        onSelectGif={(gif) => {
+        onSelectGif={async (gif) => {
+          try {
           const replyTo = replyingTo?._id ? buildReplyToSnapshot(replyingTo, members) : null;
-          onSend('', {
+          await onSend('', {
             contentType: 'gif',
             gifMeta: gif,
             ...(replyTo
@@ -1285,6 +1267,9 @@ const MessageComposer = React.memo(function MessageComposer({
           if (editingMessage) onCancelEdit?.();
           else onCancelReply?.();
           onChangeText('');
+          } catch (error) {
+            Alert.alert('GIF could not be sent', error?.message || 'Please try again.');
+          }
         }}
       />
 
@@ -1312,8 +1297,8 @@ const MessageComposer = React.memo(function MessageComposer({
           </TouchableOpacity>
           {previewFile && (
             (previewFile.mimeType?.startsWith('video/') || /\.(mp4|mov|mkv)$/i.test(previewFile.name)) ? (
-              <Video
-                source={{ uri: previewFile.url || previewFile._tempUri }}
+              <AppVideo
+                sourceUri={previewFile.url || previewFile._tempUri}
                 style={{ width: '100%', height: '80%' }}
                 resizeMode="contain"
                 useNativeControls

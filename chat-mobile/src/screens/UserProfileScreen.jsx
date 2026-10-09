@@ -23,7 +23,6 @@ import { AppAvatar, HeaderBackButton } from '../components/common';
 import { getAvatarColor } from '../components/Avatar';
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-import { useChannels } from '../hooks/queries/useChannels';
 import { isCustomStatusValid } from '../utils/statusUtils';
 
 import { usersAPI } from '../services/api';
@@ -41,15 +40,14 @@ const UserProfileScreen = ({ route, navigation }) => {
   // Use getState() directly — avoids creating a new object on every render
   // which would trigger React re-renders and "Maximum update depth exceeded".
   const state = useWorkspaceStore.getState();
-  const activeWorkspace = state.activeWorkspace;
   const activeWorkspaceId = state.activeWorkspaceId;
-  const { data: channels = [] } = useChannels(activeWorkspace?._id);
   const createDM = useChannelStore(s => s.createDM);
   const setActiveChannel = useChannelStore(s => s.setActiveChannel);
   const { data: members = [] } = useWorkspaceMembers(activeWorkspaceId);
   const rawTargetId = user?._id || user?.id;
   const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
   const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
+  const isCurrentUser = targetIdStr === currentUser?._id;
   const liveOnlineStatus = useWorkspaceStore(s => s.presenceMap?.[targetIdStr]);
   
   const [fetchedUser, setFetchedUser] = useState(null);
@@ -60,15 +58,21 @@ const UserProfileScreen = ({ route, navigation }) => {
   );
 
   const liveUser = useMemo(() => {
-    let baseUser = { ...user, ...fetchedUser };
+    let baseUser = isCurrentUser ? { ...user, ...fetchedUser, ...currentUser } : { ...user, ...fetchedUser };
     if (!baseUser.email && memberRecord) {
       baseUser.email = memberRecord.userId?.email || memberRecord.email;
     }
     baseUser.workspaceRole = fetchedUser?.workspaceRole || user?.workspaceRole || memberRecord?.role;
     return baseUser;
-  }, [user, fetchedUser, memberRecord]);
+  }, [user, fetchedUser, memberRecord, isCurrentUser, currentUser]);
 
   useEffect(() => {
+    if (isCurrentUser) {
+      setFetchedUser(null);
+      setIsFetchingUser(false);
+      useAuthStore.getState().refreshUser().catch(err => console.error('Failed to refresh current profile', err));
+      return;
+    }
     if (targetId) {
       const fetchFullUser = async () => {
         setIsFetchingUser(true);
@@ -85,7 +89,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     } else {
       setIsFetchingUser(false);
     }
-  }, [targetId]);
+  }, [targetId, isCurrentUser]);
 
   const [loadingDM, setLoadingDM] = useState(false);
   const [localTime, setLocalTime] = useState('');
@@ -114,12 +118,6 @@ const UserProfileScreen = ({ route, navigation }) => {
       </View>
     );
   }
-
-  // Find recent DMs involving this user
-  const recentDMs = channels.filter(c => 
-    c.type === 'dm' && 
-    c.dmParticipants?.some(pId => pId === targetIdStr)
-  );
 
   const handleMessage = async () => {
     setLoadingDM(true);
@@ -313,23 +311,6 @@ const UserProfileScreen = ({ route, navigation }) => {
           </View>
         </View>
 
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-        {/* Recent DMs */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Recent DMs</Text>
-          {recentDMs.length > 0 ? recentDMs.map((dm, idx) => (
-            <View key={dm._id} style={styles.dmRow}>
-              <View style={[styles.dmBadge, { backgroundColor: colors.backgroundSecondary }]}>
-                <Text style={[styles.dmBadgeText, { color: colors.textPrimary }]}>{idx + 1}</Text>
-              </View>
-              <Text style={[styles.dmName, { color: colors.textPrimary }]}>{dm.name || liveUser.name}</Text>
-            </View>
-          )) : (
-            <Text style={{ color: colors.textSecondary, marginLeft: scale(16) }}>No recent DMs found.</Text>
-          )}
-        </View>
-
         <View style={{ height: verticalScale(40) }} />
       </ScrollView>
     </SafeAreaView>
@@ -495,27 +476,6 @@ const styles = StyleSheet.create({
   },
   contactLabel: {
     fontSize: moderateScale(14),
-  },
-  dmRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(16),
-    marginBottom: verticalScale(16),
-  },
-  dmBadge: {
-    width: scale(28),
-    height: verticalScale(28),
-    borderRadius: moderateScale(8),
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: scale(12),
-  },
-  dmBadgeText: {
-    fontSize: moderateScale(13),
-    fontWeight: '700',
-  },
-  dmName: {
-    fontSize: moderateScale(16),
   },
 });
 

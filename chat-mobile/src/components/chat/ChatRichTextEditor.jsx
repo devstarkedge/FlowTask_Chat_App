@@ -26,6 +26,7 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
     colors,
     initialHtml = '',
     onUpdate,
+    onPasteFiles,
     onSelectionChange,
     onMentionQuery,
     onMentionClose,
@@ -83,9 +84,10 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
         lastTextRef.current = '';
         sendCommand('clear');
       },
-      setContent: (html) => {
+      setContent: (html, plainText) => {
         const next = html || '';
         lastHtmlRef.current = next;
+        lastTextRef.current = plainText ?? next.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ');
         if (ready) sendCommand('setContent', next);
         else pendingContentRef.current = next;
       },
@@ -137,6 +139,12 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
       }
 
       switch (data.type) {
+        case 'pasteFiles':
+          onPasteFiles?.(data.files || []);
+          break;
+        case 'pasteError':
+          onPasteFiles?.([], data.message || 'The clipboard file could not be read.');
+          break;
         case 'ready':
           setReady(true);
           break;
@@ -181,6 +189,7 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
     },
     [
       minHeight,
+      onPasteFiles,
       maxHeight,
       onUpdate,
       onSelectionChange,

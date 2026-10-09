@@ -8,6 +8,7 @@ import AudioMessagePlayer from './AudioMessagePlayer';
 import VideoMessagePlayer from './VideoMessagePlayer';
 import GifRenderer from './GifRenderer';
 import RichText from './RichText';
+import { stripFileMarkers, hasFileMarkers } from '../utils/composerAttachments';
 import MobileFileCard from './common/MobileFileCard';
 import MessageStatusTicks from './MessageStatusTicks';
 import ReactionBar from './ReactionBar';
@@ -134,6 +135,10 @@ const ChatMessageItem = memo(({
   const itemIdStr = item._id ? String(item._id) : item.tempId;
   const isSaved = useLaterStore((s) => s.savedMessageIds?.some(id => String(id) === itemIdStr));
   const attachments = getMessageAttachments(item);
+  const visibleHtml = stripFileMarkers(item.htmlContent);
+  const visibleText = stripFileMarkers(item.content);
+  // Legacy accidentally persisted transport markers are not user messages.
+  if (!attachments.length && hasFileMarkers(item.content) && !visibleText.trim() && !visibleHtml.replace(/<[^>]*>/g, '').trim()) return null;
 
   if (attachments.length > 0) {
     logger.info(`[ChatMessageItem] Message ${item._id} (${item.contentType}) has ${attachments.length} attachment(s)`);
@@ -149,6 +154,38 @@ const ChatMessageItem = memo(({
   })();
 
   const showReplyQuote = hasValidReplyTo(item.replyTo, item.parentMessageId);
+  const separateAttachmentCards = !isDeleted && attachments.length > 1
+    && !['audio', 'gif'].includes(item.contentType) && item.type !== 'audio';
+  const hasBody = !!visibleText.trim() || !!visibleHtml.replace(/<[^>]*>/g, '').trim()
+    || showReplyQuote || item.forwardMeta?.isForwarded;
+  const bubblePresentation = [
+              styles.bubble,
+              bubbleRadiusStyle,
+              {
+                backgroundColor: isMe
+                  ? colors.messageBubbleSent
+                  : colors.messageBubbleReceived,
+                alignSelf: isMe ? 'flex-end' : 'flex-start',
+                borderWidth: isMe ? 0 : StyleSheet.hairlineWidth,
+                borderColor: isMe ? 'transparent' : colors.border,
+              },
+              isReplyTarget && {
+                borderWidth: 2,
+                borderColor: colors.primary,
+              },
+              isHighlighted && !isReplyTarget && {
+                borderWidth: 2,
+                borderColor: colors.primary,
+              },
+            ];
+  const attachmentPresentation = [styles.bubble, {
+    backgroundColor: isMe ? colors.messageBubbleSent : colors.messageBubbleReceived,
+    alignSelf: isMe ? 'flex-end' : 'flex-start',
+    borderWidth: isMe ? 0 : StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    ...(isReplyTarget || isHighlighted ? { borderWidth: 2, borderColor: colors.primary } : {}),
+  }];
+
 
   return (
     <RNView 
@@ -209,27 +246,9 @@ const ChatMessageItem = memo(({
           )}
 
           <RNView
-            style={[
-              styles.bubble,
-              bubbleRadiusStyle,
-              {
-                backgroundColor: isMe
-                  ? colors.messageBubbleSent
-                  : colors.messageBubbleReceived,
-                alignSelf: isMe ? 'flex-end' : 'flex-start',
-                borderWidth: isMe ? 0 : StyleSheet.hairlineWidth,
-                borderColor: isMe ? 'transparent' : colors.border,
-              },
-              isReplyTarget && {
-                borderWidth: 2,
-                borderColor: colors.primary,
-              },
-              isHighlighted && !isReplyTarget && {
-                borderWidth: 2,
-                borderColor: colors.primary,
-              },
-            ]}
+            style={separateAttachmentCards ? { alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '100%' } : bubblePresentation}
           >
+            <RNView style={separateAttachmentCards && hasBody ? bubblePresentation : null}>
             {showReplyQuote ? (
               <ReplyQuotePreview
                 replyTo={item.replyTo}
@@ -274,8 +293,8 @@ const ChatMessageItem = memo(({
                 </RNText>
                 {isActivityCard && (item.htmlContent || item.content) && item.content !== '[Message deleted]' && (
                   <RichText
-                    html={item.htmlContent}
-                    text={item.content}
+                    html={visibleHtml}
+                    text={visibleText}
                     mentions={item.mentions}
                     searchQuery={searchQuery}
                     onMentionPress={(userId) => {
@@ -302,21 +321,21 @@ const ChatMessageItem = memo(({
                 isMe={isMe}
                 onLongPress={() => !isDeleted && showMessageActions(item, attachments[0] || { url: item.audioUrl || item.audioMeta?.audioUrl })}
               />
-            ) : item.contentType === 'video' || item.type === 'video' ? (
+            ) : !separateAttachmentCards && (item.contentType === 'video' || item.type === 'video') ? (
               <VideoMessagePlayer
                 videoUrl={item.videoUrl || item.videoMeta?.videoUrl || attachments[0]?.url || attachments[0]?.secureUrl}
                 thumbnailUrl={item.thumbnailUrl || item.videoMeta?.thumbnailUrl || attachments[0]?.thumbnailUrl}
                 width={item.width || item.videoMeta?.width}
                 height={item.height || item.videoMeta?.height}
                 colors={colors}
-                onLongPress={() => !isDeleted && showMessageActions(item, attachments[0] || { url: item.videoUrl || item.videoMeta?.videoUrl, thumbnailUrl: item.thumbnailUrl || item.videoMeta?.thumbnailUrl })}
+                onLongPress={() => !isDeleted && showMessageActions(item, attachments[0] || { url: item.videoUrl || item.videoMeta?.videoUrl, mimeType: 'video/mp4', thumbnailUrl: item.thumbnailUrl || item.videoMeta?.thumbnailUrl })}
               />
             ) : item.contentType === 'gif' && item.gifMeta ? (
               <GifRenderer item={item} contentColor={contentColor} styles={styles} />
-            ) : (item.htmlContent || item.content) ? (
+            ) : (visibleHtml || visibleText) ? (
               <RichText
-                html={item.htmlContent}
-                text={item.content}
+                html={visibleHtml}
+                text={visibleText}
                 mentions={item.mentions}
                 searchQuery={searchQuery}
                 onMentionPress={(userId) => {
@@ -334,54 +353,56 @@ const ChatMessageItem = memo(({
               />
             ) : null}
 
-            {!isDeleted && attachments.length > 0 && !['audio', 'video'].includes(item.contentType) && !['audio', 'video'].includes(item.type) && (
+            </Pressable>
+            </RNView>
+            {!isDeleted && attachments.length > 0 && (separateAttachmentCards || (!['audio', 'video'].includes(item.contentType) && !['audio', 'video'].includes(item.type))) && (
               <RNView style={{ marginTop: verticalScale(4), width: '100%', gap: 4 }}>
                 {attachments.map((file, i) => {
                   const kind = getFileKind(file.mimeType, file.name || file.fileName, file.url || file.secureUrl);
-                  if (kind === 'video') {
-                    return (
-                      <VideoMessagePlayer
-                        key={file._id || i}
-                        videoUrl={file.url || file.secureUrl}
-                        thumbnailUrl={file.thumbnailUrl}
-                        width={file.width || 16}
-                        height={file.height || 9}
-                        colors={colors}
-                        onLongPress={() => !isDeleted && showMessageActions(item, file)}
-                      />
-                    );
-                  }
-                  return <MobileFileCard key={file._id || i} file={file} colors={colors} isUploading={item.pending || item.status === 'pending' || file.isOptimisticPreview} onLongPress={() => !isDeleted && showMessageActions(item, file)} />;
+                  const card = kind === 'video' ? (
+                    <VideoMessagePlayer
+                      videoUrl={file.url || file.secureUrl}
+                      thumbnailUrl={file.thumbnailUrl}
+                      width={file.width || 16}
+                      height={file.height || 9}
+                      colors={colors}
+                      onLongPress={() => !isDeleted && showMessageActions(item, file)}
+                    />
+                  ) : (
+                    <MobileFileCard file={file} colors={colors} isUploading={item.pending || item.status === 'pending' || file.isOptimisticPreview} onLongPress={() => !isDeleted && showMessageActions(item, file)} />
+                  );
+                  return <RNView key={file._id || file.id || file.url || i} style={separateAttachmentCards ? attachmentPresentation : null}>{card}</RNView>;
                 })}
               </RNView>
             )}
 
+            <Pressable onLongPress={() => !isDeleted && showMessageActions(item)} delayLongPress={350}>
             <RNView style={styles.timestampRow}>
               <RNText
                 style={[
                   styles.timestamp,
-                  { color: isMe ? colors.messageTextSent : colors.textTertiary, opacity: 0.7 },
+                  { color: isMe && !separateAttachmentCards ? colors.messageTextSent : colors.textTertiary, opacity: 0.7 },
                 ]}
               >
                 {formatTime(item.createdAt)}
               </RNText>
               {item.isEdited && !isDeleted && (
-                <RNText style={[styles.editedLabel, { color: isMe ? colors.messageTextSent : colors.textTertiary }]}>
+                <RNText style={[styles.editedLabel, { color: isMe && !separateAttachmentCards ? colors.messageTextSent : colors.textTertiary }]}>
                   {" "}(edited)
                 </RNText>
               )}
               {item.isPinned && (
-                <Pin size={10} color={isMe ? colors.messageTextSent : colors.textTertiary} style={{ marginLeft: scale(4), opacity: 0.7 }} />
+                <Pin size={10} color={isMe && !separateAttachmentCards ? colors.messageTextSent : colors.textTertiary} style={{ marginLeft: scale(4), opacity: 0.7 }} />
               )}
               <MessageStatusTicks message={item} colors={colors} isMe={isMe} size={12} />
             </RNView>
+            </Pressable>
 
             {isSaved && !isDeleted && (
               <RNView style={{ position: 'absolute', top: verticalScale(-14), right: scale(-10), backgroundColor: colors.card, borderRadius: moderateScale(10), padding: moderateScale(2), elevation: 2, zIndex: 99, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: scale(0), height: verticalScale(1) } }}>
                 <Bookmark size={12} color={colors.primary} fill={colors.primary} />
               </RNView>
             )}
-            </Pressable>
           </RNView>
 
           {!isDeleted && (

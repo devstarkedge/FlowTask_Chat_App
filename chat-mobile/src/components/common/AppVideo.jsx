@@ -1,5 +1,7 @@
-import React, { useRef, useEffect } from 'react';
-import { Platform, View, StyleSheet } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { Platform, View, Image, StyleSheet } from 'react-native';
+
+const fillPreview = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 };
 
 let VideoView, useVideoPlayer;
 if (Platform.OS !== 'web') {
@@ -24,6 +26,8 @@ const NativeVideo = ({
   onStatusChange,
   videoRef,
 }) => {
+  const [firstFrameUri, setFirstFrameUri] = useState(null);
+  const [failedPosterUri, setFailedPosterUri] = useState(null);
   const player = useVideoPlayer ? useVideoPlayer(sourceUri || null, (playerInstance) => {
     try {
       playerInstance.loop = isLooping;
@@ -56,7 +60,8 @@ const NativeVideo = ({
         isPlaying: player.isPlaying,
         positionMillis: (player.currentTime || 0) * 1000,
         durationMillis: (player.duration || 0) * 1000,
-        isLoaded: status === 'readyToPlay',
+        isLoaded: status.status === 'readyToPlay',
+        error: status.error?.message,
       });
     });
     return () => sub?.remove?.();
@@ -74,21 +79,30 @@ const NativeVideo = ({
     }
   }, [videoRef, player]);
 
-  if (!VideoView || !player) {
-    return <View style={style} />;
-  }
-
   const contentFit = resizeMode === 'contain' ? 'contain' : resizeMode === 'cover' ? 'cover' : 'contain';
+  const showPoster = posterUri && posterUri !== sourceUri && firstFrameUri !== sourceUri && failedPosterUri !== posterUri;
 
   return (
+    <View style={style}>
+    {VideoView && player ? (
     <VideoView
-      style={style}
+      style={fillPreview}
       player={player}
       nativeControls={useNativeControls}
       allowsFullscreen
       allowsPictureInPicture
       contentFit={contentFit}
+      onFirstFrameRender={() => setFirstFrameUri(sourceUri)}
     />
+    ) : null}
+    {showPoster ? <Image
+      pointerEvents="none"
+      source={{ uri: posterUri }}
+      style={fillPreview}
+      resizeMode={resizeMode}
+      onError={() => setFailedPosterUri(posterUri)}
+    /> : null}
+    </View>
   );
 };
 

@@ -22,6 +22,7 @@ import { AppAvatar , HeaderBackButton } from '../components/common';
 import { X, Hash, Lock, Volume2, Search } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useChannels } from '../hooks/queries/useChannels';
+import { buildNewMessageSections } from '../utils/newMessageSections';
 
 
 // ─── Channel List Item ──────────────────────────────────────────────────────
@@ -191,34 +192,21 @@ const NewMessageScreen = ({ navigation }) => {
   }, [createDM, navigation]);
 
   // Build sections
-  const sections = useMemo(() => {
-    const result = [];
-    
-    if (!filtered && recent.length > 0) {
-      result.push({ title: 'Recent', data: recent, type: 'dm' });
-    }
-    
-    if (channelResults.length > 0) {
-      result.push({ title: 'Channels', data: channelResults, type: 'channel' });
-    }
-    
-    if (dmResults.length > 0) {
-      result.push({ title: 'Direct Messages', data: dmResults, type: 'dm' });
-    }
-
-    if (userResults.length > 0) {
-      result.push({ title: `People (${userResults.length})`, data: userResults, type: 'user' });
-    }
-
-    return result;
-  }, [filtered, recent, channelResults, dmResults, userResults]);
+  const sections = useMemo(() => buildNewMessageSections({
+    dms: dmResults,
+    channels: channelResults,
+    recent,
+    people: userResults,
+    filtered,
+    currentUserId: currentUser?._id,
+  }), [filtered, recent, channelResults, dmResults, userResults, currentUser?._id]);
 
   const renderItem = useCallback(
     ({ item, section }) => {
-      if (section.type === 'user') {
+      if (section.type === 'direct' && item.type !== 'dm') {
         return <UserListItem user={item} onPress={handleUserPress} colors={colors} />;
       }
-      if (section.type === 'dm') {
+      if (section.type === 'dm' || section.type === 'direct') {
         return <DMListItem channel={item} onPress={handleChannelPress} colors={colors} />;
       }
       return <ChannelListItem channel={item} onPress={handleChannelPress} colors={colors} />;

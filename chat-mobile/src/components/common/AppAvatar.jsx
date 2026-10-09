@@ -1,6 +1,7 @@
 import React from 'react';
 import BaseAvatar from '../Avatar';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { useAuthStore } from '../../stores/authStore';
 
 /**
  * AppAvatar
@@ -13,6 +14,7 @@ const AppAvatar = (props) => {
   const rawTargetId = user?._id || member?._id || user?.userId || member?.userId;
   const targetId = typeof rawTargetId === 'object' ? rawTargetId?._id || rawTargetId?.id : rawTargetId;
   const targetIdStr = targetId?.toString ? targetId.toString() : targetId;
+  const currentProfile = useAuthStore(s => s.user?._id === targetIdStr ? s.user : null);
   
   // Only re-render if THIS specific user's status changes
   const liveOnlineStatus = useWorkspaceStore((s) => s.presenceMap?.[targetIdStr]);
@@ -22,8 +24,8 @@ const AppAvatar = (props) => {
   const finalStatus = liveOnlineStatus || user?.onlineStatus || member?.onlineStatus || 'offline';
   
   const injectedProps = { ...props };
-  if (user) injectedProps.user = { ...user, onlineStatus: finalStatus };
-  else if (member) injectedProps.member = { ...member, onlineStatus: finalStatus };
+  if (user) injectedProps.user = { ...user, ...(currentProfile || {}), onlineStatus: finalStatus };
+  else if (member) injectedProps.member = { ...member, ...(currentProfile || {}), onlineStatus: finalStatus };
   else injectedProps.user = { onlineStatus: finalStatus };
 
   return <BaseAvatar {...injectedProps} />;

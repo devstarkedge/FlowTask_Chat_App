@@ -215,7 +215,7 @@ function htmlToPlainWithNewlines(html) {
   if (!html || typeof html !== 'string') return '';
   return html
     .replace(/\r\n?/g, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<br\b[^>]*>/gi, '\n')
     .replace(/<\/p>\s*<p[^>]*>/gi, '\n')
     .replace(/<\/div>\s*<div[^>]*>/gi, '\n')
     .replace(/<\/h[1-6]>\s*<h[1-6][^>]*>/gi, '\n')

@@ -37,18 +37,49 @@ export async function prepareMediaFile(file, channelId, onProgress) {
   return { ...file, ...uploaded, _id: uploaded._id || uploaded.id, name: uploaded.originalName || name, localPreviewUri: uri };
 }
 
-// One persisted message per selected file. Await creation before advancing so
-// upload speed cannot reorder messages. Keep only failed entries for retry.
-export async function sendMediaBatch({ files, channelId, baseOptions, onSend, onProgress, onRemainingFiles, prepare = prepareMediaFile }) {
+// Upload at most two files concurrently; persist messages in selection order.
+// Every preparation resolves to a result so later failures never become unhandled
+// while an earlier message is still being created.
+export async function sendMediaBatch({ files, channelId, baseOptions, onSend, onProgress, onRemainingFiles, onQueued, onFailed, prepare = prepareMediaFile }) {
+  files = files.map(file => ({ ...file, _clientMessageId: file._clientMessageId || `temp-media-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
+  await onQueued?.(files);
   const failedFiles = [];
   const remaining = [...files];
+  const prepared = files.map(() => {
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    return { promise, resolve };
+  });
+  let nextIndex = 0;
+  async function uploadWorker() {
+    while (nextIndex < files.length) {
+      const index = nextIndex++;
+      const original = files[index];
+      let file = { ...original, _clientMessageId: original._clientMessageId || `temp-media-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      try {
+        remaining[index] = { ...file, status: 'uploading', uploading: true, uploadFailed: false };
+        onProgress?.(original, { status: 'uploading', uploading: true, uploadFailed: false });
+        file = await prepare(file, channelId, event => {
+          if (event.total > 0) {
+            const progress = Math.round(event.loaded * 100 / event.total);
+            remaining[index] = { ...remaining[index], progress };
+            onProgress?.(original, { progress });
+          }
+        });
+        remaining[index] = { ...file, status: 'completed', uploading: false, progress: 100 };
+        onProgress?.(original, { ...file, status: 'completed', uploading: false, progress: 100 });
+        prepared[index].resolve({ file });
+      } catch (error) {
+        prepared[index].resolve({ file, error });
+      }
+    }
+  }
+  const workers = Array.from({ length: Math.min(2, files.length) }, () => uploadWorker());
   for (const [index, original] of files.entries()) {
-    let file = { ...original, _clientMessageId: original._clientMessageId || `temp-media-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    const result = await prepared[index].promise;
+    const file = result.file;
     try {
-      onProgress?.(original, { status: 'uploading', uploading: true, uploadFailed: false });
-      file = await prepare(file, channelId, event => {
-        if (event.total > 0) onProgress?.(original, { progress: Math.round(event.loaded * 100 / event.total) });
-      });
+      if (result.error) throw result.error;
       await onSend('', {
         ...baseOptions,
         fileReferences: [String(file._id || file.id)],
@@ -65,8 +96,10 @@ export async function sendMediaBatch({ files, channelId, baseOptions, onSend, on
       const failed = { ...file, status: 'failed', uploading: false, uploadFailed: true, error: error?.message || 'Send failed' };
       failedFiles.push(failed);
       remaining[index] = failed;
+      onFailed?.(failed);
     }
     onRemainingFiles?.(remaining.filter(Boolean));
   }
+  await Promise.all(workers);
   return failedFiles;
 }

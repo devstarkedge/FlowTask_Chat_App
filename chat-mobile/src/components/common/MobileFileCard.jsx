@@ -145,7 +145,7 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
       <>
         <TouchableOpacity onPress={openPreview} onLongPress={onLongPress} activeOpacity={0.85} style={ms.imgThumbContainer}>
           {showLocalPreview && (
-            <Image source={{ uri: localPreviewUri }} style={[ms.imgThumb, StyleSheet.absoluteFillObject]} resizeMode="cover" />
+            <Image source={{ uri: localPreviewUri }} style={[ms.imgThumb, ms.fillPreview]} resizeMode="cover" />
           )}
           <Image
             source={finalHeaders ? { uri: targetUri, headers: finalHeaders } : { uri: targetUri }}
@@ -161,7 +161,7 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
             }}
           />
           {(isUploading || loadedImageUri !== targetUri) && (
-            <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }]} pointerEvents="none">
+            <View style={[ms.fillPreview, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }]} pointerEvents="none">
               <ActivityIndicator color={colors.primary || '#1264a3'} size="large" />
             </View>
           )}
@@ -235,6 +235,7 @@ export default function MobileFileCard({ file, colors, onLongPress, isUploading 
 }
 
 const ms = StyleSheet.create({
+  fillPreview: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   imgThumbContainer: {
     width: scale(250),
     height: verticalScale(200),
@@ -263,7 +264,7 @@ const ms = StyleSheet.create({
     alignItems: 'center',
   },
   vidPlayOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },

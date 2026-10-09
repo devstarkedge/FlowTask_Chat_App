@@ -61,10 +61,10 @@ export const saveToLibraryAsync = async (uri) => {
   return MediaLibraryModule.saveToLibraryAsync(uri);
 };
 
-export const getAssetInfoAsync = async (assetId) => {
+export const getAssetInfoAsync = async (assetId, options) => {
   if (isAvailable && MediaLibraryModule?.getAssetInfoAsync) {
     try {
-      return await MediaLibraryModule.getAssetInfoAsync(assetId);
+      return await MediaLibraryModule.getAssetInfoAsync(assetId, options);
     } catch (e) {
       logger.warn('[SafeMediaLibrary] getAssetInfoAsync failed:', e?.message);
     }

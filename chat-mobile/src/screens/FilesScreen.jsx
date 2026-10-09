@@ -164,26 +164,20 @@ export default function FilesScreen({ route, navigation }) {
   const handleCopyLink = async (file) => {
     const fileId = file._id || file.id || String(Math.random());
     const kind = getFileKind(file.mimeType, file.fileName || file.originalName, file.url);
-    if (kind === "image") {
-      if (copyingFiles[fileId]) return;
-      setCopyingFiles(prev => ({ ...prev, [fileId]: true }));
-      try {
-        await FileService.copyImage(file);
-      } catch (err) {
-        logger.error(err);
-        Toast.show({ type: "error", text1: "Copy failed" });
-      } finally {
-        setCopyingFiles(prev => ({ ...prev, [fileId]: false }));
-      }
-    } else {
-      try {
-        const fileWithUrl = { ...file, url: file.url || messageAPI.getFileProxyUrl(file._id) };
-        await FileClipboardService.copyFile(fileWithUrl);
-        Toast.show({ type: "success", text1: "File copied to clipboard" });
-      } catch (err) {
-        logger.error(err);
-        Toast.show({ type: "error", text1: "Failed to copy link" });
-      }
+    if (copyingFiles[fileId]) return;
+    setCopyingFiles(prev => ({ ...prev, [fileId]: true }));
+    try {
+      // In-app copies reuse the stored file. Binary image clipboard round trips
+      // duplicate image data across native clipboard, WebView and the send queue.
+      if (!file._id && !file.id) throw new Error('This file is unavailable. Refresh Files and try again.');
+      const fileWithUrl = { ...file, url: file.url || file.secureUrl || messageAPI.getFileProxyUrl(file._id || file.id) };
+      if (!await FileClipboardService.copyFile(fileWithUrl)) throw new Error('The file could not be copied. Please try again.');
+      Toast.show({ type: "success", text1: kind === 'image' ? 'Image copied to clipboard' : 'File copied to clipboard' });
+    } catch (err) {
+      logger.error(err);
+      Toast.show({ type: "error", text1: "Copy failed", text2: err.message });
+    } finally {
+      setCopyingFiles(prev => ({ ...prev, [fileId]: false }));
     }
   };
 

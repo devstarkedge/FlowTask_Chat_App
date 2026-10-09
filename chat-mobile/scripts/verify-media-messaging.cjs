@@ -34,28 +34,49 @@ async function main() {
       { name: 'B.mp4', mimeType: 'video/mp4', _tempUri: 'file:///B.mp4' },
       { name: 'C.png', mimeType: 'image/png', _tempUri: 'file:///C.png' }];
     const timeline = [], records = [], remainingUpdates = [];
-    let active = 0;
+    let activeUploads = 0, maximumUploads = 0, activeSends = 0;
     const failed = await sendMediaBatch({ files, channelId: 'channel', baseOptions: { parentMessageId: 'reply' },
       prepare: async file => {
-        assert.equal(active++, 0); timeline.push(`upload ${file.name}`);
-        await Promise.resolve(); active--;
-        return prepareMediaFile(file, 'channel');
+        maximumUploads = Math.max(maximumUploads, ++activeUploads);
+        assert.ok(activeUploads <= 2); timeline.push(`upload ${file.name}`);
+        try { await Promise.resolve(); return await prepareMediaFile(file, 'channel'); }
+        finally { activeUploads--; }
       },
       onSend: async (content, options) => {
-        assert.equal(active++, 0); timeline.push(`send ${options.fileReferences[0]}`);
+        assert.equal(activeSends++, 0); timeline.push(`send ${options.fileReferences[0]}`);
         assert.equal(options.fileReferences.length, 1); assert.equal(options.parentMessageId, 'reply');
-        await Promise.resolve(); records.push({ _id: `message-${records.length + 1}`, content, ...options }); active--;
+        await Promise.resolve(); records.push({ _id: `message-${records.length + 1}`, content, ...options }); activeSends--;
       },
       onRemainingFiles: files => remainingUpdates.push(files.map(file => file.name)),
     });
     assert.equal(failed.length, 0);
-    assert.deepEqual(timeline, ['upload A.jpg', 'send file-1', 'upload B.mp4', 'send file-2', 'upload C.png', 'send file-3']);
+    assert.equal(maximumUploads, 2, 'Upload overlaps instead of waiting for the prior message');
+    assert.deepEqual(timeline.filter(event => event.startsWith('send')), ['send file-1', 'send file-2', 'send file-3']);
     assert.equal(new Set(records.map(record => record._id)).size, 3);
     assert.equal(new Set(records.map(record => record._clientMessageId)).size, 3);
     assert.deepEqual(remainingUpdates, [['B.mp4', 'C.png'], ['C.png'], []]);
     assert.equal(records[0].optimisticAttachments[0].url, 'file:///A.jpg');
     assert.equal(records[1].optimisticAttachments[0].url, 'file:///B.mp4');
     assert.deepEqual(uploadBodies.map(body => body[0][1].type), ['image/jpeg', 'video/mp4', 'image/png']);
+    const gates = [], started = [], orderedSends = [];
+    const overlap = sendMediaBatch({ files, channelId: 'channel', baseOptions: {},
+      prepare: file => {
+        started.push(file.name);
+        return new Promise(resolve => { gates[files.findIndex(item => item.name === file.name)] = () => resolve({ ...file, _id: file.name }); });
+      },
+      onSend: async (_, options) => orderedSends.push(options.fileReferences[0]),
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(started, ['A.jpg', 'B.mp4']);
+    gates[1]();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(started, ['A.jpg', 'B.mp4', 'C.png']);
+    gates[2]();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(orderedSends, [], 'Later completed uploads cannot overtake the first message');
+    gates[0]();
+    await overlap;
+    assert.deepEqual(orderedSends, ['A.jpg', 'B.mp4', 'C.png']);
     let success = [];
     const failures = await sendMediaBatch({ files, channelId: 'channel', baseOptions: {},
       prepare: async file => { if (file.name === 'B.mp4') throw new Error('Upload failed'); return { ...file, _id: file.name }; },
@@ -154,6 +175,8 @@ async function main() {
       pendingMentions: [], replyingTo: null, members: [], editingMessage: editing ? { _id: 'old-group' } : null,
       sendLock: { current: false }, setIsSending() {}, channelId: 'channel', activeWorkspaceId: 'workspace',
       pendingPasteRef: { current: Promise.resolve() },
+      draftTimerRef: { current: null },
+      onStageMedia: undefined, onMediaFailed: undefined,
       pendingFilesRef: { current: [{ _id: 'A', name: 'A.jpg' }, { _id: 'B', name: 'B.mp4' }] },
       hasFileMarkers: load('src/utils/composerAttachments.js').hasFileMarkers,
       onSend: async (content, options) => sends.push({ content, options }),

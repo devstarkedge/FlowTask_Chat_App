@@ -235,7 +235,7 @@ const ChatScreen = ({ route, navigation }) => {
     }
 
     const latestMessage = messages[messages.length - 1];
-    const latestMessageId = latestMessage?._id;
+    const latestMessageId = latestMessage?.tempId || latestMessage?.clientMessageId || latestMessage?._id;
 
     if (latestMessageId && lastMessageIdRef.current !== latestMessageId) {
       const oldLastId = lastMessageIdRef.current;
@@ -1125,6 +1125,15 @@ const ChatScreen = ({ route, navigation }) => {
               }
             }}
             onSchedule={handleSchedule}
+            onStageMedia={async (files, options) => {
+              pendingAutoScroll.current = true;
+              await Promise.all(files.map(file => sendMessage({ channelId, content: '', tempId: file._clientMessageId,
+                options: { ...options, _stageOnly: true, optimisticAttachments: [{ ...file, url: file.localPreviewUri || file._tempUri || file.uri || file.url }] },
+              })));
+            }}
+            onMediaFailed={file => queryClient.setQueryData(queryKeys.messages(channelId), old => old?.pages ? {
+              ...old, pages: old.pages.map(page => ({ ...page, items: page.items.filter(message => message._id !== file._clientMessageId) })),
+            } : old)}
             replyingTo={replyingTo}
             editingMessage={editingMessage}
             onCancelReply={() => { setReplyingTo(null); setText(""); }}

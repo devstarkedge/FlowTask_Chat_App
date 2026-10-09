@@ -104,7 +104,12 @@ export default function MediaPickerSheet({
         mediaType: ['photo', 'video'],
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       });
-      if (current()) setPhotos(assets || []);
+      const previews = await Promise.all((assets || []).map(async asset => {
+        if (!/^(ph|assets-library):\/\//.test(asset.uri || '')) return asset;
+        const info = await MediaLibrary.getAssetInfoAsync(asset.id, { shouldDownloadFromNetwork: false });
+        return info?.localUri?.startsWith('file://') ? { ...asset, uri: info.localUri } : asset;
+      }));
+      if (current()) setPhotos(previews);
     } catch (e) {
       console.log('Error loading photos', e);
     }
@@ -224,7 +229,7 @@ export default function MediaPickerSheet({
         disabled={isBusy}
         onPress={() => dismissThenRun('recent photo', current => handlePhotoSelect(item, current))}
       >
-        <Image source={{ uri: item.uri }} style={styles.photoImg} />
+        {!/^(ph|assets-library):\/\//.test(item.uri || '') ? <Image source={{ uri: item.uri }} style={styles.photoImg} /> : <ImageIcon size={24} color={colors.textSecondary} />}
       </TouchableOpacity>
     );
   };

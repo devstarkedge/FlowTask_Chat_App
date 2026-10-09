@@ -44,6 +44,7 @@ import { useKeyboardState } from "react-native-keyboard-controller";
 import { pickMediaAndFiles } from '../utils/mediaUtils';
 import { consumeComposerAttachments, appendComposerAttachments, hasFileMarkers } from "../utils/composerAttachments";
 import FileClipboardService from '../services/FileClipboardService';
+import MediaLibrary from '../utils/safeMediaLibrary';
 import { useDraftStore } from "../stores/draftStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useScheduledStore } from "../stores/scheduledStore";
@@ -168,6 +169,8 @@ const MessageComposer = React.memo(function MessageComposer({
   workspaceId,
   colors,
   onSend,
+  onStageMedia,
+  onMediaFailed,
   onSchedule,
   replyingTo,
   editingMessage,
@@ -468,6 +471,14 @@ const MessageComposer = React.memo(function MessageComposer({
     };
     sendLock.current = true;
     setIsSending(true);
+    const selectedKeys = new Set(filesToSend.map(file => file._tempUri || file._id || file.id));
+    const replaceSubmittedFiles = files => {
+      const next = [...files, ...pendingFilesRef.current.filter(file => !selectedKeys.has(file._tempUri || file._id || file.id))];
+      pendingFilesRef.current = next;
+      setPendingFiles(next);
+      saveDraftNow(next);
+    };
+    let textAccepted = false;
     try {
       let failedFiles = [];
       if (editingMessage) {
@@ -478,35 +489,60 @@ const MessageComposer = React.memo(function MessageComposer({
           fileReferences: files.map(file => String(file._id || file.id)) });
         onCancelEdit?.();
       } else {
+        // Transfer the submitted text too, before awaiting the network. Keep
+        // anything typed during the send independent of this submission.
+        if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+        latestContentRef.current = { html: '', text: '' };
+        editorRef.current?.clear();
+        onChangeText('');
+        setPendingMentions([]);
+        onCancelReply?.();
+        // Ownership transfers to the send queue immediately; don't keep a second
+        // uploading preview in the composer alongside its optimistic chat row.
+        replaceSubmittedFiles([]);
         // Preserve the mobile caption convention: text once, before the files.
         if (plainContent) await onSend(plainContent, { htmlContent: htmlContent || undefined, ...baseOptions });
+        textAccepted = true;
         failedFiles = await sendMediaBatch({ files: filesToSend, channelId, baseOptions, onSend,
+          onQueued: onStageMedia ? files => onStageMedia(files, baseOptions) : undefined,
+          onFailed: onMediaFailed,
           onRemainingFiles: files => {
-            const selectedKeys = new Set(filesToSend.map(file => file._tempUri || file._id || file.id));
-            setPendingFiles(prev => [...files, ...prev.filter(file => !selectedKeys.has(file._tempUri || file._id || file.id))]);
-            saveDraftNow(files);
+            replaceSubmittedFiles(files.filter(file => file.status === 'failed'));
           },
-          onProgress: (original, updates) => setPendingFiles(prev => prev.map(file =>
-            (file._tempUri || file._id || file.id) === (original._tempUri || original._id || original.id)
-              ? { ...file, ...updates } : file)),
+          onProgress: (original, updates) => setPendingFiles(prev => {
+            const key = original._tempUri || original._id || original.id;
+            if (!prev.some(file => (file._tempUri || file._id || file.id) === key)) return prev;
+            return prev.map(file => (file._tempUri || file._id || file.id) === key ? { ...file, ...updates } : file);
+          }),
         });
-        if (!failedFiles.length) onCancelReply?.();
       }
-      latestContentRef.current = { html: '', text: '' };
-      editorRef.current?.clear();
-      onChangeText('');
-      const selectedKeys = new Set(filesToSend.map(file => file._tempUri || file._id || file.id));
-      setPendingFiles(prev => [...failedFiles, ...prev.filter(file => !selectedKeys.has(file._tempUri || file._id || file.id))]);
-      setPendingMentions([]);
-      clearDraft(channelId, activeWorkspaceId, null);
+      if (editingMessage) {
+        latestContentRef.current = { html: '', text: '' };
+        editorRef.current?.clear();
+        onChangeText('');
+        setPendingMentions([]);
+      }
+      replaceSubmittedFiles(failedFiles);
+      saveDraftNow(pendingFilesRef.current);
       if (failedFiles.length) {
-        saveDraftNow(failedFiles);
         Alert.alert('Some files could not be sent', `${failedFiles.length} file(s) remain in the composer. Retry or send them again.\n${failedFiles[0].error}`);
       }
-      lastSavedRef.current = '';
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       emitTyping(channelId, false);
     } catch (error) {
+      if (!editingMessage && plainContent && !textAccepted) {
+        const current = latestContentRef.current;
+        const restored = {
+          html: htmlContent + (current.html || markdownToHtml(current.text || '')),
+          text: [plainContent, current.text].filter(Boolean).join('\n'),
+        };
+        latestContentRef.current = restored;
+        editorRef.current?.setContent(restored.html, restored.text);
+        onChangeText(restored.html);
+        setPendingMentions(currentMentions => [...new Set([...pendingMentions, ...currentMentions])]);
+      }
+      if (!editingMessage && filesToSend.length) replaceSubmittedFiles(filesToSend);
+      if (!editingMessage) saveDraftNow(pendingFilesRef.current);
       Alert.alert('Message could not be sent', error?.message || 'Please try again.');
     } finally {
       sendLock.current = false;
@@ -515,6 +551,8 @@ const MessageComposer = React.memo(function MessageComposer({
   }, [
     text,
     onSend,
+    onStageMedia,
+    onMediaFailed,
     replyingTo,
     editingMessage,
     pendingFiles,
@@ -704,6 +742,17 @@ const MessageComposer = React.memo(function MessageComposer({
   const handleFilesSelected = useCallback(
     async (pickedFiles) => {
       if (!pickedFiles || !pickedFiles.length) return;
+      try {
+        pickedFiles = await Promise.all(pickedFiles.map(async file => {
+          if (!/^(ph|assets-library):\/\//.test(file.uri || '')) return file;
+          const info = await MediaLibrary.getAssetInfoAsync(file.assetId || file.id || file.uri.replace(/^ph:\/\//, ''));
+          if (!info?.localUri || !info.localUri.startsWith('file://')) throw new Error('This photo is not available locally. Download it from iCloud or select it again through View Library.');
+          return { ...file, uri: info.localUri };
+        }));
+      } catch (error) {
+        Alert.alert('Media could not be opened', error.message);
+        return;
+      }
 
       const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
       const oversizedFiles = pickedFiles.filter(f => (f.fileSize || f.size || 0) > MAX_FILE_SIZE);
@@ -956,7 +1005,7 @@ const MessageComposer = React.memo(function MessageComposer({
                 const isVideo = file.mimeType?.startsWith('video/') || /\.(mp4|mov|mkv)$/i.test(file.name);
                 return (
                   <View
-                    key={i}
+                    key={file._tempUri || file.uri || file._id || file.id || i}
                     style={[
                       { 
                         position: 'relative',
@@ -983,10 +1032,10 @@ const MessageComposer = React.memo(function MessageComposer({
                       }}
                     >
                       {isImage ? (
-                        <Image source={{ uri: file.url || file._tempUri || file.thumbnailUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                        <Image source={{ uri: file.localPreviewUri || file._tempUri || file.uri || file.url || file.thumbnailUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                       ) : isVideo ? (
                         <View style={{ width: '100%', height: '100%' }}>
-                          <AppVideo sourceUri={file.url || file._tempUri} style={{ width: '100%', height: '100%' }} resizeMode="cover" shouldPlay={false} useNativeControls={false} />
+                          <AppVideo sourceUri={file.localPreviewUri || file._tempUri || file.uri || file.url} posterUri={file.thumbnailUrl} style={{ width: '100%', height: '100%' }} resizeMode="cover" shouldPlay={false} useNativeControls={false} />
                           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
                             <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, padding: 4 }}>
                               <Play size={16} color="#FFF" />
@@ -1003,14 +1052,14 @@ const MessageComposer = React.memo(function MessageComposer({
                       )}
                     </TouchableOpacity>
                     {file.status === 'uploading' && (
-                      <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+                      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
                         <Loader2 size={24} color="#FFF" />
                         <Text style={{ color: '#FFF', fontSize: 10, marginTop: 4, fontWeight: 'bold' }}>{file.progress || 0}%</Text>
                       </View>
                     )}
                     {file.status === 'failed' && (
                       <TouchableOpacity 
-                        style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}
                         onPress={() => retryUpload(i)}
                       >
                         <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>Retry</Text>
@@ -1298,7 +1347,7 @@ const MessageComposer = React.memo(function MessageComposer({
           {previewFile && (
             (previewFile.mimeType?.startsWith('video/') || /\.(mp4|mov|mkv)$/i.test(previewFile.name)) ? (
               <AppVideo
-                sourceUri={previewFile.url || previewFile._tempUri}
+                sourceUri={previewFile.localPreviewUri || previewFile._tempUri || previewFile.uri || previewFile.url}
                 style={{ width: '100%', height: '80%' }}
                 resizeMode="contain"
                 useNativeControls
@@ -1306,7 +1355,7 @@ const MessageComposer = React.memo(function MessageComposer({
               />
             ) : (
               <Image
-                source={{ uri: previewFile.url || previewFile._tempUri || previewFile.thumbnailUrl }}
+                source={{ uri: previewFile.localPreviewUri || previewFile._tempUri || previewFile.uri || previewFile.url || previewFile.thumbnailUrl }}
                 style={{ width: '100%', height: '80%' }}
                 resizeMode="contain"
               />

@@ -107,6 +107,8 @@ export const useSendMessage = () => {
 
   return useMutation({
     mutationFn: async ({ channelId, content, options = {}, tempId }) => {
+      // Reuse onMutate for local media rows before upload; no backend request.
+      if (options._stageOnly) return { isStaged: true };
       const {
         htmlContent, threadId, parentMessageId, replyTo,
         fileReferences, attachments, mentions, contentType,
@@ -202,16 +204,18 @@ export const useSendMessage = () => {
       // Cancel any in-flight refetch without awaiting to prevent race conditions during rapid concurrent optimistic updates
       queryClient.cancelQueries({ queryKey: queryKeys.messages(channelId) });
       const previousData = queryClient.getQueryData(queryKeys.messages(channelId));
+      const stagedMessage = previousData?.pages?.flatMap(page => page.items || []).find(message => message._id === tempId);
 
       const user = getUser();
       const optimisticMessage = {
         _id: tempId,
+        tempId,
         content,
         htmlContent: options?.htmlContent,
         channelId,
         authorId: user,
         senderSnapshot: { name: user?.name, avatar: user?.avatar },
-        createdAt: new Date().toISOString(),
+        createdAt: stagedMessage?.createdAt || new Date().toISOString(),
         pending: true,
         fileReferences: options?.fileReferences || [],
         attachments: options?.attachments || [],
@@ -273,6 +277,7 @@ export const useSendMessage = () => {
     },
 
     onSuccess: (data, { channelId, tempId, options = {} }) => {
+      if (data.isStaged) return;
       if (data.isOffline) return; // Keep the pending optimistic message visible
 
       // Thread replies are managed exclusively by the threadReplies cache — don't

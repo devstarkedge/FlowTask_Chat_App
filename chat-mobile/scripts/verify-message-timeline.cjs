@@ -53,7 +53,7 @@ async function main() {
   const hooks = load('src/hooks/queries/useMessages.js', {
     '@tanstack/react-query': { useInfiniteQuery: config => config, useMutation: config => config, useQueryClient: () => client },
     '../../services/api': { __esModule: true, default: { get: async () => ({ data: { data: { items: apiItems, hasMore: true } } }) } },
-    '../../queries/queryKeys': { queryKeys }, '../../stores/authStore': {}, '../../services/offlineQueue': {}, '../../stores/chatStore': {},
+    '../../queries/queryKeys': { queryKeys }, '../../stores/authStore': { useAuthStore: { getState: () => ({ user: { _id: 'sender' } }) } }, '../../services/offlineQueue': {}, '../../stores/chatStore': {},
   });
   const history = await hooks.useMessages('channel').queryFn({ pageParam: null });
   assert.deepEqual(ids(history.items), [...ids(mixed), 'temp-X']);
@@ -62,6 +62,18 @@ async function main() {
   const refreshed = await hooks.useMessages('channel').queryFn({ pageParam: null });
   assert.deepEqual(ids(refreshed.items), ids(mixed));
   assert.deepEqual(ids(refreshed.items), ids(timeline.messagesFromPages([{ items: mixed }])));
+  const stagedMutation = hooks.useSendMessage();
+  const stagingArgs = { channelId: 'staged-channel', content: '', tempId: 'temp-media-stage', options: { _stageOnly: true, optimisticAttachments: [imageA] } };
+  await stagedMutation.onMutate(stagingArgs);
+  const beforeUpload = client.getQueryData(['messages', 'staged-channel']).pages[0].items[0];
+  assert.equal(beforeUpload._id, stagingArgs.tempId);
+  assert.equal(beforeUpload.optimisticAttachments[0].url, imageA.url);
+  const stageResult = await stagedMutation.mutationFn(stagingArgs);
+  assert.equal(stageResult.isStaged, true, 'Staging creates only a local row, not a backend message');
+  stagedMutation.onSuccess(stageResult, stagingArgs);
+  await stagedMutation.onMutate({ ...stagingArgs, options: { fileReferences: ['file-A'], optimisticAttachments: [imageA] } });
+  assert.equal(client.getQueryData(['messages', 'staged-channel']).pages[0].items.length, 1);
+  assert.equal(client.getQueryData(['messages', 'staged-channel']).pages[0].items[0].createdAt, beforeUpload.createdAt, 'Upload completion must not reorder the staged row');
   client.setQueryData(['messages', 'channel'], {
     pages: [{ items: mixed.slice(2), nextCursor: mixed[2]._id }], pageParams: [null],
   });

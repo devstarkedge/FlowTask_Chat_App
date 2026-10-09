@@ -9,6 +9,15 @@ const config = getDefaultConfig(projectRoot);
 config.projectRoot = projectRoot;
 config.watchFolders = [path.resolve(projectRoot)];
 
+// Windows creates directory watchers for the file map. Native build trees and
+// exported bundles are not app sources; match their absolute paths as Metro does.
+const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const rootPattern = projectRoot.split(/[\\/]/).map(escape).join('[\\\\/]');
+const generatedFolders = new RegExp(`^${rootPattern}[\\\\/](?:dist(?:_[^\\\\/]+)?|coverage|\\.verification-[^\\\\/]+|android[\\\\/](?:\\.gradle|build|app[\\\\/]build)|ios[\\\\/](?:Pods|build))(?:[\\\\/]|$)`);
+const existingBlockList = config.resolver.blockList || [];
+config.resolver.blockList = [...(Array.isArray(existingBlockList) ? existingBlockList : [existingBlockList]), generatedFolders];
+if (process.platform === 'win32') config.maxWorkers = 2;
+
 // Ensure .jsx is recognized
 config.resolver = {
   ...config.resolver,

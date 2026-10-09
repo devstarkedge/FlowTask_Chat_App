@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import './src/i18n';
 import { Keyboard, Dimensions, AppState } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './src/queries/queryClient';
+import { restoreNavigationState, saveNavigationState, isNavigationEntryUrl } from './src/services/navigationRecovery';
 
 import AppNavigator from "./src/navigation/AppNavigation";
 import { useAuthStore } from "./src/stores/authStore";
@@ -55,8 +56,50 @@ export default function App() {
   const initPrefs = usePreferencesStore((state) => state.init);
   const fetchNotifPrefs = useNotificationPrefStore((state) => state.fetchPreferences);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const authInitialized = useAuthStore((state) => state.isInitialized);
+  const userId = useAuthStore((state) => state.user?._id || state.user?.id);
   const activeWorkspaceId = useWorkspaceStore((state) => state?.activeWorkspaceId ?? null);
   const themeSubscriptionRef = useRef(null);
+  const [workspaceHydrated, setWorkspaceHydrated] = useState(() => useWorkspaceStore.persist.hasHydrated());
+  const [navigationRestore, setNavigationRestore] = useState({ ready: false, state: undefined });
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve(workspaceHydrated ? undefined : useWorkspaceStore.persist.rehydrate())
+      .catch(error => console.warn('[Startup] Workspace restore failed:', error?.message))
+      .finally(() => { if (!cancelled) setWorkspaceHydrated(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (navigationRestore.ready || !authInitialized || !workspaceHydrated) return;
+    let cancelled = false;
+    (async () => {
+      const initialUrl = await Linking.getInitialURL();
+      const state = accessToken ? await restoreNavigationState(userId, activeWorkspaceId, isNavigationEntryUrl(initialUrl) ? initialUrl : null) : undefined;
+      if (!cancelled) setNavigationRestore({ ready: true, state });
+    })().catch(error => {
+      console.warn('[Navigation] Restore failed:', error?.message);
+      if (!cancelled) setNavigationRestore({ ready: true, state: undefined });
+    });
+    return () => { cancelled = true; };
+  }, [authInitialized, workspaceHydrated, accessToken, userId, activeWorkspaceId, navigationRestore.ready]);
+
+  const persistNavigation = state => {
+    if (!accessToken) return;
+    saveNavigationState(userId, activeWorkspaceId, state, () => {
+      const auth = useAuthStore.getState();
+      return !!auth.accessToken && (auth.user?._id || auth.user?.id) === userId
+        && useWorkspaceStore.getState().activeWorkspaceId === activeWorkspaceId;
+    }).catch(error => console.warn('[Navigation] Save failed:', error?.message));
+  };
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active' && navigationRef.isReady()) persistNavigation(navigationRef.getRootState());
+    });
+    return () => subscription.remove();
+  }, [accessToken, userId, activeWorkspaceId]);
 
 
 
@@ -76,7 +119,7 @@ export default function App() {
         return;
       }
       themeSubscriptionRef.current = subscription;
-    })();
+    })().catch(error => console.warn('[Startup] Initialization failed:', error?.message));
     return () => {
       cancelled = true;
       if (themeSubscriptionRef.current) {
@@ -150,10 +193,12 @@ export default function App() {
           <ErrorBoundary>
             <ThemeProvider>
               <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                <NavigationContainer ref={navigationRef} linking={linking} onReady={handlePushNavigationReady} onStateChange={handlePushNavigationReady}>
+                {navigationRestore.ready && <NavigationContainer ref={navigationRef} linking={linking} initialState={navigationRestore.state}
+                  onReady={() => { persistNavigation(navigationRef.getRootState()); handlePushNavigationReady(); }}
+                  onStateChange={state => { persistNavigation(state); handlePushNavigationReady(); }}>
                   <AppNavigator />
                   <GlobalToastProvider />
-                </NavigationContainer>
+                </NavigationContainer>}
               </KeyboardProvider>  
             </ThemeProvider>
           </ErrorBoundary>

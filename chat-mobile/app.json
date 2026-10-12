@@ -79,6 +79,10 @@
       }
     },
     "plugins": [
+      [
+        "./plugins/withAndroidLauncherInset.cjs",
+        { "insetPercent": 14 }
+      ],
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-audio",

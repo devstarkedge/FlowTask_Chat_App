@@ -1,5 +1,10 @@
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
+// Record precedence without retaining/logging a second copy of the URI.
+const mongoEnvOverriddenByDotenv = (() => {
+  const supplied = process.env.MONGO_URI;
+  dotenv.config({ override: true });
+  return Boolean(supplied && supplied !== process.env.MONGO_URI);
+})();
 
 /**
  * Centralized environment configuration with validation.
@@ -70,6 +75,7 @@ const env = Object.freeze({
 
   // Database
   MONGO_URI: process.env.MONGO_URI,
+  MONGO_ENV_OVERRIDDEN_BY_DOTENV: mongoEnvOverriddenByDotenv,
 
   // Auth — Native Chat tokens
   JWT_SECRET: process.env.JWT_SECRET,

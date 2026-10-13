@@ -558,7 +558,7 @@ export const canvasAPI = {
   updateSavedStatus: (canvasId, status) => api.patch(`/canvas/save-later/${canvasId}/status`, { status }),
   getSavedCanvases: (channelId, status) =>
     api.get(channelId ? `/canvas/saved/${channelId}` : "/canvas/saved", { params: { status } }),
-  togglePublicShare: (canvasId) => api.post(`/canvas/share/${canvasId}`),
+  togglePublicShare: (canvasId, isPublic) => api.post(`/canvas/share/${canvasId}`, { isPublic }),
   getPublic: (token) => api.get(`/canvas/public/${token}`),
 };
 

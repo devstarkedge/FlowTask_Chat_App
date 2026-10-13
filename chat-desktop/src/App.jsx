@@ -10,6 +10,7 @@ import { isDesktopApp, updateWindowControlsContrast } from './services/desktopSe
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
 import DevTemplateSelector from './pages/DevTemplateSelector'
 import CanvasDeepLink from './components/canvas/CanvasDeepLink'
+const PublicCanvas = lazy(() => import('./components/canvas/PublicCanvas'))
 
 // Lazy load auth & setup pages (rarely revisited after login)
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -185,6 +186,7 @@ function App() {
     <Suspense fallback={<PageFallback />}>
       <Routes>
         {/* Public routes */}
+        <Route path="/public/canvas/:token" element={<PublicCanvas />} />
         <Route path="/" element={!user ? <LandingPage /> : <AuthenticatedDefaultRedirect />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/login" element={!user ? <LoginPage /> : <AuthenticatedDefaultRedirect />} />

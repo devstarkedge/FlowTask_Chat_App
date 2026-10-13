@@ -1,6 +1,23 @@
 import mongoose from 'mongoose';
 import logger from '../utils/logger.js';
 import env from './environment.js';
+import { getDatabaseIdentity } from './databaseIdentity.js';
+
+function logDatabaseIdentity(connection, event) {
+  logger.info('MongoDB Runtime Identity', {
+    metric: 'db_identity', event, ...getDatabaseIdentity(connection, env),
+  });
+}
+
+function databaseErrorDetails(error) {
+  const cause = error?.cause || error;
+  return {
+    error: error?.name || 'Error',
+    code: cause?.code || error?.code || null,
+    syscall: cause?.syscall || error?.syscall || null,
+    hostname: cause?.hostname || error?.hostname || null,
+  };
+}
 
 /**
  * Enterprise MongoDB Connection Manager.
@@ -161,6 +178,7 @@ async function reconnectWithBackoff(mode = 'runtime') {
     : RECONNECT.RUNTIME_MAX_RETRIES;
 
   reconnectAttempt = 0;
+  let lastError;
 
   while (reconnectAttempt < maxRetries && !isShuttingDown) {
     reconnectAttempt++;
@@ -183,59 +201,44 @@ async function reconnectWithBackoff(mode = 'runtime') {
     if (isShuttingDown) break;
 
     try {
-      if (mongoose.connection.readyState === 1 || mongoose.connection.readyState === 2) {
+      if (mongoose.connection.readyState === 1) {
         isConnected = true;
         isReconnecting = false;
+        globalCache.conn = mongoose;
+        logDatabaseIdentity(mongoose.connection, 'driver_recovered');
         return;
       }
-      
-      if (mongoose.connection.readyState !== 0) {
-        await mongoose.disconnect();
+      let conn;
+      if (mongoose.connection.readyState === 2) {
+        // Connecting is not ready: wait for the driver's result before booting.
+        await mongoose.connection.asPromise();
+        conn = mongoose;
+      } else {
+        if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
+        conn = await mongoose.connect(env.MONGO_URI, MONGOOSE_OPTIONS);
       }
-
-      const conn = await mongoose.connect(env.MONGO_URI, MONGOOSE_OPTIONS);
       globalCache.conn = conn;
 
       isConnected = true;
       isReconnecting = false;
+      const attempts = reconnectAttempt;
       reconnectAttempt = 0;
 
       logger.info('MongoDB reconnected successfully', {
         metric: 'db_lifecycle',
         event: 'reconnected',
-        attempts: reconnectAttempt,
+        attempts,
       });
+      logDatabaseIdentity(conn.connection, 'reconnected');
 
       startHealthCheck();
       return;
     } catch (error) {
-      console.log('--- DATABASE CONNECTION FAILURE ---');
-      console.error("--- MONGODB DRIVER ERROR OBJECT ---");
-      console.error("error:", error);
-      console.error("error.name:", error.name);
-      console.error("error.message:", error.message);
-      console.error("error.code:", error.code);
-      console.error("error.reason:", error.reason);
-      console.error("error.cause:", error.cause);
-      console.error("error.stack:", error.stack);
-
-      if (error.reason && error.reason.servers) {
-        for (const [address, server] of error.reason.servers.entries()) {
-          if (server.error) {
-            console.error(`\n--- DEEP INSPECTION FOR: ${address} ---`);
-            console.error("server.error.name:", server.error.name);
-            console.error("server.error.message:", server.error.message);
-            console.error("server.error.code:", server.error.code);
-            console.error("server.error.cause:", server.error.cause);
-            console.error("server.error.stack:", server.error.stack);
-          }
-        }
-      }
-
+      lastError = error;
       logger.error('MongoDB reconnection failed', {
         metric: 'db_reconnect',
         attempt: reconnectAttempt,
-        error: error.message,
+        ...databaseErrorDetails(error),
         nextRetryMs: Math.min(
           RECONNECT.BASE_DELAY_MS * Math.pow(RECONNECT.BACKOFF_FACTOR, reconnectAttempt),
           RECONNECT.MAX_DELAY_MS,
@@ -252,7 +255,7 @@ async function reconnectWithBackoff(mode = 'runtime') {
       event: 'connection_failed',
       attempts: reconnectAttempt,
     });
-    // Removed process.exit(1) to prevent Render container from crash-looping
+    throw new Error('MongoDB is unavailable after startup retries; dependent services were not started.', { cause: lastError });
   }
 }
 
@@ -308,17 +311,24 @@ function stopHealthCheck() {
  * Connect to MongoDB with retry logic and lifecycle monitoring.
  */
 export async function connectDatabase() {
-  if (globalCache.conn) {
+  if (globalCache.conn && mongoose.connection.readyState === 1) {
     isConnected = true;
     logger.info('MongoDB Reusing Existing Connection', {
       metric: 'db_lifecycle',
       event: 'reusing_connection',
       poolSize: MONGOOSE_OPTIONS.maxPoolSize,
     });
+    logDatabaseIdentity(globalCache.conn.connection, 'reusing_connection');
     return globalCache.conn;
   }
-  if (isConnected) return;
+  // Every startup caller shares the same readiness barrier.
+  if (globalCache.promise) return globalCache.promise;
+  globalCache.promise = connectInitialDatabase();
+  try { return await globalCache.promise; }
+  finally { globalCache.promise = null; }
+}
 
+async function connectInitialDatabase() {
   try {
     const startTime = performance.now();
     const conn = await mongoose.connect(env.MONGO_URI, MONGOOSE_OPTIONS);
@@ -337,37 +347,18 @@ export async function connectDatabase() {
       maxIdleTimeMS: MONGOOSE_OPTIONS.maxIdleTimeMS,
       activeConnections: conn.connection.base.connections.length,
     });
+    logDatabaseIdentity(conn.connection, 'connected');
   } catch (error) {
-    console.log('--- DATABASE CONNECTION FAILURE ---');
-    console.error("--- MONGODB DRIVER ERROR OBJECT ---");
-    console.error("error:", error);
-    console.error("error.name:", error.name);
-    console.error("error.message:", error.message);
-    console.error("error.code:", error.code);
-    console.error("error.reason:", error.reason);
-    console.error("error.cause:", error.cause);
-    console.error("error.stack:", error.stack);
-
-    if (error.reason && error.reason.servers) {
-      for (const [address, server] of error.reason.servers.entries()) {
-        if (server.error) {
-          console.error(`\n--- DEEP INSPECTION FOR: ${address} ---`);
-          console.error("server.error.name:", server.error.name);
-          console.error("server.error.message:", server.error.message);
-          console.error("server.error.code:", server.error.code);
-          console.error("server.error.cause:", server.error.cause);
-          console.error("server.error.stack:", server.error.stack);
-        }
-      }
-    }
-
     logger.error('MongoDB initial connection failed, starting reconnect', {
       metric: 'db_lifecycle',
       event: 'initial_connection_failed',
-      error: error.message,
+      ...databaseErrorDetails(error),
     });
     await reconnectWithBackoff('initial');
-    return;
+  }
+
+  if (mongoose.connection.readyState !== 1) {
+    throw new Error('MongoDB did not become ready; dependent services were not started.');
   }
 
   // ─── Connection Event Handlers ─────────────────────────────────────
@@ -400,10 +391,12 @@ export async function connectDatabase() {
       metric: 'db_lifecycle',
       event: 'driver_reconnected',
     });
+    logDatabaseIdentity(mongoose.connection, 'driver_reconnected');
   });
 
   // Start health monitoring
   startHealthCheck();
+  return globalCache.conn;
 }
 
 /**

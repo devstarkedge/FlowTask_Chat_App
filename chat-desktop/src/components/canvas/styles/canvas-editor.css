@@ -475,7 +475,7 @@
   top: 0;
   bottom: 0;
   width: 4px;
-  background-color: var(--accent-primary, #6366f1);
+  background-color: transparent;
   pointer-events: none;
 }
 

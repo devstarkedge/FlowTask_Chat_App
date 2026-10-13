@@ -12,7 +12,6 @@ import {
   sanitizeDocJSON,
   EMPTY_DOC,
   slashMenuState,
-  selectionToolbarPosition,
   buildExtensions,
   buildNodeViews,
 } from "./CanvasEditorCore";
@@ -20,6 +19,7 @@ import { useCanvasSave } from "./useCanvasSave";
 import { useCanvasContentSync } from "./useCanvasContentSync";
 import { useCanvasCursor } from "./useCanvasCursor";
 import { useCanvasTyping } from "./useCanvasTyping";
+import { textSelectionPosition, dismissTextSelectionOnMedia } from './textSelection';
 
 export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
   const user = useAuthStore((s) => s.user);
@@ -85,13 +85,9 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       closeSlashMenuRef.current();
     }
 
-    const { selection } = editorInstance.state;
-    if (!selection.empty) {
-      showSelectionToolbarRef.current(
-        slashMenuState
-          ? selectionToolbarPosition(editorInstance)
-          : { x: 0, y: 0 },
-      );
+    const position = textSelectionPosition(editorInstance);
+    if (position) {
+      showSelectionToolbarRef.current(position);
     } else {
       hideSelectionToolbarRef.current();
     }
@@ -138,6 +134,7 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
         },
         blur: () => {
           setFocused(false);
+          hideSelectionToolbarRef.current();
           const prov = providerRef.current;
           if (prov?.awareness) {
             try {
@@ -152,6 +149,8 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
       },
     },
     nodeViews,
+    onFocus: ({ editor: e }) => syncContextualUiRef.current(e),
+    onBlur: () => hideSelectionToolbarRef.current(),
     onUpdate: ({ editor: e }) => {
       contentSync.localEditRef.current = true;
       wordCountRef.current = e.storage.characterCount.words();
@@ -167,11 +166,12 @@ export function useCanvasEditor({ canvas, onSave, provider, ydoc }) {
 
   useEffect(() => {
     if (!editor) return undefined;
-    const scrollEl = document.querySelector(".canvas-scroll-surface");
-    if (!scrollEl) return undefined;
     const onScroll = () => syncContextualUiRef.current(editor);
-    scrollEl.addEventListener("scroll", onScroll, { passive: true });
-    return () => scrollEl.removeEventListener("scroll", onScroll);
+    const onPointer = event => { dismissTextSelectionOnMedia(editor, event.target); syncContextualUiRef.current(editor); };
+    document.addEventListener('scroll', onScroll, true);
+    document.addEventListener('pointerdown', onPointer, true);
+    window.addEventListener('resize', onScroll);
+    return () => { document.removeEventListener('scroll', onScroll, true); document.removeEventListener('pointerdown', onPointer, true); window.removeEventListener('resize', onScroll); };
   }, [editor]);
 
   // ── Patch contentSync with the real editor after useEditor creates it ─────────

@@ -176,6 +176,7 @@ async function authenticateCanvasSession({ token, documentName, requestParameter
       userId: `anonymous-${crypto.randomBytes(4).toString('hex')}`,
       userName: "Anonymous Viewer",
       userAvatar: null,
+      readOnly: true,
     };
   }
 
@@ -344,6 +345,7 @@ export async function startCanvasCollaborationServer() {
         });
 
         const ctx = await authenticateCanvasSession(payload);
+        if (ctx.readOnly) payload.connection.readOnly = true;
         logger.debug('[CANVAS COLLAB] authentication success', {
           canvasId: ctx?.canvasId,
           workspaceId: ctx?.workspaceId,
@@ -437,6 +439,17 @@ export async function startCanvasCollaborationServer() {
   }
 
   return collaborationServer;
+}
+
+export function revokePublicCanvasSessions(canvasId) {
+  for (const [name, document] of collaborationServer?.documents || []) {
+    if (parseCanvasDocumentName(name) !== String(canvasId)) continue;
+    for (const connection of document.getConnections()) {
+      if (!connection.context?.readOnly) continue;
+      try { connection.close({ code: 4403, reason: 'Public sharing disabled' }); }
+      catch (error) { logger.warn('[CANVAS COLLAB] failed to close revoked public session', { canvasId, error: error.message }); }
+    }
+  }
 }
 
 export async function stopCanvasCollaborationServer() {

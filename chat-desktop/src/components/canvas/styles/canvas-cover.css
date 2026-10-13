@@ -20,7 +20,7 @@
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: 48px;
+  font-size: 32px;
   line-height: 1.15;
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -32,6 +32,10 @@
 .canvas-title-input::placeholder {
   color: var(--text-muted);
 }
+
+.canvas-title-editor { flex: 1; min-width: 0; width: 100%; }
+.canvas-title-input p { margin: 0; overflow-wrap: anywhere; }
+.canvas-title-input p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: var(--text-muted); pointer-events: none; }
 
 .canvas-subtitle {
   margin: 6px 0 16px;

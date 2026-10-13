@@ -283,6 +283,7 @@ async function startServer() {
   try {
     // 1. Connect to MongoDB
     await connectDatabase();
+    if (!isDatabaseConnected()) throw new Error('MongoDB is not ready; startup was stopped before database queries.');
 
     // 2. Register webhook event handlers (only when FlowTask is enabled)
     if (env.FLOWTASK_ENABLED) {

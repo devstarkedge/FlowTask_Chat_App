@@ -29,6 +29,9 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
   const [currentAccessLevel, setCurrentAccessLevel] = useState("view");
   const [isSaving, setIsSaving] = useState(false);
   const [isTogglingPublic, setIsTogglingPublic] = useState(false);
+  const [sharing, setSharing] = useState(canvas?.sharing || { isPublic: false });
+  const publicToggleLock = useRef(false);
+  useEffect(() => { setSharing(canvas?.sharing || { isPublic: false }); }, [canvas?._id, canvas?.sharing]);
   
   // Accordion state
   const [expandedSection, setExpandedSection] = useState(null); // 'people' | 'advanced' | null
@@ -65,7 +68,10 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
       setExpandedSection(null); // reset
       setSearchQuery("");
     }
-  }, [isOpen, canvas]);
+  // Initialize the modal on entry, not on every saved metadata response.
+  // A public-toggle response must not collapse the section or reset edits.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, canvas?._id]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -172,19 +178,27 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
   }, [canvasId, currentAccessLevel, userRoles, updateCanvasMetadata, onClose]);
 
   const handleTogglePublicShare = useCallback(async () => {
-    if (!canvasId) return;
+    if (!canvasId || publicToggleLock.current) return;
+    publicToggleLock.current = true;
     setIsTogglingPublic(true);
     try {
-      const res = await canvasAPI.togglePublicShare(canvasId);
-      if (res.data?.success) {
+      const res = await canvasAPI.togglePublicShare(canvasId, !sharing.isPublic);
+      if (res.data?.success && typeof res.data.data?.sharing?.isPublic === 'boolean') {
+        setSharing(res.data.data.sharing);
+        const nextSharing = res.data.data.sharing;
+        useCanvasStore.setState(state => ({
+          activeCanvas: state.activeCanvas?._id === canvasId ? { ...state.activeCanvas, sharing: nextSharing } : state.activeCanvas,
+          canvasesByChannel: Object.fromEntries(Object.entries(state.canvasesByChannel || {}).map(([id, items]) => [id, items.map(item => item._id === canvasId ? { ...item, sharing: nextSharing } : item)])),
+        }));
         toast.success(res.data.data.sharing?.isPublic ? "Public sharing enabled" : "Public sharing disabled");
-      }
+      } else throw new Error('Sharing update failed');
     } catch (err) {
       toast.error("Failed to toggle public share");
     } finally {
       setIsTogglingPublic(false);
+      publicToggleLock.current = false;
     }
-  }, [canvasId]);
+  }, [canvasId, sharing.isPublic]);
 
   const handleShareToChannel = useCallback(async () => {
     if (!canvasId || !channelId) return;
@@ -198,7 +212,7 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
         canvasMeta: {
           canvasId: canvasId,
           title: canvas?.title || "Untitled canvas",
-          publicToken: canvas?.sharing?.isPublic ? canvas.sharing.publicToken : null,
+          publicToken: sharing.isPublic ? sharing.publicToken : null,
           permission: currentAccessLevel,
           previewText: canvas?.content 
             ? canvas.content.replace(/<[^>]*>?/gm, '').substring(0, 200) 
@@ -212,12 +226,12 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
   }, [canvasId, channelId, canvas, currentAccessLevel, handleDone, sendMessage]);
 
   const handleCopyPublicLink = useCallback(() => {
-    if (!canvas?.sharing?.publicToken) return;
-    const url = getPublicCanvasUrl(canvas.sharing.publicToken);
+    if (!sharing.publicToken) return;
+    const url = getPublicCanvasUrl(sharing.publicToken);
     navigator.clipboard.writeText(url).then(() => {
       toast.success("Public link copied");
     });
-  }, [canvas?.sharing?.publicToken]);
+  }, [sharing.publicToken]);
 
   if (!isOpen) return null;
 
@@ -440,14 +454,14 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
                       disabled={isTogglingPublic}
                       style={{
                         padding: "6px 12px", borderRadius: 16, border: "none", fontWeight: 600, fontSize: 12, cursor: "pointer",
-                        background: canvas?.sharing?.isPublic ? "#10b981" : "#e2e8f0",
-                        color: canvas?.sharing?.isPublic ? "#fff" : "var(--text-primary)",
+                        background: sharing.isPublic ? "#10b981" : "#e2e8f0",
+                        color: sharing.isPublic ? "#fff" : "var(--text-primary)",
                       }}
                     >
-                      {isTogglingPublic ? "..." : canvas?.sharing?.isPublic ? "Enabled" : "Disabled"}
+                      {isTogglingPublic ? "..." : sharing.isPublic ? "Enabled" : "Disabled"}
                     </button>
                   </div>
-                  {canvas?.sharing?.isPublic && canvas?.sharing?.publicToken && (
+                  {sharing.isPublic && sharing.publicToken && (
                     <button onClick={handleCopyPublicLink} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#3b82f6", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                       <Link2 size={14} /> Copy Public Link
                     </button>

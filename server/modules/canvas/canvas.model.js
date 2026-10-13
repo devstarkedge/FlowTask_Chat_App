@@ -22,6 +22,7 @@ const canvasSchema = new Schema(
       type: String,
       default: "Untitled Canvas",
     },
+    titleDocument: { type: Object, default: null },
 
     type: {
       type: String,

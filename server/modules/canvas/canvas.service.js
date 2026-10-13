@@ -1,4 +1,5 @@
 import canvasRepository from "./canvas.repository.js";
+import { normalizeCanvasTitle } from './canvasTitle.js';
 import channelRepository from "../channels/channel.repository.js";
 import CanvasBlock from "./canvasBlock.model.js";
 import CanvasComment from "./canvasComment.model.js";
@@ -207,6 +208,7 @@ class CanvasService {
         channelId: canvas.channelId,
         snapshot: {
           title: canvas.title,
+          titleDocument: canvas.titleDocument || null,
           cover: canvas.cover || null,
           content: canvas.content || null,
           blocks: blocks.map((b) => ({
@@ -352,6 +354,9 @@ class CanvasService {
 
     const allowedUpdates = {};
     if (updates.title !== undefined) allowedUpdates.title = updates.title;
+    if (updates.titleDocument !== undefined) {
+      Object.assign(allowedUpdates, normalizeCanvasTitle(updates.titleDocument));
+    } else if (updates.title !== undefined) allowedUpdates.titleDocument = null;
     if (updates.type !== undefined) allowedUpdates.type = updates.type;
     if (updates.cover !== undefined) allowedUpdates.cover = updates.cover;
     if (updates.content !== undefined) allowedUpdates.content = this.normalizeContent(updates.content);
@@ -371,6 +376,7 @@ class CanvasService {
         channelId: canvas.channelId,
         updates: {
           title: updatedCanvas.title,
+          titleDocument: updatedCanvas.titleDocument || null,
           type: updatedCanvas.type,
           cover: updatedCanvas.cover,
           content: updatedCanvas.content,
@@ -605,6 +611,7 @@ class CanvasService {
 
     // Update metadata from snapshot
     canvas.title = version.snapshot.title || canvas.title;
+    canvas.titleDocument = version.snapshot.titleDocument || null;
     canvas.cover = version.snapshot.cover || null;
     canvas.content = this.normalizeContent(version.snapshot.content);
     canvas.updatedBy = userId;
@@ -640,6 +647,7 @@ class CanvasService {
         canvasId,
         channelId: canvas.channelId,
         title: canvas.title,
+        titleDocument: canvas.titleDocument || null,
         cover: canvas.cover,
         content: canvas.content,
       },
@@ -876,11 +884,13 @@ class CanvasService {
   }
 
   // ── Toggle Public Share
-  async togglePublicShare(canvasId, userId, workspaceId) {
+  async togglePublicShare(canvasId, userId, workspaceId, isPublic) {
     if (!workspaceId) throw new ValidationError("workspaceId is required");
     const Canvas = (await import("./canvas.model.js")).default;
     const canvas = await Canvas.findOne({ _id: canvasId, workspaceId });
     if (!canvas) throw new NotFoundError("Canvas not found");
+    if (isPublic !== undefined && typeof isPublic !== 'boolean') throw new ValidationError('isPublic must be a boolean');
+    if (isPublic !== undefined && !!canvas.sharing?.isPublic === isPublic) return canvas;
 
     if (!canvas.sharing) {
       canvas.sharing = { isPublic: false, publicToken: null };
@@ -897,6 +907,11 @@ class CanvasService {
     }
 
     await canvas.save();
+
+    if (!canvas.sharing.isPublic) {
+      const { revokePublicCanvasSessions } = await import('./canvasCollaboration.server.js');
+      revokePublicCanvasSessions(canvasId);
+    }
 
     // Broadcast canvas update
     emitToChannel(

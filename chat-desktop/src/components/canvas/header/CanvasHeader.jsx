@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import debounce from "lodash/debounce";
+import toast from 'react-hot-toast';
 import { MoreHorizontal, MoreVertical, Image as ImageIcon, Move } from "lucide-react";
 import { useCanvasStore } from "../../../stores/canvasStore";
 import CanvasCoverImage from "../cover/CanvasCoverImage";
 import CanvasCoverActions from "../cover/CanvasCoverActions";
 import CanvasCover from "../cover/CanvasCover";
 import CanvasThreeDotMenu from "../CanvasThreeDotMenu";
+import CanvasTitleEditor from './CanvasTitleEditor';
 import "../styles/canvas-cover-tokens.css";
 
 // ── Cover Style Helper ──────────────────────────────────────────────────────────
@@ -114,16 +116,17 @@ export default function CanvasHeader({
 
   const debouncedTitleSave = useMemo(
     () =>
-      debounce(async (nextTitle) => {
+      debounce(async (nextTitle, titleDocument) => {
         if (!canvas?._id) return;
-        await updateCanvasMetadata(canvas._id, {
+        try { await updateCanvasMetadata(canvas._id, {
           title: nextTitle.trim() || "Untitled canvas",
-        });
+          titleDocument,
+        }); } catch { toast.error('Failed to save canvas title'); }
       }, 600),
     [canvas?._id, updateCanvasMetadata],
   );
 
-  useEffect(() => () => debouncedTitleSave.cancel(), [debouncedTitleSave]);
+  useEffect(() => () => debouncedTitleSave.flush(), [debouncedTitleSave]);
 
   // ── Cover Actions ──────────────────────────────────────────────────────────────
   const handleCoverReplace = useCallback(() => {
@@ -352,14 +355,13 @@ export default function CanvasHeader({
 
 
         {/* Title Input */}
-        <input
-          className="canvas-title-input"
-          value={title}
-          placeholder="Your canvas title"
-          spellCheck={false}
-          onChange={(event) => {
-            setTitle(event.target.value);
-            debouncedTitleSave(event.target.value);
+        <CanvasTitleEditor
+          canvasId={canvas?._id}
+          title={canvas?.title ?? title}
+          titleDocument={canvas?.titleDocument}
+          onChange={(nextTitle, document) => {
+            setTitle(nextTitle);
+            debouncedTitleSave(nextTitle, document);
           }}
           onBlur={() => debouncedTitleSave.flush()}
         />

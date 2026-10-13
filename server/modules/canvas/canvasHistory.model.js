@@ -25,6 +25,7 @@ const canvasHistorySchema = new Schema(
 
     snapshot: {
       title: { type: String },
+      titleDocument: { type: Schema.Types.Mixed },
       cover: { type: Schema.Types.Mixed },
       content: { type: Schema.Types.Mixed },
       blocks: { type: Array, default: [] },

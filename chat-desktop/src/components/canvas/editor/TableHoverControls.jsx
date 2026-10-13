@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
  * Displays hover-triggered controls on table borders.
@@ -10,6 +10,10 @@ export default function TableHoverControls({ editor, containerRef }) {
   const [hoveredTable, setHoveredTable] = useState(null);
   const [isVisible, setIsVisible] = useState(false);
   const [activeAxis, setActiveAxis] = useState('row'); // 'row' | 'col'
+  const tableRef = useRef(null);
+  const deleteRef = useRef(null);
+  const pressedTableRef = useRef(null);
+  const [cross, setCross] = useState({ x: 0, y: 0 });
 
   // Insert button position (bottom/right border)
   const [insertX, setInsertX] = useState(0);
@@ -27,31 +31,73 @@ export default function TableHoverControls({ editor, containerRef }) {
     const container = containerRef.current;
     if (!container) return;
 
+    const positionCross = table => {
+      if (!table || !container.contains(table)) return false;
+      const rect = table.getBoundingClientRect();
+      const wrapper = table.closest('.tableWrapper')?.getBoundingClientRect() || rect;
+      const host = container.getBoundingClientRect();
+      let top = 0, bottom = window.innerHeight, right = window.innerWidth;
+      for (let parent = container.parentElement; parent; parent = parent.parentElement) {
+        if (!/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflow + getComputedStyle(parent).overflowY)) continue;
+        const bounds = parent.getBoundingClientRect();
+        top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); right = Math.min(right, bounds.right);
+      }
+      if (rect.bottom <= top || rect.top >= bottom) return false;
+      const edge = Math.min(rect.right, wrapper.right);
+      const sideRoom = edge + 44 <= right;
+      setCross({ x: (sideRoom ? edge + 8 : Math.min(edge, right) - 40) - host.left,
+        y: Math.max(top, Math.min(rect.top - 40, bottom - 36)) - host.top });
+      return true;
+    };
+    const selectedTable = () => {
+      const selection = editor?.state.selection;
+      for (let depth = selection?.$from.depth || 0; depth > 0; depth--) {
+        if (selection.$from.node(depth).type.name !== 'table') continue;
+        const dom = editor.view.nodeDOM(selection.$from.before(depth));
+        return dom?.matches?.('table') ? dom : dom?.querySelector?.('table');
+      }
+      return null;
+    };
+    const inControlRegion = event => {
+      const table = tableRef.current;
+      if (!table || !container.contains(table)) return false;
+      const bounds = table.closest('.tableWrapper')?.getBoundingClientRect() || table.getBoundingClientRect();
+      const button = deleteRef.current?.getBoundingClientRect();
+      return button && event.clientX >= Math.min(bounds.left, button.left) && event.clientX <= Math.max(bounds.right, button.right)
+        && event.clientY >= Math.min(bounds.top, button.top) && event.clientY <= Math.max(bounds.bottom, button.bottom);
+    };
+
     const handleMouseMove = (e) => {
       if (!editor || !editor.isEditable) {
         setIsVisible(false);
+        setHoveredTable(null);
         return;
       }
 
       const target = e.target;
+      if (!(target instanceof Element)) return;
 
       // Don't hide when hovering our own control buttons
       if (
         target.closest('.table-hover-control-btn') ||
-        target.closest('.table-hover-control-dot')
+        target.closest('.table-hover-control-dot') || target.closest('.canvas-table-delete')
       ) {
         return;
       }
 
       const tableEl = target.closest('.ProseMirror table');
 
-      if (!tableEl) {
+      if (!tableEl || !container.contains(tableEl)) {
+        if (inControlRegion(e) || pressedTableRef.current) return;
         setIsVisible(false);
-        setHoveredTable(null);
+        const selected = selectedTable();
+        if (selected && positionCross(selected)) { tableRef.current = selected; setHoveredTable(selected); }
+        else setHoveredTable(null);
         return;
       }
 
       setHoveredTable(tableEl);
+      tableRef.current = tableEl;
       setIsVisible(true);
 
       const rect = tableEl.getBoundingClientRect();
@@ -62,6 +108,7 @@ export default function TableHoverControls({ editor, containerRef }) {
 
       const tableTop = rect.top - containerRect.top;
       const tableLeft = rect.left - containerRect.left;
+      positionCross(tableEl);
 
       const rows = Array.from(tableEl.querySelectorAll('tr'));
       if (rows.length === 0) return;
@@ -150,21 +197,73 @@ export default function TableHoverControls({ editor, containerRef }) {
       }
     };
 
-    const handleMouseLeave = () => {
+    const handleMouseLeave = event => {
+      if (event && (inControlRegion(event) || (event.relatedTarget instanceof Node && deleteRef.current?.contains(event.relatedTarget)) || pressedTableRef.current)) return;
       setIsVisible(false);
-      setHoveredTable(null);
+      const selected = selectedTable();
+      if (selected && positionCross(selected)) { tableRef.current = selected; setHoveredTable(selected); }
+      else setHoveredTable(null);
+    };
+    const handleSelection = () => {
+      const selection = editor?.state.selection;
+      if (!editor?.isEditable || !selection) return handleMouseLeave();
+      for (let depth = selection.$from.depth; depth > 0; depth--) {
+        if (selection.$from.node(depth).type.name !== 'table') continue;
+        const dom = editor.view.nodeDOM(selection.$from.before(depth));
+        const table = dom?.matches?.('table') ? dom : dom?.querySelector?.('table');
+        if (!table) return handleMouseLeave();
+        tableRef.current = table; setHoveredTable(table);
+        if (!positionCross(table)) setHoveredTable(null);
+        return;
+      }
+      handleMouseLeave();
     };
 
-    container.addEventListener('mousemove', handleMouseMove);
+    const handleScroll = () => {
+      setIsVisible(false);
+      if (tableRef.current && positionCross(tableRef.current)) return;
+      setHoveredTable(null);
+    };
+    const handlePointerUp = event => {
+      if (deleteRef.current?.contains(event.target)) return;
+      pressedTableRef.current = null;
+      handleMouseLeave(event);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
     container.addEventListener('mouseleave', handleMouseLeave);
+    editor?.on('selectionUpdate', handleSelection);
+    document.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleScroll);
+    document.addEventListener('pointerup', handlePointerUp);
 
     return () => {
-      container.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseleave', handleMouseLeave);
+      editor?.off('selectionUpdate', handleSelection);
+      document.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
+      document.removeEventListener('pointerup', handlePointerUp);
     };
   }, [editor, containerRef]);
 
-  if (!isVisible) return null;
+  const crossButton = hoveredTable && editor?.isEditable ? <button
+    ref={deleteRef}
+    type="button" className="canvas-table-delete" aria-label="Delete table" title="Delete entire table"
+    style={{ position: 'absolute', left: cross.x, top: cross.y, width: 36, height: 36, zIndex: 51, pointerEvents: 'auto', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+    onPointerDown={event => { event.preventDefault(); event.stopPropagation(); pressedTableRef.current = tableRef.current; }}
+    onPointerCancel={() => { pressedTableRef.current = null; }}
+    onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }}
+    onClick={event => {
+      event.preventDefault(); event.stopPropagation();
+      const table = pressedTableRef.current || hoveredTable;
+      pressedTableRef.current = null;
+      const paragraph = table?.querySelector('td p, th p');
+      if (!paragraph || !editor.view.dom.contains(table)) return;
+      const pos = editor.view.posAtDOM(paragraph, 0);
+      editor.chain().focus().setTextSelection(pos).deleteTable().run();
+      setHoveredTable(null); setIsVisible(false); tableRef.current = null;
+    }}>×</button> : null;
+  if (!isVisible) return crossButton;
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -242,6 +341,7 @@ export default function TableHoverControls({ editor, containerRef }) {
 
   return (
     <>
+      {crossButton}
       {/* ── Insert button (blue +) ────────────────────────────────── */}
       <div
         className="table-hover-control-btn"

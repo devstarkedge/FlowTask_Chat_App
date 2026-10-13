@@ -234,7 +234,7 @@ const togglePublicShare = asyncHandler(async (req, res) => {
   const workspaceId = req.workspaceId;
   const userId = req.user._id;
 
-  const canvas = await canvasService.togglePublicShare(canvasId, userId, workspaceId);
+  const canvas = await canvasService.togglePublicShare(canvasId, userId, workspaceId, req.body?.isPublic);
 
   return res.status(200).json({
     success: true,

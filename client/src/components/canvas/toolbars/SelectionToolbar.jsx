@@ -383,7 +383,7 @@ function AlignDropdown({ editor }) {
   );
 }
 
-const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar, onComment }) {
+const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar, onComment, titleOnly = false }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef(null);
 
@@ -409,8 +409,7 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       onMouseDown={(e) => e.preventDefault()}
     >
       {/* 1. Paragraph / Heading Dropdown */}
-      <BlockSelector editor={editor} />
-      <ToolbarDivider />
+      {!titleOnly && <><BlockSelector editor={editor} /><ToolbarDivider /></>}
 
       {/* 2. Bold, Italic, Underline, Strikethrough */}
       <ToolbarButton
@@ -446,6 +445,7 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       {/* 3. Bullet list, Inline Code, Link, Text Align Dropdown */}
       <ToolbarButton
         label="Bulleted list"
+        disabled={titleOnly}
         active={editor.isActive("bulletList")}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
       >
@@ -472,6 +472,7 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       <div style={{ display: "inline-flex", position: "relative" }} ref={emojiButtonRef}>
         <ToolbarButton
           label="Add reaction"
+          disabled={titleOnly}
           active={showEmojiPicker}
           onClick={() => setShowEmojiPicker((v) => !v)}
         >
@@ -496,6 +497,7 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       </div>
       <ToolbarButton
         label="Comment"
+        disabled={titleOnly}
         onClick={() => {
           const range = getCommentRangeFromSelection(editor);
           if (range) {

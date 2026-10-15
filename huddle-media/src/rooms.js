@@ -1,6 +1,6 @@
 const codecs=[{kind:'audio',mimeType:'audio/opus',clockRate:48000,channels:2},{kind:'video',mimeType:'video/VP8',clockRate:90000,parameters:{'x-google-start-bitrate':600}}];
 export class MediaRooms {
-  constructor({workers,maxRooms=64,maxPeers=32,broadcast=()=>{}}){this.workers=workers;this.maxRooms=maxRooms;this.maxPeers=maxPeers;this.broadcast=broadcast;this.rooms=new Map();this.pending=new Map();this.draining=false;}
+  constructor({workers,maxRooms=64,maxPeers=60,broadcast=()=>{}}){if(!Number.isInteger(maxPeers)||maxPeers<2||maxPeers>60)throw new Error('Invalid meeting capacity');this.workers=workers;this.maxRooms=maxRooms;this.maxPeers=maxPeers;this.broadcast=broadcast;this.rooms=new Map();this.pending=new Map();this.draining=false;}
   key(claims){return `${claims.workspaceId}:${claims.huddleId}`;}
   async room(claims){
     const key=this.key(claims);if(this.rooms.has(key))return this.rooms.get(key);if(this.pending.has(key))return this.pending.get(key);

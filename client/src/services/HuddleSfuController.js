@@ -25,7 +25,19 @@ export class HuddleSfuController {
     if(microphone)this.audioProducer=await this.send.produce({track:microphone,appData:{source:'microphone'},stopTracks:false});
     if(this.cameraStream)this.cameraProducer=await this.send.produce({track:this.cameraStream.getVideoTracks()[0],appData:{source:'camera'},stopTracks:false});
     this.live(epoch);this.initialized=true;
-    this.refreshQueue=Promise.resolve();const changed=()=>{this.refreshQueue=this.refreshQueue.then(()=>this.refresh(epoch)).catch(error=>{if(this.epoch===epoch)this.update({error:error.message});});};socket.on('media:changed',changed);changed();this.update({notice:null,error:null});
+    const changed=()=>this.requestRefresh(epoch);socket.on('media:changed',changed);changed();this.update({notice:null,error:null});
+  }
+  requestRefresh(epoch){
+    if(!this.initialized || this.epoch!==epoch)return;
+    // A burst of joins/camera changes needs the latest producer list, not an
+    // ever-growing queue containing one full refresh per event.
+    this.refreshPending=true;
+    if(this.refreshQueue)return this.refreshQueue;
+    const task=(async()=>{while(this.refreshPending && this.initialized && this.epoch===epoch){this.refreshPending=false;await this.refresh(epoch);}})()
+      .catch(error=>{if(this.epoch===epoch)this.update({error:error.message});});
+    this.refreshQueue=task;
+    task.finally(()=>{if(this.refreshQueue===task)this.refreshQueue=null;});
+    return task;
   }
   async refresh(epoch){
     if(!this.initialized || this.epoch!==epoch)return;const producers=await this.request('list');this.live(epoch);const ids=new Set(producers.map(p=>p.id));
@@ -54,7 +66,7 @@ export class HuddleSfuController {
   }
   async setScreen(stream){const previous=this.screenStream;this.screenStream=null;this.update({localScreenStream:null});try{if(this.screenProducer){const old=this.screenProducer;this.screenProducer=null;old.close();await this.request('close-producer',{producerId:old.id});}}finally{previous?.getTracks().forEach(t=>{t.onended=null;t.stop();});}if(stream){const epoch=this.epoch;const producer=await this.send.produce({track:stream.getVideoTracks()[0],appData:{source:'screen'},stopTracks:false});if(this.epoch!==epoch){producer.close();throw new Error('Media session changed');}this.screenProducer=producer;this.screenStream=stream;}this.update({localScreenStream:this.screenStream});}
   async updateConfiguration(config){if(!this.socket?.connected)throw new Error('Media connection is unavailable');const socket=this.socket;await new Promise((resolve,reject)=>socket.timeout(8000).emit('media:renew',config.media.token,(error,result)=>error || !result?.ok?reject(new Error('Media authorization could not be renewed')):resolve()));const changed=JSON.stringify(this.rtcConfiguration?.iceServers)!==JSON.stringify(config.rtcConfiguration.iceServers);if(changed && (!this.iceExpiresAt || this.iceExpiresAt-Date.now()/1000<300)){await Promise.all([this.send,this.recv].filter(Boolean).map(transport=>transport.updateIceServers({iceServers:config.rtcConfiguration.iceServers})));this.rtcConfiguration=config.rtcConfiguration;this.iceExpiresAt=config.expiresAt;}}
-  pause(){this.epoch++;this.initialized=false;const socket=this.socket;this.socket=null;socket?.removeAllListeners();socket?.disconnect();this.send?.close();this.recv?.close();this.send=this.recv=null;this.audioProducer=this.screenProducer=this.cameraProducer=null;for(const consumer of this.consumers.values())consumer.close();this.consumers.clear();this.screenStream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.screenStream=null;this.cameraStream?.getTracks().forEach(t=>{t.enabled=false;});this.stream?.getAudioTracks().forEach(t=>{t.enabled=false;});this.update({remoteStream:null,remoteScreenStream:null,remoteCameraStreams:{},localScreenStream:null,connection:this.context?'reconnecting':'idle'});}
+  pause(){this.epoch++;this.initialized=false;this.refreshPending=false;this.refreshQueue=null;const socket=this.socket;this.socket=null;socket?.removeAllListeners();socket?.disconnect();this.send?.close();this.recv?.close();this.send=this.recv=null;this.audioProducer=this.screenProducer=this.cameraProducer=null;for(const consumer of this.consumers.values())consumer.close();this.consumers.clear();this.screenStream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.screenStream=null;this.cameraStream?.getTracks().forEach(t=>{t.enabled=false;});this.stream?.getAudioTracks().forEach(t=>{t.enabled=false;});this.update({remoteStream:null,remoteScreenStream:null,remoteCameraStreams:{},localScreenStream:null,connection:this.context?'reconnecting':'idle'});}
   restoreTracks(){this.stream?.getAudioTracks().forEach(t=>{t.enabled=!this.muted;});this.cameraStream?.getTracks().forEach(t=>{t.enabled=true;});}
   stop(){this.context=null;this.pause();this.cameraStream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.cameraStream=null;this.stream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.stream=null;this.context=null;this.update({connection:'idle',muted:false,notice:null,localCameraStream:null});}
 }

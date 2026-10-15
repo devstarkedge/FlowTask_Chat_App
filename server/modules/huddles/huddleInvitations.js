@@ -15,14 +15,20 @@ export async function deliverHuddleInvitations(context,channelId,state,{getSocke
     if(!entry || (entry.isActive!==false && entry.notificationsEnabled!==false))eligible.add(String(id));
   }
   const alreadyJoined=new Set(state.participants.map(p=>String(p.userId)));
-  let sent=0;
-  for(const userId of users) {
-    if(!eligible.has(userId) || alreadyJoined.has(userId))continue;
+  let sent=0,cursor=0;
+  const recipients=users.filter(userId=>eligible.has(userId) && !alreadyJoined.has(userId));
+  async function deliver() {
+   while(cursor<recipients.length) {
+    const userId=recipients[cursor++];
     try {await authorize(userId,channelId,context.workspaceId);}catch(error){if([403,404].includes(error.statusCode))continue;throw error;}
     if(!await allowsNotification(userId,String(context.user._id),channelId))continue;
     emit(userId,{id:randomUUID(),huddleId:String(state.huddle._id),channelId,workspaceId:String(context.workspaceId),
       callerId:String(context.user._id),callerName:context.user.name || 'A teammate',label:channel.type==='dm'?context.user.name:channel.name,expiresAt:now()+60000});
     sent++;
+   }
   }
+  // Large channels must not perform sixty serial permission/notification
+  // round trips before acknowledging audio-ready. Keep database work bounded.
+  await Promise.all(Array.from({length:Math.min(8,recipients.length)},()=>deliver()));
   return {sent};
 }

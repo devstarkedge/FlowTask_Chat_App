@@ -4,11 +4,13 @@ import {createWorker} from 'mediasoup';
 import {Server} from 'socket.io';
 import {MediaRooms} from './rooms.js';
 import {verifySession} from './auth.js';
+import {readPeerCapacity} from './capacity.js';
 
 const env=process.env,secret=env.HUDDLE_MEDIA_SECRET,nodeId=env.HUDDLE_MEDIA_NODE_ID;
 if(!secret || secret.length<32 || /REPLACE|CHANGE_ME/.test(secret) || !/^[a-z0-9-]{1,50}$/.test(nodeId || '') || !env.MEDIA_ANNOUNCED_ADDRESS || /REPLACE/.test(env.MEDIA_ANNOUNCED_ADDRESS))throw new Error('Media node identity, announced address and private signing secret are required');
 const integer=(name,fallback,min,max)=>{const value=Number(env[name] || fallback);if(!Number.isInteger(value)||value<min||value>max)throw new Error(`Invalid ${name}`);return value;};
-const port=integer('PORT',4443,1024,65535),count=integer('MEDIA_WORKERS',Math.min(2,availableParallelism()),1,availableParallelism()),rtcPort=integer('MEDIA_RTC_PORT',40000,1024,65000),maxPeers=integer('MEDIA_MAX_PEERS',32,2,50),maxRooms=integer('MEDIA_MAX_ROOMS',64,1,10000);
+const {maxPeers,requestsPerMinute}=readPeerCapacity(env);
+const port=integer('PORT',4443,1024,65535),count=integer('MEDIA_WORKERS',Math.min(2,availableParallelism()),1,availableParallelism()),rtcPort=integer('MEDIA_RTC_PORT',40000,1024,65000),maxRooms=integer('MEDIA_MAX_ROOMS',64,1,10000);
 const origins=(env.MEDIA_ALLOWED_ORIGINS || '').split(',').map(value=>value.trim()).filter(Boolean);
 if(!origins.length || origins.some(origin=>origin==='*' || /REPLACE/.test(origin)))throw new Error('Explicit TaskChat frontend origins are required');
 const http=createServer((req,res)=>{if(req.url==='/health'){res.writeHead(rooms?.draining?503:200,{'Content-Type':'application/json'});res.end(JSON.stringify({ready:!rooms?.draining,nodeId}));}else{res.writeHead(404);res.end();}});
@@ -31,7 +33,7 @@ io.on('connection',socket=>{
   socket.on('media:request',(payload,ack)=>{
     if(typeof ack!=='function')return;
     if(Date.now()-windowAt>60000){windowAt=Date.now();requests=0;}
-    if(++requests>240){ack({ok:false,error:'Media request limit reached'});return;}
+    if(++requests>requestsPerMinute){ack({ok:false,error:'Media request limit reached'});return;}
     if(pending>=8){ack({ok:false,error:'Media request queue is full'});return;}pending++;
     queue=queue.then(async()=>{await ready;if(!peer || !socket.connected)throw new Error('Media unavailable');if(!payload || typeof payload.operation!=='string')throw new Error('Invalid request');return rooms.request(peer,payload.operation,payload.data);}).then(data=>ack({ok:true,data})).catch(error=>ack({ok:false,error:error.message})).finally(()=>{pending--;});
   });

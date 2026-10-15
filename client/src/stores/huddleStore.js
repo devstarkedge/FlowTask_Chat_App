@@ -4,6 +4,14 @@ import {startHuddleAudio,stopHuddleAudio} from '../services/huddleAudioService';
 import {useHuddleUiStore} from './huddleUiStore';
 
 let generation=0;
+const pendingLeaves=new Map();
+function leaveRemotely(channelId,epoch,onState) {
+  const pending=Promise.resolve().then(()=>epoch===generation?request('leave',{channelId}):null)
+    .then(data=>{if(data && epoch===generation)onState(data);}).catch(()=>{});
+  pendingLeaves.set(channelId,pending);
+  pending.finally(()=>{if(pendingLeaves.get(channelId)===pending)pendingLeaves.delete(channelId);});
+  return pending;
+}
 export const useHuddleStore=create((set,get)=>({
   byChannel:{},session:null,busy:false,error:null,
   ingest:(channelId,state)=>set(current=>{
@@ -15,7 +23,7 @@ export const useHuddleStore=create((set,get)=>({
   }),
   load:async channelId=>{
     const epoch=generation;
-    try {const data=await request('get',{channelId});if(epoch===generation)get().ingest(channelId,data);}
+    try {const data=await request('get',{channelId});if(epoch===generation){get().ingest(channelId,data);if(!get().session)set({error:null});}}
     catch(error){if(epoch===generation)set({error:error.message});}
   },
   act:async(action,channelId)=>{
@@ -23,13 +31,23 @@ export const useHuddleStore=create((set,get)=>({
     const epoch=generation;
     if(action==='leave' && get().session?.channelId===channelId) {
       stopHuddleAudio();set({session:null,error:null});
-      request('leave',{channelId}).catch(()=>{});
+      leaveRemotely(channelId,epoch,data=>{if(!get().session)get().ingest(channelId,data);});
       return;
     }
     set({busy:true,error:null});
     try {
       if(['leave','end'].includes(action) && get().session?.channelId===channelId)stopHuddleAudio();
       if(['start','join'].includes(action) && get().session && get().session.channelId!==channelId)throw new Error('Leave your current huddle first.');
+      if(['start','join'].includes(action) && pendingLeaves.has(channelId))await pendingLeaves.get(channelId);
+      if(epoch!==generation)return;
+      if(action==='join') {
+        // The channel strip may have been rendered before the last participant
+        // left. Never use its cached record as proof that a meeting is active.
+        const current=await request('get',{channelId});
+        if(epoch!==generation)return;
+        get().ingest(channelId,current);
+        if(!current.huddle)throw new Error('This Huddle has ended. Start a new Huddle to call again.');
+      }
       const data=await request(action,{channelId});
       if(epoch!==generation)return;
       get().ingest(channelId,data);
@@ -42,7 +60,19 @@ export const useHuddleStore=create((set,get)=>({
         }
       }
       if(action==='leave' || action==='end')set({session:null});
-    } catch(error){if(epoch===generation)set({error:error.message});}
+    } catch(error){
+      if(epoch!==generation)return;
+      if(action==='join' && error.code==='NOT_FOUND') {
+        // Handle a meeting ending between the preflight and the join itself.
+        try {
+          const current=await request('get',{channelId});
+          if(epoch!==generation)return;
+          get().ingest(channelId,current);
+          error.message=current.huddle?'The active Huddle changed. Try Join again.':'This Huddle has ended. Start a new Huddle to call again.';
+        } catch {/* Keep the original error if the refresh also fails. */}
+      }
+      if(epoch===generation)set({error:error.message});
+    }
     finally {if(epoch===generation)set({busy:false});}
   },
   resume:async()=>{
@@ -72,7 +102,7 @@ export const useHuddleStore=create((set,get)=>({
     const current=get().session;if(current?.id!==id)return;
     generation++;stopHuddleAudio();
     set({session:null,busy:false,error:'Huddle ended because the connection could not recover within 5 minutes.'});
-    request('leave',{channelId:current.channelId}).catch(()=>{});
+    leaveRemotely(current.channelId,generation,data=>{if(!get().session)get().ingest(current.channelId,data);});
   },
-  reset:()=>{generation++;stopHuddleAudio();useHuddleUiStore.getState().closePanel();set({byChannel:{},session:null,busy:false,error:null});},
+  reset:()=>{generation++;pendingLeaves.clear();stopHuddleAudio();useHuddleUiStore.getState().closePanel();set({byChannel:{},session:null,busy:false,error:null});},
 }));

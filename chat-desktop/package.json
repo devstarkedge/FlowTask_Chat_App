@@ -106,7 +106,8 @@
     "mac": {
       "category": "public.app-category.productivity",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "TaskChat uses your microphone when you join a Huddle to talk with participants."
+        "NSMicrophoneUsageDescription": "TaskChat uses your microphone when you join a Huddle to talk with participants.",
+        "NSCameraUsageDescription": "TaskChat uses your camera only when you turn it on in a Huddle."
       },
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist"

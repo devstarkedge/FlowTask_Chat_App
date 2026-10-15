@@ -13,7 +13,9 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       const active=await repository.active(context.workspaceId,channelId);
       let state=cached && String(cached.huddle?._id)===String(active?._id) ? structuredClone(cached) :
         {huddle:active,participants:[],revision:Math.max(cached?.revision || 0,now()*1000),emptySince:now()};
-      let changed=false;
+      // A record ended outside this presence snapshot must also remove the
+      // active strip for subscribers, including when discovered by a get.
+      let changed=Boolean(cached?.huddle && String(cached.huddle._id)!==String(active?._id));
       let route;
       let invite=false;
       const before=state.participants.length;
@@ -28,13 +30,22 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         state.emptySince=now(); changed=true;
       }
       if(action==='start' || action==='join' || action==='resume') {
-        if(!state.huddle) throw new NotFoundError('Active huddle');
+        if(!state.huddle) {
+          // Expiry may have completed the database record above, or another
+          // process may already have ended it. Publish that state before the
+          // failed join returns, so clients cannot retain a stale Join strip.
+          if(changed || cached?.huddle) {
+            state.revision=Math.max(state.revision+1,now()*1000);
+            await save(state);publish(context.workspaceId,channelId,publicState(state));
+          }
+          throw new NotFoundError('Active huddle');
+        }
         const existing=state.participants.find(p=>p.id===input.sessionId);
         if(action==='resume' && (!existing || existing.userId!==String(context.user._id) || existing.secret!==input.secret)) throw new ForbiddenError('Huddle session cannot be resumed');
         let participant=existing;
         if(action!=='resume') participant=state.participants.find(p=>p.socketId===context.socketId);
         if(!participant) {
-          if(state.participants.length>=50) throw new ValidationError('Huddle participant limit reached');
+          if(state.participants.length>=mediaCapacity()) throw new ValidationError('Huddle participant limit reached');
           participant={id:randomUUID(),secret:randomUUID(),userId:String(context.user._id),name:context.user.name,avatar:context.user.avatar || null};
           state.participants.push(participant); changed=true;
         }

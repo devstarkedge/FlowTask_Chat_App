@@ -12,8 +12,8 @@ export function mediaSettings(source=process.env) {
   }
   const secret=source.HUDDLE_MEDIA_SECRET;
   let nodes;try{nodes=JSON.parse(source.HUDDLE_MEDIA_NODES || '[]');}catch{throw new AppError('Invalid Huddle media nodes',503,'HUDDLE_CONFIG');}
-  const maxPeers=Number(source.HUDDLE_MAX_PEERS || 32);
-  if(!secret || secret.length<32 || /REPLACE|CHANGE_ME/.test(secret) || !Array.isArray(nodes) || !nodes.length || nodes.length>100 || !Number.isInteger(maxPeers) || maxPeers<2 || maxPeers>50)throw new AppError('TaskChat SFU configuration is incomplete',503,'HUDDLE_CONFIG');
+  const maxPeers=Number(source.HUDDLE_MAX_PEERS || 60);
+  if(!secret || secret.length<32 || /REPLACE|CHANGE_ME/.test(secret) || !Array.isArray(nodes) || !nodes.length || nodes.length>100 || !Number.isInteger(maxPeers) || maxPeers<2 || maxPeers>60)throw new AppError('TaskChat SFU configuration is incomplete',503,'HUDDLE_CONFIG');
   const ids=new Set();
   for(const node of nodes){let url;try{url=new URL(node.url);}catch{throw new AppError('Invalid media node URL',503,'HUDDLE_CONFIG');}if(!/^[a-z0-9-]{1,50}$/.test(node.id || '') || ids.has(node.id) || url.username || url.password || url.search || url.hash || (url.protocol!=='https:' && !(source.NODE_ENV!=='production' && url.protocol==='http:' && ['localhost','127.0.0.1'].includes(url.hostname))))throw new AppError('Invalid media node configuration',503,'HUDDLE_CONFIG');ids.add(node.id);}
   return {mode,maxPeers,nodes,secret};

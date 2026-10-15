@@ -5,7 +5,10 @@ export function validateAudioSignal(value) {
   if(value.restart===true)return {restart:true};
   if(value.description) {
     const {type,sdp}=value.description;
-    if(!['offer','answer'].includes(type) || typeof sdp!=='string' || sdp.length>65536 || !sdp.includes('m=audio ') || /^m=(?!audio |video )/m.test(sdp) || (sdp.match(/^m=video /gm)||[]).length>1) throw new ValidationError('Only bounded audio and one screen track are supported');
+    // The peer reserves separate camera and screen transceivers even with
+    // camera off. Bound the negotiated slots, including inactive ones, to the
+    // same layout as HuddleAudioController: one audio and two video slots.
+    if(!['offer','answer'].includes(type) || typeof sdp!=='string' || sdp.length>65536 || (sdp.match(/^m=audio /gm)||[]).length!==1 || /^m=(?!audio |video )/m.test(sdp) || (sdp.match(/^m=video /gm)||[]).length>2) throw new ValidationError('Only one audio, one camera and one screen media slot are supported');
     return {description:{type,sdp}};
   }
   if(value.candidate) {

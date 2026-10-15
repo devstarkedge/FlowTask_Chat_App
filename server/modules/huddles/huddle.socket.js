@@ -28,7 +28,7 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
       }
     });
   }
-  for(const action of ['invite','hand','reaction','notes','screen-state','audio-ready','audio-state','audio-config','signal']) {
+  for(const action of ['invite','hand','reaction','notes','screen-state','camera-state','audio-ready','audio-state','audio-config','signal']) {
     socket.on(`huddle:${action}`,async(payload={},ack)=>{
       if(typeof ack!=='function')return;
       try {
@@ -41,8 +41,8 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
           const state=await huddleService.run(context(),payload.channelId,action,{muted:payload.muted});
           const media=await createSfuConfiguration(context(),state,socket.data.huddle.sessionId);
           ack({success:true,data:{state,...config,...media}});
-        } else if(['invite','hand','reaction','notes','screen-state'].includes(action)) {
-          const state=await huddleService.run(context(),payload.channelId,action,{raised:payload.raised,emoji:payload.emoji,text:payload.text,version:payload.version,sharing:payload.sharing});
+        } else if(['invite','hand','reaction','notes','screen-state','camera-state'].includes(action)) {
+          const state=await huddleService.run(context(),payload.channelId,action,{raised:payload.raised,emoji:payload.emoji,text:payload.text,version:payload.version,sharing:payload.sharing,enabled:payload.enabled});
           const {invitation,...snapshot}=state;
           ack({success:true,data:{state:snapshot,...(invitation?{invitation}:{})}});
         } else if(action==='audio-state') {

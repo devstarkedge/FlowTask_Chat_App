@@ -21,6 +21,11 @@ export const useHuddleStore=create((set,get)=>({
   act:async(action,channelId)=>{
     if(get().busy)return;
     const epoch=generation;
+    if(action==='leave' && get().session?.channelId===channelId) {
+      stopHuddleAudio();set({session:null,error:null});
+      request('leave',{channelId}).catch(()=>{});
+      return;
+    }
     set({busy:true,error:null});
     try {
       if(['leave','end'].includes(action) && get().session?.channelId===channelId)stopHuddleAudio();
@@ -42,17 +47,32 @@ export const useHuddleStore=create((set,get)=>({
   },
   resume:async()=>{
     const current=get().session,epoch=generation;
-    if(!current)return;
+    if(!current)return false;
     try {
       const data=await request('resume',{channelId:current.channelId,sessionId:current.id,secret:current.secret});
-      if(epoch!==generation || get().session?.id!==current.id)return;
+      if(epoch!==generation || get().session?.id!==current.id)return false;
       get().ingest(current.channelId,data);set({error:null});
-    } catch(error){if(epoch===generation && get().session?.id===current.id)set({session:null,error:error.message});}
+      return Boolean(get().session);
+    } catch(error){
+      if(epoch===generation && get().session?.id===current.id) {
+        // Transport timeouts and lock contention do not revoke membership.
+        // Keep the session secret so the next reconnect attempt can resume it.
+        const revoked=['FORBIDDEN','NOT_FOUND','UNAUTHORIZED'].includes(error.code);
+        set({...(revoked?{session:null}:{}),error:error.message});
+      }
+      return false;
+    }
   },
   heartbeat:async()=>{
     const current=get().session,epoch=generation;if(!current)return;
     try {await request('heartbeat',{channelId:current.channelId});}
     catch(error){if(epoch===generation && get().session?.id===current.id)set({error:error.message,...(['FORBIDDEN','NOT_FOUND','UNAUTHORIZED'].includes(error.code)?{session:null}: {})});}
+  },
+  expireNetworkSession:id=>{
+    const current=get().session;if(current?.id!==id)return;
+    generation++;stopHuddleAudio();
+    set({session:null,busy:false,error:'Huddle ended because the connection could not recover within 5 minutes.'});
+    request('leave',{channelId:current.channelId}).catch(()=>{});
   },
   reset:()=>{generation++;stopHuddleAudio();useHuddleUiStore.getState().closePanel();set({byChannel:{},session:null,busy:false,error:null});},
 }));

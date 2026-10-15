@@ -51,3 +51,14 @@
 @media(max-width:520px){.huddle-window{inset:8px;width:calc(100vw - 16px);border-radius:12px}.huddle-window-content{padding:14px}.huddle-device-row{grid-template-columns:1fr 1fr}.huddle-camera-control{display:none}.huddle-tools-bar{display:grid;grid-template-columns:1fr 1fr}.huddle-tools-bar button{padding:10px}.huddle-participant-grid.has-peers{grid-template-columns:1fr 1fr}.huddle-participant-tile img,.huddle-avatar-letter{width:80px;height:80px;flex-basis:80px;font-size:30px}.huddle-listener-note summary{flex-wrap:wrap}.huddle-listener-note summary>span{margin-left:22px}.huddle-window-footer{gap:16px}.huddle-end-action{max-width:85px}}
 @media(max-height:740px){.huddle-window,.huddle-window.is-live{top:12px;bottom:12px}.is-live .huddle-window-content{padding-top:12px}.is-live .huddle-participant-tile{height:190px;min-height:190px}.huddle-window-footer,.is-live .huddle-window-footer{min-height:66px;padding:12px}.is-sharing .huddle-participant-tile{height:70px;min-height:70px}.huddle-call-status{padding:10px 2px}.huddle-tools button{padding:9px 12px}.huddle-meeting-link{padding-top:5px}}
 @media(prefers-reduced-motion:reduce){.huddle-tools button{transition:none}}
+
+.huddle-window.is-maximized{inset:8px;width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:none;transform:none;border-radius:12px}
+/* Electron's native caption buttons live above the web content, regardless of
+   z-index. Keep the Huddle chrome below their reserved title-bar rectangle. */
+.has-native-window-controls .huddle-window{top:max(24px,calc(env(titlebar-area-height,48px) + 8px))}
+.has-native-window-controls .huddle-window.is-maximized{top:calc(env(titlebar-area-height,48px) + 8px);height:calc(100dvh - env(titlebar-area-height,48px) - 16px)}
+.huddle-window-chrome>button{-webkit-app-region:no-drag;flex-shrink:0}
+.huddle-reconnecting{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px;border:1px solid #b895e955;border-radius:12px;background:#8864b51a;color:#dfd0f3}.huddle-reconnecting p{margin:5px 0;font-size:12px}.huddle-reconnecting span{font-size:11px;color:#b8a8ca}.huddle-reconnect-spinner{flex-shrink:0;animation:huddle-reconnect-spin 1s linear infinite}@keyframes huddle-reconnect-spin{to{transform:rotate(360deg)}}
+.huddle-camera-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}.huddle-participant-tile.has-camera .huddle-participant-name,.huddle-participant-tile.has-camera .huddle-preview-icons{z-index:1}
+@media(prefers-reduced-motion:reduce){.huddle-reconnect-spinner{animation:none}}
+@media(max-width:520px){.huddle-camera-control{display:inline-flex;grid-column:1/-1}}

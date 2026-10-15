@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {ForbiddenError, NotFoundError, ValidationError} from '../../middleware/errorHandler.js';
-const GRACE=30000, LEASE=60000;
+const GRACE=30000, RECONNECT_GRACE=300000, LEASE=60000;
 const publicState = state => ({huddle:state.huddle, revision:state.revision,
   participants:state.participants.map(({secret,socketId,expiresAt,...profile})=>profile)});
 
@@ -44,7 +44,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         participant.socketId=context.socketId; participant.expiresAt=now()+LEASE;
         state.emptySince=null;
         input.session={id:participant.id,secret:participant.secret};
-      } else if(['invite','hand','reaction','notes','screen-state','audio-ready','audio-state','audio-config','signal'].includes(action)) {
+      } else if(['invite','hand','reaction','notes','screen-state','camera-state','audio-ready','audio-state','audio-config','signal'].includes(action)) {
         const sender=state.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
         if(!state.huddle || !sender || sender.connection!=='connected') throw new ForbiddenError('Join this huddle before using audio');
         if(action==='invite') {
@@ -64,10 +64,13 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
           if(!sender.audioReady || typeof input.sharing!=='boolean')throw new ValidationError('Invalid screen sharing state');
           if(input.sharing && state.participants.some(p=>p!==sender && p.screenSharing))throw new ValidationError('Someone is already sharing a screen');
           sender.screenSharing=input.sharing;changed=true;
+        } else if(action==='camera-state') {
+          if(!sender.audioReady || typeof input.enabled!=='boolean')throw new ValidationError('Invalid camera state');
+          sender.cameraOn=input.enabled;changed=true;
         } else if(action==='audio-ready') {
           const capacity=mediaCapacity();
           if(!sender.audioReady && state.participants.filter(p=>p.audioReady).length>=capacity) throw new ValidationError(`This Huddle is full. It currently supports ${capacity===2?'two':capacity} devices.`);
-          sender.audioReady=true; sender.screenSharing=false; sender.mediaId=randomUUID(); sender.muted=input.muted!==false;
+          sender.audioReady=true; sender.screenSharing=false;sender.cameraOn=false; sender.mediaId=randomUUID(); sender.muted=input.muted!==false;
           if(!state.announced && String(state.huddle.startedBy)===sender.userId){state.announced=true;state.lastInviteAt=now();invite=true;}
           changed=true;
         } else if(action==='audio-state') {
@@ -88,8 +91,8 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         if(participant) {
           if(action==='leave') {state.participants=state.participants.filter(p=>p!==participant); changed=true;}
           else {
-            participant.expiresAt=now()+(action==='disconnect'?GRACE:LEASE);
-            if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.handRaised=false;participant.mediaId=null;changed=true;}
+            participant.expiresAt=now()+(action==='disconnect'?RECONNECT_GRACE:LEASE);
+            if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.cameraOn=false;participant.handRaised=false;participant.mediaId=null;changed=true;}
           }
         } else if(action==='heartbeat') throw new NotFoundError('Huddle participant');
       } else if(action==='end') {

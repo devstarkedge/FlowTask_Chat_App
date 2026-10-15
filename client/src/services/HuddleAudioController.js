@@ -41,8 +41,9 @@ export class HuddleAudioController {
     pc.ontrack=event=>{
       if(this.peer!==peer)return;
       const stream=this.makeStream([event.track]);
-      this.update(event.track.kind==='video'?{remoteScreenStream:stream}:{remoteStream:stream});
-      if(event.track.kind==='video')event.track.onended=()=>{if(this.peer===peer)this.update({remoteScreenStream:null});};
+      const camera=event.track.kind==='video' && event.transceiver===peer.cameraTransceiver;
+      this.update(camera?{remoteCameraStreams:{[peer.id]:stream}}:event.track.kind==='video'?{remoteScreenStream:stream}:{remoteStream:stream});
+      if(event.track.kind==='video')event.track.onended=()=>{if(this.peer===peer)this.update(camera?{remoteCameraStreams:{}}:{remoteScreenStream:null});};
     };
     pc.onicecandidate=event=>{
       if(event.candidate)this.transmit(peer,{candidate:event.candidate.toJSON?.() || event.candidate});
@@ -70,9 +71,11 @@ export class HuddleAudioController {
         else this.fail(peer,new Error('Audio connection failed. Retry audio or check your TURN server.'));
       }
     };
-    for(const track of this.stream.getAudioTracks())pc.addTrack(track,this.stream);
+    for(const track of this.stream.getAudioTracks())peer.audioSender=pc.addTrack(track,this.stream);
     // Keep audio negotiation/receipt when joining without a capture device.
-    if(!this.stream.getAudioTracks().length)pc.addTransceiver('audio',{direction:'recvonly'});
+    if(!this.stream.getAudioTracks().length)peer.audioSender=pc.addTransceiver('audio',{direction:'sendrecv'}).sender;
+    peer.cameraTransceiver=pc.addTransceiver?.('video',{direction:'sendrecv'});
+    if(this.cameraStream)peer.cameraTransceiver?.sender.replaceTrack(this.cameraStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
     // Reserve one bidirectional screen slot so either participant can share
     // without racing offers or renegotiating the microphone connection.
     peer.screenSender=pc.addTransceiver?.('video',{direction:'sendrecv'}).sender;
@@ -142,6 +145,26 @@ export class HuddleAudioController {
     this.update({muted});
   }
 
+  async setMicrophone(stream) {
+    const context=this.context;
+    const track=stream.getAudioTracks()[0];
+    if(this.peer)await this.peer.audioSender.replaceTrack(track);
+    if(this.context!==context || !context)throw new Error('Media session changed');
+    const old=this.stream;this.stream=stream;
+    const channelId=this.context?.channelId;track.onended=()=>{this.stop();this.onLocalEnded(channelId);};
+    old?.getTracks().forEach(t=>{t.onended=null;t.stop();});
+  }
+
+  async setCamera(stream) {
+    const context=this.context;
+    const old=this.cameraStream;
+    await this.peer?.cameraTransceiver?.sender.replaceTrack(stream?.getVideoTracks()[0] || null);
+    if(this.context!==context || !context)throw new Error('Media session changed');
+    this.cameraStream=stream || null;
+    old?.getTracks().forEach(t=>{t.onended=null;t.stop();});
+    this.update({localCameraStream:this.cameraStream});
+  }
+
   async setScreen(stream) {
     const old=this.screenStream;
     await this.peer?.screenSender?.replaceTrack(stream?.getVideoTracks()[0] || null);
@@ -151,6 +174,7 @@ export class HuddleAudioController {
   }
 
   pause() {
+    this.cameraStream?.getTracks().forEach(track=>{track.enabled=false;});
     this.screenStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.screenStream=null;
     this.update({localScreenStream:null,remoteScreenStream:null});
     this.initialized=false;this.pending=[];this.closePeer();
@@ -158,7 +182,7 @@ export class HuddleAudioController {
     if(this.context)this.update({connection:'reconnecting'});
   }
 
-  restoreTracks() {this.stream?.getAudioTracks().forEach(track=>{track.enabled=!this.muted;});}
+  restoreTracks() {this.stream?.getAudioTracks().forEach(track=>{track.enabled=!this.muted;});this.cameraStream?.getTracks().forEach(track=>{track.enabled=true;});}
 
   updateConfiguration({rtcConfiguration,expiresAt,notice}) {
     this.config=rtcConfiguration;this.expiresAt=expiresAt;
@@ -179,10 +203,12 @@ export class HuddleAudioController {
       pc.ontrack=pc.onicecandidate=pc.onnegotiationneeded=pc.onconnectionstatechange=null;
       pc.close();
     }
-    this.update({remoteStream:null,remoteScreenStream:null});
+    this.update({remoteStream:null,remoteScreenStream:null,remoteCameraStreams:{}});
   }
 
   stop() {
+    this.cameraStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.cameraStream=null;
+    this.update({localCameraStream:null,remoteCameraStreams:{}});
     this.screenStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.screenStream=null;
     this.initialized=false;this.pending=[];this.closePeer();
     this.stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});

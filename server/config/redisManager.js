@@ -28,6 +28,7 @@ class RedisManager {
       return;
     }
 
+    let startupTimer;
     try {
       logger.info('Initializing singleton Redis clients...');
       
@@ -59,17 +60,21 @@ class RedisManager {
       });
 
       // Connect both
-      await Promise.all([
-        this.sharedClient.connect(),
-        this.subClient.connect(),
+      await Promise.race([
+        Promise.all([this.sharedClient.connect(),this.subClient.connect()]),
+        new Promise((_,reject)=>{startupTimer=setTimeout(()=>reject(new Error('Redis startup connection timed out')),8000);}),
       ]);
 
       this.isInitialized = true;
     } catch (err) {
       logger.error('Failed to initialize singleton Redis clients', { error: err.message });
+      // Stop both reconnect loops, including a partially connected sibling.
+      this.sharedClient?.disconnect();this.subClient?.disconnect();
       this.sharedClient = null;
       this.subClient = null;
       this.isInitialized = false;
+    } finally {
+      clearTimeout(startupTimer);
     }
   }
 

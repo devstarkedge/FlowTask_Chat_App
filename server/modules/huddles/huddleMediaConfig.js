@@ -32,6 +32,6 @@ export async function createSfuConfiguration(context,state,sessionId,{source=pro
   const row=await model.findOne({_id:state.huddle._id,workspaceId:context.workspaceId,status:'active'}).select('mediaNodeId').lean();
   const node=settings.nodes.find(n=>n.id===row?.mediaNodeId);if(!node)throw new AppError('This meeting media node is unavailable',503,'HUDDLE_MEDIA_UNAVAILABLE');
   const expiresAt=Math.floor(now/1000)+60;
-  const token=jwt.sign({workspaceId:String(context.workspaceId),channelId:String(state.huddle.channelId),huddleId:String(state.huddle._id),sessionId,mediaId:own.mediaId,userId:String(context.user._id),screenAllowed:own.screenSharing===true,exp:expiresAt,iat:Math.floor(now/1000)},settings.secret,{algorithm:'HS256',issuer:'taskchat-huddles',audience:`taskchat-media:${node.id}`});
+  const token=jwt.sign({workspaceId:String(context.workspaceId),channelId:String(state.huddle.channelId),huddleId:String(state.huddle._id),sessionId,mediaId:own.mediaId,userId:String(context.user._id),screenAllowed:own.screenSharing===true,cameraAllowed:own.cameraOn===true,exp:expiresAt,iat:Math.floor(now/1000)},settings.secret,{algorithm:'HS256',issuer:'taskchat-huddles',audience:`taskchat-media:${node.id}`});
   return {mediaMode:'sfu',media:{url:node.url,token},mediaExpiresAt:expiresAt,mediaRenewAfterMs:30000,maxPeers:settings.maxPeers};
 }

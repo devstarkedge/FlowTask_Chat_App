@@ -12,6 +12,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 
 import env from './config/environment.js';
+import redisManager from './config/redisManager.js';
 import { createCorsOptions } from './config/cors.js';
 import { connectDatabase, disconnectDatabase, isDatabaseConnected, getDatabaseHealth, stopHealthCheck } from './config/database.js';
 import logger from './utils/logger.js';
@@ -279,6 +280,8 @@ async function startServer() {
     // 1. Connect to MongoDB
     await connectDatabase();
     if (!isDatabaseConnected()) throw new Error('MongoDB is not ready; startup was stopped before database queries.');
+    // Shared Huddle presence and the Socket.IO adapter need initialized clients.
+    await redisManager.init();
     // The partial unique index is required even when production autoIndex is off.
     await initializeHuddles().catch(error=>logger.warn('Huddles disabled for this server process',{code:error.code}));
 
@@ -432,6 +435,7 @@ async function shutdown(signal) {
     }
 
     try {
+      await redisManager.closeAll();
       await disconnectDatabase();
       logger.info('Graceful shutdown complete');
     } catch (error) {

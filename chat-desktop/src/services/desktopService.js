@@ -39,23 +39,29 @@ export const updateWindowControlsContrast = (targetElementOrColor) => {
 
     if (typeof targetElementOrColor === 'string' && targetElementOrColor.startsWith('#')) {
       // Direct hex string passed
-      const hex = targetElementOrColor.replace('#', '');
+      const rawHex = targetElementOrColor.replace('#', '');
+      const hex = rawHex.length===3 ? [...rawHex].map(value=>value+value).join('') : rawHex;
       const r = parseInt(hex.substring(0, 2), 16) || 0;
       const g = parseInt(hex.substring(2, 4), 16) || 0;
       const b = parseInt(hex.substring(4, 6), 16) || 0;
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
       symbolColor = lum > 140 ? '#0f172a' : '#ffffff';
     } else {
-      // Find topbar element or sample document header area
+      // A selector list follows DOM order, not selector priority. The Huddle
+      // portal is mounted before the app layout, so its light header must not
+      // determine native caption colors over the dark application title bar.
       const topbar = targetElementOrColor instanceof HTMLElement
         ? targetElementOrColor
-        : document.querySelector('.cl-topbar, .file-preview-topbar, header, [data-topbar], .workspace-layout-header');
+        : document.querySelector('.file-preview-topbar')
+          || document.querySelector('.cl-topbar')
+          || document.querySelector('[data-topbar], .workspace-layout-header')
+          || document.querySelector('header:not(.huddle-window-chrome)');
 
       const elemToSample = topbar || document.body;
       const bg = window.getComputedStyle(elemToSample).backgroundColor;
 
       if (bg && bg.startsWith('rgb')) {
-        const rgbValues = bg.match(/\d+/g);
+        const rgbValues = bg.match(/[\d.]+/g);
         if (rgbValues && rgbValues.length >= 3) {
           const r = parseInt(rgbValues[0], 10);
           const g = parseInt(rgbValues[1], 10);

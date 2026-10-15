@@ -4,6 +4,7 @@ export const useHuddleAudioStore=create(set=>({
   inputDeviceId:'',outputDeviceId:'',startMuted:false,joinWithoutMicrophone:false,withoutMicrophone:false,
   localScreenStream:null,remoteScreenStream:null,screenBusy:false,
   invitation:null,
+  reconnectDeadline:null,micBusy:false,cameraBusy:false,localCameraStream:null,remoteCameraStreams:{},
   update:patch=>set(patch),
   toggleDeafen:()=>set(state=>({deafened:!state.deafened})),
 }));

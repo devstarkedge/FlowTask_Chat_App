@@ -16,7 +16,7 @@ export class MediaRooms {
     const peer={claims,room,transports:new Map(),producers:new Map(),consumers:new Map(),closed:false};room.peers.set(claims.sessionId,peer);return peer;
   }
   producers(peer){return [...peer.room.peers.values()].filter(p=>p!==peer).flatMap(p=>[...p.producers.values()].map(producer=>({id:producer.id,sessionId:p.claims.sessionId,source:producer.appData.source})));}
-  renew(peer,claims){peer.claims=claims;if(!claims.screenAllowed)for(const [id,producer] of peer.producers)if(producer.appData.source==='screen'){peer.producers.delete(id);producer.close();this.broadcast(peer.room.key,'media:changed');}}
+  renew(peer,claims){peer.claims=claims;for(const [id,producer] of peer.producers)if((producer.appData.source==='screen' && !claims.screenAllowed) || (producer.appData.source==='camera' && !claims.cameraAllowed)){peer.producers.delete(id);producer.close();this.broadcast(peer.room.key,'media:changed');}}
   async request(peer,operation,data={}) {
     if(peer.closed || peer.room.peers.get(peer.claims.sessionId)!==peer)throw new Error('Media session closed');
     const room=peer.room;
@@ -32,7 +32,7 @@ export class MediaRooms {
     if(operation==='connect') {const transport=peer.transports.get(data.transportId);if(!transport)throw new Error('Transport not owned');await transport.connect({dtlsParameters:data.dtlsParameters});return {};}
     if(operation==='produce') {
       const transport=peer.transports.get(data.transportId);const source=data.source;
-      if(!transport || transport.appData.direction!=='send' || !['microphone','screen'].includes(source) || (source==='microphone'?data.kind!=='audio':data.kind!=='video') || (source==='screen' && (!peer.claims.screenAllowed || [...room.peers.values()].some(p=>[...p.producers.values()].some(producer=>producer.appData.source==='screen')))) || [...peer.producers.values()].some(p=>p.appData.source===source))throw new Error('Producer not permitted');
+      if(!transport || transport.appData.direction!=='send' || !['microphone','screen','camera'].includes(source) || (source==='microphone'?data.kind!=='audio':data.kind!=='video') || (source==='camera' && !peer.claims.cameraAllowed) || (source==='screen' && (!peer.claims.screenAllowed || [...room.peers.values()].some(p=>[...p.producers.values()].some(producer=>producer.appData.source==='screen')))) || [...peer.producers.values()].some(p=>p.appData.source===source))throw new Error('Producer not permitted');
       const producer=await transport.produce({kind:data.kind,rtpParameters:data.rtpParameters,appData:{source}});
       if(peer.closed){producer.close();throw new Error('Media session closed');}peer.producers.set(producer.id,producer);this.broadcast(room.key,'media:changed');return {id:producer.id};
     }

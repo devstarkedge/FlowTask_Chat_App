@@ -95,8 +95,18 @@ export const useHuddleStore=create((set,get)=>({
   },
   heartbeat:async()=>{
     const current=get().session,epoch=generation;if(!current)return;
-    try {await request('heartbeat',{channelId:current.channelId});}
-    catch(error){if(epoch===generation && get().session?.id===current.id)set({error:error.message,...(['FORBIDDEN','NOT_FOUND','UNAUTHORIZED'].includes(error.code)?{session:null}: {})});}
+    try {
+      const data=await request('heartbeat',{channelId:current.channelId});
+      if(epoch!==generation || get().session?.id!==current.id)return;
+      get().ingest(current.channelId,data);
+      return data.participants?.some(p=>p.id===current.id && p.connection==='connected')===true;
+    }
+    catch(error){
+      if(epoch===generation && get().session?.id===current.id)set({error:error.message,...(['FORBIDDEN','UNAUTHORIZED'].includes(error.code)?{session:null}: {})});
+      // Missing heartbeat membership needs a secret-checked resume before we
+      // decide that the meeting/session is genuinely gone.
+      return error.code==='NOT_FOUND'?false:undefined;
+    }
   },
   expireNetworkSession:id=>{
     const current=get().session;if(current?.id!==id)return;

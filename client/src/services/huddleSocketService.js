@@ -4,6 +4,7 @@ import {useHuddleUiStore} from '../stores/huddleUiStore';
 import {useHuddleAudioStore} from '../stores/huddleAudioStore';
 import {createHuddleNetworkRecovery} from './huddleNetworkRecovery';
 export function bindHuddleSocket(socket,getWorkspaceId) {
+  let disposed=false,heartbeatPending=false;
   const recovery=createHuddleNetworkRecovery({
     getSession:()=>useHuddleStore.getState().session,
     resume:()=>useHuddleStore.getState().resume(),restore:retryHuddleAudio,
@@ -24,14 +25,22 @@ export function bindHuddleSocket(socket,getWorkspaceId) {
   socket.on('huddle:invitation',invitation);
   const connected=()=>recovery.reconnect();
   const disconnected=()=>recovery.begin();
-  const online=()=>{if(!recovery.active || !recovery.check())return;if(!socket.connected)socket.connect?.();else recovery.reconnect();};
+  const heartbeat=async()=>{
+    if(disposed || heartbeatPending || !useHuddleStore.getState().session)return;
+    heartbeatPending=true;const id=useHuddleStore.getState().session.id;
+    try {
+      const alive=await useHuddleStore.getState().heartbeat();
+      if(!disposed && alive===false && useHuddleStore.getState().session?.id===id)recovery.reconnect();
+    }finally{heartbeatPending=false;}
+  };
+  const online=()=>{if(!recovery.active){if(socket.connected)heartbeat();return;}if(!recovery.check())return;if(!socket.connected)socket.connect?.();else recovery.reconnect();};
   const visible=()=>{if(document.visibilityState==='visible')online();};
   window.addEventListener('offline',disconnected);window.addEventListener('online',online);
   window.addEventListener('focus',online);document.addEventListener('visibilitychange',visible);
   const unsubscribeAudio=useHuddleAudioStore.subscribe((audio,previous)=>{
     if(!useHuddleStore.getState().session || useHuddleStore.getState().busy)return;
     if(audio.connection!==previous.connection && ['failed','reconnecting'].includes(audio.connection)) {
-      recovery.begin();if(socket.connected && navigator.onLine!==false)recovery.reconnect();
+      recovery.begin();if(socket.connected && navigator.onLine!==false){if(audio.connection==='failed')recovery.reconnect();else recovery.schedule(8000);}
     }
     if(recovery.active && ['connected','waiting'].includes(audio.connection))recovery.complete();
   });
@@ -40,10 +49,10 @@ export function bindHuddleSocket(socket,getWorkspaceId) {
   socket.on('disconnect',disconnected);
   const timer=setInterval(()=>{
     if(recovery.active && !recovery.check())return;
-    if(socket.connected && !recovery.recovering)useHuddleStore.getState().heartbeat();
+    if(socket.connected && !recovery.recovering)heartbeat();
     // Socket.IO's normal retry budget may finish before the five-minute call
     // deadline. Retry its transport, preserving the same authenticated socket.
     if(recovery.active && navigator.onLine!==false && !socket.connected && !socket.active)socket.connect?.();
   },20000);
-  return ()=>{recovery.dispose();unsubscribeAudio();unsubscribeSession?.();window.removeEventListener('offline',disconnected);window.removeEventListener('online',online);window.removeEventListener('focus',online);document.removeEventListener('visibilitychange',visible);clearInterval(timer);socket.off('disconnect',disconnected);socket.off('huddle:state',state);socket.off('huddle:invitation',invitation);socket.off('connect',connected);useHuddleUiStore.getState().clearInvitations();disposeAudio();};
+  return ()=>{disposed=true;recovery.dispose();unsubscribeAudio();unsubscribeSession?.();window.removeEventListener('offline',disconnected);window.removeEventListener('online',online);window.removeEventListener('focus',online);document.removeEventListener('visibilitychange',visible);clearInterval(timer);socket.off('disconnect',disconnected);socket.off('huddle:state',state);socket.off('huddle:invitation',invitation);socket.off('connect',connected);useHuddleUiStore.getState().clearInvitations();disposeAudio();};
 }

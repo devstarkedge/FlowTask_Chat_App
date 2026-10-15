@@ -1,10 +1,12 @@
 import service from './huddle.service.js';
 import {ConflictError, ForbiddenError} from '../../middleware/errorHandler.js';
 import {buildRoomName} from '../../config/constants.js';
+import {createHuddleOperationQueue} from './huddleOperationQueue.js';
+const queued=createHuddleOperationQueue({maxPending:16});
 
 // REST and Socket.IO operations share the same device/session lock.
 export async function runSocketHuddle(socket,channelId,action,input={},huddleService=service) {
-  if(socket.data.huddleOperation) throw new ConflictError('A huddle operation is already in progress');
+ return queued(socket,async()=>{
   if(!socket.connected) throw new ForbiddenError('A connected session is required');
   socket.data.huddleOperation=true;
   const context={user:socket.chatUser,workspaceId:socket.workspaceId,socketId:socket.id};
@@ -37,4 +39,5 @@ export async function runSocketHuddle(socket,channelId,action,input={},huddleSer
     }
     return result;
   } finally {socket.data.huddleOperation=false;}
+ });
 }

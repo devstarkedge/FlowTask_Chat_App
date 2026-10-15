@@ -18,6 +18,7 @@ export function createHuddleNetworkRecovery({getSession,resume,restore,expire,on
   };
   const reconnect=async()=>{
     begin();if(!check() || !isOnline() || running)return;
+    clearTimeout(retryTimer);retryTimer=null;
     running=true;const ticket=epoch;
     try {
       const restored=await resume();
@@ -27,9 +28,10 @@ export function createHuddleNetworkRecovery({getSession,resume,restore,expire,on
       if(ticket!==epoch || !check() || !isOnline())return;
       if(audio===false)throw new Error('Media recovery pending');
       if(isRestored())reset();
+      else retryTimer=setTimeout(()=>{if(isOnline() && isRestored())reset();else reconnect();},15000);
     } catch {
       if(ticket===epoch && check() && isOnline())retryTimer=setTimeout(reconnect,2000);
     } finally {if(ticket===epoch)running=false;}
   };
-  return {begin,reconnect,check,reset,complete(){if(check() && isOnline() && isRestored())reset();},get active(){return Boolean(deadline);},get recovering(){return running;},dispose(){disposed=true;reset();}};
+  return {begin,reconnect,schedule(delay){begin();if(!check() || running)return;clearTimeout(retryTimer);retryTimer=setTimeout(reconnect,delay);},check,reset,complete(){if(check() && isOnline() && isRestored())reset();},get active(){return Boolean(deadline);},get recovering(){return running;},dispose(){disposed=true;reset();}};
 }

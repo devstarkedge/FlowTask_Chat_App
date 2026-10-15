@@ -3,12 +3,33 @@ import {ForbiddenError, NotFoundError, ValidationError} from '../../middleware/e
 const GRACE=30000, RECONNECT_GRACE=300000, LEASE=60000;
 const publicState = state => ({huddle:state.huddle, revision:state.revision,
   participants:state.participants.map(({secret,socketId,expiresAt,...profile})=>profile)});
+function signalPeers(state,context,input,time) {
+  const sender=state?.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
+  const target=state?.participants.find(p=>p.id===input.targetSessionId);
+  if(!state?.huddle || String(state.huddle._id)!==input.huddleId || !sender || !target || sender===target ||
+    sender.connection!=='connected' || target.connection!=='connected' || !sender.audioReady || !target.audioReady ||
+    !Number.isFinite(sender.expiresAt) || !Number.isFinite(target.expiresAt) || sender.expiresAt<=time || target.expiresAt<=time ||
+    sender.mediaId!==input.fromMediaId || target.mediaId!==input.toMediaId)throw new ForbiddenError('Audio peer is unavailable or belongs to another session');
+  return {sender,target};
+}
 
 export function createHuddleEngine({authorize,repository,presence,publish,notify=async()=>({sent:0}),mediaCapacity=()=>2,now=Date.now}) {
   async function run(context,channelId,action,input={}) {
     if(!/^[a-f\d]{24}$/i.test(channelId || '')) throw new ValidationError('Invalid channel ID');
     if(action!=='sweep') await authorize(context,channelId);
     const key=`${context.workspaceId}:${channelId}`;
+    if(action==='signal' && typeof presence.read==='function') {
+      const state=await presence.read(key);
+      const {target}=signalPeers(state,context,input,now());
+      await authorize({workspaceId:context.workspaceId,user:{_id:target.userId},socketId:target.socketId},channelId);
+      const active=await repository.active(context.workspaceId,channelId);
+      if(!active || String(active._id)!==input.huddleId)throw new ForbiddenError('Active audio meeting is unavailable');
+      // Recheck after asynchronous permission/database work: a peer could
+      // have left or replaced its media generation while those checks ran.
+      const current=signalPeers(await presence.read(key),context,input,now());
+      return {route:{socketId:current.target.socketId,channelId,workspaceId:context.workspaceId,huddleId:input.huddleId,
+        fromSessionId:current.sender.id,toSessionId:current.target.id,fromMediaId:current.sender.mediaId,toMediaId:current.target.mediaId,signal:input.signal}};
+    }
     const completed=await presence(key,async (cached,save)=>{
       const active=await repository.active(context.workspaceId,channelId);
       let state=cached && String(cached.huddle?._id)===String(active?._id) ? structuredClone(cached) :
@@ -19,7 +40,18 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       let route;
       let invite=false;
       const before=state.participants.length;
-      state.participants=state.participants.filter(p=>p.expiresAt>now());
+      state.participants=state.participants.filter(p=>{
+        if(p.expiresAt>now())return true;
+        // A delayed browser heartbeat is not an explicit Leave. Retain the
+        // secret-bound identity for a bounded resume window, just as on a
+        // transport disconnect. Anchor expiry to the missed lease, not sweeps.
+        if(p.connection==='connected' && p.expiresAt+RECONNECT_GRACE>now()) {
+          p.expiresAt+=RECONNECT_GRACE;p.connection='reconnecting';
+          p.audioReady=false;p.mediaId=null;p.screenSharing=false;p.cameraOn=false;p.handRaised=false;
+          changed=true;return true;
+        }
+        return false;
+      });
       if(state.participants.length!==before) changed=true;
       if(before && !state.participants.length) state.emptySince=now();
       if(state.huddle && !state.participants.length && now()-state.emptySince>=GRACE) {
@@ -97,12 +129,15 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
           route={socketId:target.socketId,channelId,workspaceId:context.workspaceId,huddleId:input.huddleId,
             fromSessionId:sender.id,toSessionId:target.id,fromMediaId:sender.mediaId,toMediaId:target.mediaId,signal:input.signal};
         }
+        // Authenticated media renewals/actions also prove this device is alive.
+        // They must not depend on a separate UI interval winning a Redis lock.
+        sender.expiresAt=now()+LEASE;
       } else if(action==='leave' || action==='heartbeat' || action==='disconnect') {
         const participant=state.participants.find(p=>p.socketId===context.socketId);
         if(participant) {
           if(action==='leave') {state.participants=state.participants.filter(p=>p!==participant); changed=true;}
           else {
-            participant.expiresAt=now()+(action==='disconnect'?RECONNECT_GRACE:LEASE);
+            if(action==='disconnect' || participant.connection==='connected')participant.expiresAt=now()+(action==='disconnect'?RECONNECT_GRACE:LEASE);
             if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.cameraOn=false;participant.handRaised=false;participant.mediaId=null;changed=true;}
           }
         } else if(action==='heartbeat') throw new NotFoundError('Huddle participant');

@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme } = require('electron');
+const { installDisplayCapture } = require('./sourcePicker.cjs');
+const { installWindowSecurity } = require('./security.cjs');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 
@@ -52,10 +54,14 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
       nodeIntegration: false,
       backgroundThrottling: false,
     },
   });
+
+  installDisplayCapture(mainWindow, {BrowserWindow,ipcMain,desktopCapturer});
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -71,6 +77,8 @@ function createWindow() {
     // In production, load the built React app
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  installWindowSecurity(mainWindow, {isDev, indexPath:path.join(__dirname, '../dist/index.html')});
 
   // Notify renderer when window maximize state changes
   mainWindow.on('maximize', () => {

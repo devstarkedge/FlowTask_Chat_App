@@ -3,8 +3,8 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 
 /**
  * TableResponsive Extension
- * Automatically tags tables in the DOM with `.is-compact` and `data-cols="compact"`
- * whenever column count exceeds 6, ensuring dynamic responsive column layout.
+ * Keep the table's minimum width proportional to its logical column count.
+ * Added columns grow horizontally instead of squeezing the existing cells.
  */
 export const TableResponsive = Extension.create({
   name: "tableResponsive",
@@ -21,14 +21,9 @@ export const TableResponsive = Extension.create({
             tables.forEach((table) => {
               const firstRow = table.querySelector("tr");
               if (firstRow) {
-                const cols = firstRow.children.length;
-                if (cols > 6) {
-                  table.classList.add("is-compact");
-                  table.setAttribute("data-cols", "compact");
-                } else {
-                  table.classList.remove("is-compact");
-                  table.setAttribute("data-cols", "standard");
-                }
+                const cols = [...firstRow.cells].reduce((count, cell) => count + cell.colSpan, 0);
+                const minimum = `max(100%, ${cols * 160}px)`;
+                if (table.style.minWidth !== minimum) table.style.minWidth = minimum;
               }
             });
           };

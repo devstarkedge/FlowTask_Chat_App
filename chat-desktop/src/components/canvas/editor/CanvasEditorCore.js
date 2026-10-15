@@ -25,6 +25,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import TemplateVariable from "./extensions/TemplateVariable";
 import TableResponsive from "./extensions/TableResponsive";
+import TableRowSorting from "./extensions/TableRowSorting";
 import TemplateVariableView from "./TemplateVariableView";
 import CalloutNode from "../nodes/CalloutNode";
 import FileNode from "../nodes/FileNode";
@@ -214,11 +215,12 @@ export function buildExtensions({ withCollab, ydoc, provider, user }) {
     CalloutNode,
     TaskList,
     TaskItem.configure({ nested: true }),
-    Table.configure({ resizable: true }),
+    Table.configure({ resizable: true, cellMinWidth: 160 }),
     TableRow,
     TableHeader,
     TableCell,
     TableResponsive,
+    TableRowSorting,
     CharacterCount,
     Highlight.configure({ multicolor: true }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),

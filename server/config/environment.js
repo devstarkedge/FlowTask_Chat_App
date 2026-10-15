@@ -115,6 +115,8 @@ const env = Object.freeze({
 
   // Redis (optional)
   REDIS_URL: process.env.REDIS_URL || '',
+  // Development uses one API process; production requires shared presence.
+  HUDDLE_PRESENCE_MODE: process.env.HUDDLE_PRESENCE_MODE || (IS_PRODUCTION ? 'redis' : 'memory'),
   CANVAS_COLLAB_ENABLED: process.env.CANVAS_COLLAB_ENABLED !== 'false',
   CANVAS_COLLAB_PORT: parseInt(process.env.CANVAS_COLLAB_PORT, 10) || ((parseInt(process.env.PORT, 10) || 3200) + 1),
   CANVAS_COLLAB_DEBOUNCE_MS: parseInt(process.env.CANVAS_COLLAB_DEBOUNCE_MS, 10) || 1200,

@@ -1,3 +1,4 @@
+import HuddlePanel from '../huddles/HuddlePanel';
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
@@ -295,6 +296,8 @@ export default function ChatPanel({
         onRemoveCanvasTabById={handleRemoveCanvasTabById}
       />
 
+      <HuddlePanel channelId={channelId} />
+
       {/* Connection status banners — only shown after 1.5s debounce */}
       {showConnectionBanner && connectionStatus === "connecting" && (
         <div
@@ -321,7 +324,7 @@ export default function ChatPanel({
         >
           <div className="flex items-center gap-2">
             <WifiOff size={14} />
-            <span className="font-semibold">Connection restored. Please refresh your application to continue.</span>
+            <span className="font-semibold">Unable to reconnect. Refresh to try again.</span>
           </div>
           <button
             onClick={() => {

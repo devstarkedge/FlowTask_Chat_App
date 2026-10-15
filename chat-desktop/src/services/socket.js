@@ -1,3 +1,6 @@
+import { bindHuddleSocket } from './huddleSocketService'
+import { useHuddleStore } from '../stores/huddleStore'
+import { bindSocketRecovery } from './socketRecovery'
 import { authAPI } from './api'
 import { io } from 'socket.io-client'
 import { queryClient } from '../queries/queryClient'
@@ -22,8 +25,8 @@ import { showDesktopNotification } from './desktopService'
 import { notificationService } from '../notifications'
 
 let socket = null
-let _disconnectTime = 0   // timestamp when socket last disconnected
-const BRIEF_DISCONNECT_THRESHOLD_MS = 5000  // under 5s = brief blip, skip full cascade
+let socketRecovery = null
+let disposeHuddleSocket = null
 
 function getSocketUrl() {
   const explicit = import.meta.env.VITE_SOCKET_URL
@@ -198,10 +201,15 @@ export function setupNetworkListeners() {
 
   window.addEventListener('online', () => {
     logger.log('[NETWORK] online event received')
+    if (socket?.connected) {
+      useChatStore.getState().setConnectionStatus('connected')
+      return
+    }
     const status = useChatStore.getState().connectionStatus
     if (status !== 'connected') {
       useChatStore.getState().setConnectionStatus('connecting')
       if (socket && !socket.connected) {
+        if (socketRecovery?.isRecovering || (socket.active && !socketRecovery?.isBlocked)) return socket
         socket.auth = getSocketAuth()
         socket.connect()
       } else if (!socket) {
@@ -234,6 +242,7 @@ export function connectSocket() {
 
   // Reuse existing disconnected instance instead of creating duplicate clients.
   if (socket && !socket.connected) {
+    if (socketRecovery?.isRecovering || (socket.active && !socketRecovery?.isBlocked)) return socket
     socket.auth = getSocketAuth()
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
     if (isOnline) {
@@ -257,9 +266,18 @@ export function connectSocket() {
     reconnectionDelayMax: 5000,
   })
 
+  disposeHuddleSocket = bindHuddleSocket(socket, () => useWorkspaceStore.getState().activeWorkspaceId)
+  const recoverySocket = socket
+  socketRecovery = bindSocketRecovery(recoverySocket, {
+    getAuth: getSocketAuth,
+    refreshSession: () => authAPI.me(),
+    setStatus: status => useChatStore.getState().setConnectionStatus(status),
+    isCurrent: () => socket === recoverySocket,
+    log: (event, details) => (event === 'reconnect_attempt' ? logger.info : logger.warn)('[Socket] Recovery', { event, ...details }),
+  })
+
   socket.on('connect', () => {
     logger.log('[SOCKET] Connected:', socket.id)
-    _disconnectTime = 0
     useChatStore.getState().setConnectionStatus('connected')
 
     useUserProfileStore.getState().clearProfiles()
@@ -305,56 +323,8 @@ export function connectSocket() {
 
   socket.on('disconnect', (reason) => {
     logger.log('[SOCKET] Disconnected, reason:', reason)
-    _disconnectTime = Date.now()
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
-    useChatStore.getState().setConnectionStatus(isOnline ? 'disconnected' : 'offline')
-  })
-
-  socket.on('reconnect_attempt', (attempt) => {
-    socket.auth = getSocketAuth()
-    logger.log('[SOCKET] Reconnecting... attempt', attempt)
-    useChatStore.getState().setConnectionStatus('connecting')
-  })
-
-  socket.on('reconnect', (attempt) => {
-    logger.log('[SOCKET] Reconnected after', attempt, 'attempts')
-    useChatStore.getState().setConnectionStatus('connected')
-
-    const disconnectDuration = _disconnectTime > 0
-      ? Date.now() - _disconnectTime
-      : Infinity
-
-    _disconnectTime = 0
-
-    if (disconnectDuration < BRIEF_DISCONNECT_THRESHOLD_MS) {
-      logger.log('[SOCKET] Brief disconnect — skipping full re-sync', { disconnectDuration })
-      return
-    }
-
-    performConnectionRecovery('socket_reconnect')
-  })
-
-  socket.on('reconnect_failed', () => {
-    logger.warn('[SOCKET] Max reconnection attempts reached')
-    useChatStore.getState().setConnectionStatus('recovery_required')
-  })
-
-  socket.on('connect_error', (err) => {
-    const freshAuth = getSocketAuth()
-    socket.auth = freshAuth
-
-    logger.error('[SOCKET] Connection error:', err.message)
-
-    if (!freshAuth.token || !freshAuth.workspaceId) {
-      logger.warn('[SOCKET] Missing token/workspace for socket auth, disconnecting')
-      socket.disconnect()
-      useChatStore.getState().setConnectionStatus('disconnected')
-      return
-    }
-
-    if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
-      logger.warn('[SOCKET] Auth error detected on socket connection')
-    }
+    useChatStore.getState().setConnectionStatus(socketRecovery?.isBlocked ? 'recovery_required' : socketRecovery?.isRecovering ? 'connecting' : isOnline ? 'disconnected' : 'offline')
   })
 
   // ─── Message Events ──────────────────────────────────────────────────
@@ -942,6 +912,11 @@ export function connectSocket() {
 }
 
 export function disconnectSocket() {
+  disposeHuddleSocket?.()
+  disposeHuddleSocket = null
+  useHuddleStore.getState().reset()
+  socketRecovery?.dispose()
+  socketRecovery = null
   if (socket) {
     socket.disconnect()
     socket = null
@@ -954,6 +929,7 @@ export function disconnectSocket() {
  * Falls back to full reconnect if socket is not connected.
  */
 export function reconnectWithWorkspace() {
+  useHuddleStore.getState().reset()
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
 
   // Clear transient state across all stores

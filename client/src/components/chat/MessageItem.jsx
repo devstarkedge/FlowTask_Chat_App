@@ -1,4 +1,5 @@
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import HuddleSummary from '../huddles/HuddleSummary';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import MessageContentResolver from "./MessageContentResolver";
@@ -656,6 +657,7 @@ const MessageItem = memo(
     }
 
     // System messages
+    if (message.huddleMeta) return <HuddleSummary message={message}/>;
     if (isSystem) {
       return (
         <div className="flex items-center gap-3 py-2 px-5 my-1 animate-fade-in">

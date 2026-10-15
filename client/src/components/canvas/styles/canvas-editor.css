@@ -374,10 +374,10 @@
   box-sizing: border-box;
 }
 
-/* Base Table Cell Styling (Up to 6 columns: Comfortable layout) */
+/* Comfortable cell spacing at every column count. */
 .canvas-prosemirror th,
 .canvas-prosemirror td {
-  min-width: 90px;
+  min-width: 160px;
   border: 1px solid var(--border-primary);
   padding: 10px 14px;
   vertical-align: top;
@@ -405,38 +405,7 @@
   color: var(--text-primary);
 }
 
-/* ─── Compact Layout (> 6 Columns Threshold) ─────────────────────────── */
-/* Automatically applies when a table has more than 6 columns */
-.canvas-prosemirror table:has(tr > :nth-child(7)),
-.canvas-prosemirror table.is-compact,
-.canvas-prosemirror table[data-cols="compact"] {
-  min-width: max-content;
-}
-
-.canvas-prosemirror table:has(tr > :nth-child(7)) th,
-.canvas-prosemirror table:has(tr > :nth-child(7)) td,
-.canvas-prosemirror table.is-compact th,
-.canvas-prosemirror table.is-compact td,
-.canvas-prosemirror table[data-cols="compact"] th,
-.canvas-prosemirror table[data-cols="compact"] td {
-  min-width: 80px;
-  padding: 7px 10px;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.canvas-prosemirror table:has(tr > :nth-child(7)) th,
-.canvas-prosemirror table.is-compact th,
-.canvas-prosemirror table[data-cols="compact"] th {
-  font-size: 11px;
-}
-
-.canvas-prosemirror table:has(tr > :nth-child(7)) tr td:first-child code,
-.canvas-prosemirror table.is-compact tr td:first-child code,
-.canvas-prosemirror table[data-cols="compact"] tr td:first-child code {
-  padding: 3px 8px;
-  font-size: 11px;
-}
+/* Keep comfortable cell spacing as columns grow; the wrapper scrolls. */
 
 /* Rounded corners for outer table borders inside wrapper */
 .canvas-prosemirror tr:first-child th:first-child,
@@ -1042,4 +1011,9 @@
   border-width: 5px;
   border-style: solid;
   border-color: #000 transparent transparent transparent;
-}
+}
+.canvas-table-row-drag { position: absolute; z-index: 3; left: 0; top: 50%; transform: translateY(-50%); width: 14px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: grab; user-select: none; color: var(--text-muted); opacity: 0; }
+.canvas-prosemirror :is(td, th):has(> .canvas-table-row-drag) { position: relative; }
+
+.canvas-prosemirror tr:hover .canvas-table-row-drag { opacity: 1; }
+.canvas-prosemirror :is(td, th):has(> .canvas-table-row-drag) { padding-left: 28px; }

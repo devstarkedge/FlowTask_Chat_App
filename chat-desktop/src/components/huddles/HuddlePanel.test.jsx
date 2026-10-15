@@ -1,0 +1,13 @@
+import React,{act} from 'react';
+import {createRoot} from 'react-dom/client';
+import {beforeEach,afterEach,it,expect,vi} from 'vitest';
+const state=vi.hoisted(()=>({huddle:{byChannel:{},session:null,load:vi.fn()},chat:{connectionStatus:'connected'},channels:[{_id:'channel',name:'Design'}]}));
+vi.mock('../../stores/huddleStore',()=>({useHuddleStore:selector=>selector(state.huddle)}));
+vi.mock('../../stores/chatStore',()=>({useChatStore:selector=>selector(state.chat)}));
+vi.mock('../../stores/channelStore',()=>({useChannelStore:selector=>selector({channels:state.channels})}));
+import HuddlePanel from './HuddlePanel';
+import {useHuddleUiStore} from '../../stores/huddleUiStore';
+let root,container;
+beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;vi.clearAllMocks();state.huddle.byChannel={};state.huddle.session=null;useHuddleUiStore.setState({panel:null});container=document.createElement('div');document.body.appendChild(container);root=createRoot(container);});afterEach(()=>{act(()=>root.unmount());container.remove();});
+it('loads lifecycle discovery without showing an extra inactive call bar',()=>{act(()=>root.render(<HuddlePanel channelId="channel"/>));expect(state.huddle.load).toHaveBeenCalledWith('channel');expect(container.textContent).toBe('');});
+it('join opens the pre-call panel instead of immediately starting capture',()=>{state.huddle.byChannel.channel={huddle:{_id:'call'},participants:[{id:'session',name:'Alice'}]};act(()=>root.render(<HuddlePanel channelId="channel"/>));act(()=>container.querySelector('button').click());expect(useHuddleUiStore.getState().panel.channelId).toBe('channel');expect(container.textContent).toContain('Join Huddle');});

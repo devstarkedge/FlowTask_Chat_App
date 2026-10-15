@@ -44,9 +44,9 @@ export default function TableHoverControls({ editor, containerRef }) {
       }
       if (rect.bottom <= top || rect.top >= bottom) return false;
       const edge = Math.min(rect.right, wrapper.right);
-      const sideRoom = edge + 44 <= right;
-      setCross({ x: (sideRoom ? edge + 8 : Math.min(edge, right) - 40) - host.left,
-        y: Math.max(top, Math.min(rect.top - 40, bottom - 36)) - host.top });
+      const sideRoom = edge + 40 <= right;
+      setCross({ x: (sideRoom ? edge + 4 : Math.min(edge, right) - 40) - host.left,
+        y: Math.max(top, Math.min(sideRoom ? rect.top : rect.top - 40, bottom - 36)) - host.top });
       return true;
     };
     const selectedTable = () => {
@@ -101,6 +101,9 @@ export default function TableHoverControls({ editor, containerRef }) {
       setIsVisible(true);
 
       const rect = tableEl.getBoundingClientRect();
+      const wrapperRect = tableEl.closest('.tableWrapper')?.getBoundingClientRect() || rect;
+      const visibleLeft = Math.max(rect.left, wrapperRect.left);
+      const visibleRight = Math.min(rect.right, wrapperRect.right);
       const containerRect = container.getBoundingClientRect();
 
       const mouseX = e.clientX - rect.left;
@@ -128,7 +131,8 @@ export default function TableHoverControls({ editor, containerRef }) {
       });
 
       // Internal separator lines (exclude last edge = table border)
-      const verticalLines = colEdges.length > 1 ? colEdges.slice(0, -1) : [rect.width / 2];
+      const visibleColumns = colEdges.slice(0, -1).filter(x => rect.left + x >= visibleLeft + 12 && rect.left + x <= visibleRight - 40);
+      const verticalLines = visibleColumns.length ? visibleColumns : [(visibleLeft + visibleRight) / 2 - rect.left];
       const horizontalLines = rowEdges.length > 1 ? rowEdges.slice(0, -1) : [rect.height / 2];
 
       // Nearest column separator to mouse X
@@ -151,7 +155,7 @@ export default function TableHoverControls({ editor, containerRef }) {
 
       // Distance to bottom vs right outer border
       const distBottom = Math.abs(rect.height - mouseY);
-      const distRight = Math.abs(rect.width - mouseX);
+      const distRight = Math.abs(visibleRight - e.clientX);
 
       // Only show within 120 px of an outer border
       const maxDistance = 120;
@@ -177,19 +181,20 @@ export default function TableHoverControls({ editor, containerRef }) {
         setDeleteY(tableTop + rect.height);
 
         // Dot on right border at nearest row separator
-        setDotX(tableLeft + rect.width);
+        setDotX(visibleRight - containerRect.left);
         setDotY(tableTop + targetY);
       } else {
         // ── Column axis: buttons sit to the right of the table ──────────
         setActiveAxis('col');
 
         // Insert (+) centered at nearest row separator, right of table
-        setInsertX(tableLeft + rect.width);
-        setInsertY(tableTop + targetY);
+        const controlY = Math.max(12, Math.min(targetY, rect.height - GAP - 12));
+        setInsertX(visibleRight - containerRect.left);
+        setInsertY(tableTop + controlY);
 
         // Delete (−) just below insert
-        setDeleteX(tableLeft + rect.width);
-        setDeleteY(tableTop + targetY + GAP);
+        setDeleteX(visibleRight - containerRect.left);
+        setDeleteY(tableTop + controlY + GAP);
 
         // Dot on bottom border at nearest column separator
         setDotX(tableLeft + targetX);
@@ -232,6 +237,7 @@ export default function TableHoverControls({ editor, containerRef }) {
     document.addEventListener('mousemove', handleMouseMove);
     container.addEventListener('mouseleave', handleMouseLeave);
     editor?.on('selectionUpdate', handleSelection);
+    editor?.on('update', handleScroll);
     document.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleScroll);
     document.addEventListener('pointerup', handlePointerUp);
@@ -240,6 +246,7 @@ export default function TableHoverControls({ editor, containerRef }) {
       document.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseleave', handleMouseLeave);
       editor?.off('selectionUpdate', handleSelection);
+      editor?.off('update', handleScroll);
       document.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleScroll);
       document.removeEventListener('pointerup', handlePointerUp);

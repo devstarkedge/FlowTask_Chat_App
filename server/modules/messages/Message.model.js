@@ -263,6 +263,11 @@ const messageSchema = new Schema({
     }, { _id: false }),
     default: null,
   },
+  huddleMeta: {
+    type: new Schema({huddleId:Schema.Types.ObjectId,startedAt:Date,endedAt:Date,notes:String,
+      attendees:[{type:Schema.Types.ObjectId,ref:'ChatUser'}]}, {_id:false}),
+    default:null,
+  },
   gifMeta: {
     type: gifMetaSchema,
     default: null,

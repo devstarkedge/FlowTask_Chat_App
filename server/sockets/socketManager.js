@@ -7,6 +7,7 @@ import logger from '../utils/logger.js';
 import { logSocketReconnect } from '../utils/performanceLogger.js';
 import { SOCKET_EVENTS, buildRoomName } from '../config/constants.js';
 import registerCanvasSocket from '../modules/canvas/canvas.socket.js';
+import registerHuddleSocket, {leaveHuddleForWorkspaceSwitch} from '../modules/huddles/huddle.socket.js';
 
 
 /**
@@ -269,6 +270,7 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     // Register Canvas Socket Listeners
     registerCanvasSocket(io, socket);
+    registerHuddleSocket(io, socket);
 
     // Enforce max connections per user (cap at 5 tabs/devices)
     const currentUser = await userRepository.addSocketId(userId, socket.id);
@@ -641,6 +643,7 @@ export async function initializeSocket(httpServer, corsOptions) {
         // Update workspace context
         const previousWorkspaceId = wsId;
         socket.workspaceId = newWorkspaceId;
+        leaveHuddleForWorkspaceSwitch(socket);
         socket.workspaceMembership = newMembership;
         wsId = newWorkspaceId;
 
@@ -942,11 +945,12 @@ export function emitToUser(userId, event, data, workspaceId) {
  * @param {object} data
  * @param {string} [workspaceId] - If provided, uses workspace-scoped room
  */
-export function emitToChannel(channelId, event, data, workspaceId) {
+export function emitToChannel(channelId, event, data, workspaceId, additionalRoom) {
   if (!io) return;
   const room = resolveScopedRoom(workspaceId, 'channel', channelId, 'emitToChannel');
   if (!room) return;
-  io.to(room).emit(event, data);
+  const target=additionalRoom?io.to(room).to(additionalRoom):io.to(room);
+  target.emit(event, data);
 }
 
 /**

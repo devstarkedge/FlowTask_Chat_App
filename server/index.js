@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
+import huddleRoutes from './modules/huddles/huddle.routes.js';
+import {startHuddleSweeper} from './modules/huddles/huddle.sweeper.js';
+import {initializeHuddles} from './modules/huddles/huddle.initialize.js';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
@@ -245,6 +248,7 @@ app.use('/api/chat/drafts', draftRoutes);
 app.use('/api/chat/categories', categoryRoutes);
 app.use('/api/chat/favorites', favoritesRoutes);
 app.use('/api/chat/canvas', canvasRoutes);
+app.use('/api/chat/huddles', huddleRoutes);
 app.use('/api/chat/push', pushRoutes);
 app.use('/api/chat/gifs', gifsRoutes);
 app.use('/api/chat/search', searchRoutes);
@@ -278,12 +282,15 @@ app.use(errorHandler);
 
 // ─── Start Server ────────────────────────────────────────────────────────────
 let memoryMonitorTimer = null;
+let stopHuddleSweeper = null;
 
 async function startServer() {
   try {
     // 1. Connect to MongoDB
     await connectDatabase();
     if (!isDatabaseConnected()) throw new Error('MongoDB is not ready; startup was stopped before database queries.');
+    // The partial unique index is required even when production autoIndex is off.
+    await initializeHuddles().catch(error=>logger.warn('Huddles disabled for this server process',{code:error.code}));
 
     // 2. Register webhook event handlers (only when FlowTask is enabled)
     if (env.FLOWTASK_ENABLED) {
@@ -292,6 +299,7 @@ async function startServer() {
 
     // 3. Initialize Socket.IO
     await initializeSocket(httpServer, corsOptions);
+    stopHuddleSweeper = startHuddleSweeper();
 
     // 4. Ensure default workspace exists
     const defaultWorkspace = await workspaceService.ensureDefaultWorkspace();
@@ -369,6 +377,7 @@ async function startServer() {
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 async function shutdown(signal) {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
+  stopHuddleSweeper?.();
 
   // 1. Stop memory monitor
   if (memoryMonitorTimer) {

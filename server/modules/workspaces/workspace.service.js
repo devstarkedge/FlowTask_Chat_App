@@ -584,6 +584,8 @@ class WorkspaceService {
       // 6. Delete all canvases
       const { default: Canvas } = await import('../canvas/canvas.model.js');
       const canvasResult = await Canvas.deleteMany({ workspaceId: wsObjectId });
+      const {default:Huddle} = await import('../huddles/Huddle.model.js');
+      await Huddle.deleteMany({workspaceId:wsObjectId});
       logger.info(`[CASCADE] Deleted ${canvasResult.deletedCount} canvases`);
 
       // 7. Delete all read receipts

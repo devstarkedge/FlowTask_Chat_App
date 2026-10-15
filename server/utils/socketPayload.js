@@ -138,6 +138,7 @@ export function messageSocketPayload(message, extras = {}) {
     gifMeta: plain.gifMeta || null,
     audioMeta: plain.audioMeta || null,
     videoMeta: plain.videoMeta || null,
+    huddleMeta: plain.huddleMeta || null,
     status: plain.status || 'sent',
     deliveredAt: plain.deliveredAt || null,
     seenAt: plain.seenAt || null,

@@ -1,0 +1,102 @@
+import {randomUUID} from 'node:crypto';
+import {ForbiddenError, NotFoundError, ValidationError} from '../../middleware/errorHandler.js';
+const GRACE=30000, LEASE=60000;
+const publicState = state => ({huddle:state.huddle, revision:state.revision,
+  participants:state.participants.map(({secret,socketId,expiresAt,...profile})=>profile)});
+
+export function createHuddleEngine({authorize,repository,presence,publish,now=Date.now}) {
+  async function run(context,channelId,action,input={}) {
+    if(!/^[a-f\d]{24}$/i.test(channelId || '')) throw new ValidationError('Invalid channel ID');
+    if(action!=='sweep') await authorize(context,channelId);
+    const key=`${context.workspaceId}:${channelId}`;
+    return presence(key,async (cached,save)=>{
+      const active=await repository.active(context.workspaceId,channelId);
+      let state=cached && String(cached.huddle?._id)===String(active?._id) ? structuredClone(cached) :
+        {huddle:active,participants:[],revision:Math.max(cached?.revision || 0,now()*1000),emptySince:now()};
+      let changed=false;
+      let route;
+      const before=state.participants.length;
+      state.participants=state.participants.filter(p=>p.expiresAt>now());
+      if(state.participants.length!==before) changed=true;
+      if(before && !state.participants.length) state.emptySince=now();
+      if(state.huddle && !state.participants.length && now()-state.emptySince>=GRACE) {
+        await repository.end(state.huddle._id); state.huddle=null; changed=true;
+      }
+      if(action==='start' && !state.huddle) {
+        state.huddle=await repository.start(context,channelId);
+        state.emptySince=now(); changed=true;
+      }
+      if(action==='start' || action==='join' || action==='resume') {
+        if(!state.huddle) throw new NotFoundError('Active huddle');
+        const existing=state.participants.find(p=>p.id===input.sessionId);
+        if(action==='resume' && (!existing || existing.userId!==String(context.user._id) || existing.secret!==input.secret)) throw new ForbiddenError('Huddle session cannot be resumed');
+        let participant=existing;
+        if(action!=='resume') participant=state.participants.find(p=>p.socketId===context.socketId);
+        if(!participant) {
+          if(state.participants.length>=50) throw new ValidationError('Huddle participant limit reached');
+          participant={id:randomUUID(),secret:randomUUID(),userId:String(context.user._id),name:context.user.name,avatar:context.user.avatar || null};
+          state.participants.push(participant); changed=true;
+        }
+        if(participant.connection!=='connected') changed=true;
+        participant.connection='connected';
+        if(repository.attend) await repository.attend(state.huddle._id,context.user._id);
+        participant.socketId=context.socketId; participant.expiresAt=now()+LEASE;
+        state.emptySince=null;
+        input.session={id:participant.id,secret:participant.secret};
+      } else if(['hand','reaction','notes','screen-state','audio-ready','audio-state','audio-config','signal'].includes(action)) {
+        const sender=state.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
+        if(!state.huddle || !sender || sender.connection!=='connected') throw new ForbiddenError('Join this huddle before using audio');
+        if(action==='hand') {
+          if(typeof input.raised!=='boolean')throw new ValidationError('Invalid hand state');
+          sender.handRaised=input.raised;changed=true;
+        } else if(action==='reaction') {
+          if(!['👍','❤️','😂','🎉','👏','🙌'].includes(input.emoji))throw new ValidationError('Unsupported reaction');
+          sender.reaction={emoji:input.emoji,at:now(),id:randomUUID()};changed=true;
+        } else if(action==='notes') {
+          if(typeof input.text!=='string' || input.text.length>10000 || !Number.isInteger(input.version))throw new ValidationError('Invalid meeting notes');
+          state.huddle=await repository.notes(state.huddle._id,input.text,input.version);changed=true;
+        } else if(action==='screen-state') {
+          if(!sender.audioReady || typeof input.sharing!=='boolean')throw new ValidationError('Invalid screen sharing state');
+          if(input.sharing && state.participants.some(p=>p!==sender && p.screenSharing))throw new ValidationError('Someone is already sharing a screen');
+          sender.screenSharing=input.sharing;changed=true;
+        } else if(action==='audio-ready') {
+          if(!sender.audioReady && state.participants.filter(p=>p.audioReady).length>=2) throw new ValidationError('This audio milestone supports two devices. Group audio requires the SFU milestone.');
+          sender.audioReady=true; sender.screenSharing=false; sender.mediaId=randomUUID(); sender.muted=input.muted!==false;
+          changed=true;
+        } else if(action==='audio-state') {
+          if(!sender.audioReady || typeof input.muted!=='boolean') throw new ValidationError('Invalid audio state');
+          sender.muted=input.muted; changed=true;
+        } else if(action==='audio-config') {
+          if(!sender.audioReady) throw new ForbiddenError('Audio is not enabled for this session');
+        } else {
+          const target=state.participants.find(p=>p.id===input.targetSessionId);
+          if(String(state.huddle._id)!==input.huddleId || !sender.audioReady || sender.mediaId!==input.fromMediaId || !target || target===sender || !target.audioReady || target.connection!=='connected' || target.mediaId!==input.toMediaId) throw new ForbiddenError('Audio peer is unavailable or belongs to another session');
+          // Recheck the receiver through the existing membership/permission layer.
+          await authorize({workspaceId:context.workspaceId,user:{_id:target.userId},socketId:target.socketId},channelId);
+          route={socketId:target.socketId,channelId,workspaceId:context.workspaceId,huddleId:input.huddleId,
+            fromSessionId:sender.id,toSessionId:target.id,fromMediaId:sender.mediaId,toMediaId:target.mediaId,signal:input.signal};
+        }
+      } else if(action==='leave' || action==='heartbeat' || action==='disconnect') {
+        const participant=state.participants.find(p=>p.socketId===context.socketId);
+        if(participant) {
+          if(action==='leave') {state.participants=state.participants.filter(p=>p!==participant); changed=true;}
+          else {
+            participant.expiresAt=now()+(action==='disconnect'?GRACE:LEASE);
+            if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.handRaised=false;participant.mediaId=null;changed=true;}
+          }
+        } else if(action==='heartbeat') throw new NotFoundError('Huddle participant');
+      } else if(action==='end') {
+        if(state.huddle && String(state.huddle.startedBy)!==String(context.user._id) && !['owner','admin'].includes(context.membership.role)) throw new ForbiddenError('Only the starter or workspace owner/admin can end this huddle');
+        if(state.huddle) await repository.end(state.huddle._id);
+        state.huddle=null; state.participants=[]; changed=true;
+      }
+      if(!state.participants.length && state.emptySince===null) state.emptySince=now();
+      if(changed) state.revision=Math.max(state.revision+1,now()*1000);
+      await save(state);
+      const result=publicState(state);
+      if(changed) publish(context.workspaceId,channelId,result);
+      return {...result,...(input.session?{session:input.session}: {}),...(route?{route}: {})};
+    });
+  }
+  return {run};
+}

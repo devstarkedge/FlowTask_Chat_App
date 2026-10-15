@@ -1,0 +1,40 @@
+import service from './huddle.service.js';
+import {ConflictError, ForbiddenError} from '../../middleware/errorHandler.js';
+import {buildRoomName} from '../../config/constants.js';
+
+// REST and Socket.IO operations share the same device/session lock.
+export async function runSocketHuddle(socket,channelId,action,input={},huddleService=service) {
+  if(socket.data.huddleOperation) throw new ConflictError('A huddle operation is already in progress');
+  if(!socket.connected) throw new ForbiddenError('A connected session is required');
+  socket.data.huddleOperation=true;
+  const context={user:socket.chatUser,workspaceId:socket.workspaceId,socketId:socket.id};
+  try {
+    const previous=socket.data.huddle;
+    if(['start','join','resume'].includes(action) && previous && previous.channelId!==channelId) {
+      let state;
+      try {state=await huddleService.run(context,previous.channelId,'get');}
+      catch(error) {
+        if(![403,404].includes(error.statusCode))throw error;
+        state={huddle:null,participants:[]};
+      }
+      if(state.huddle && state.participants.some(p=>p.id===previous.sessionId)) throw new ConflictError('Leave your current huddle first');
+      if(previous.room)socket.leave?.(previous.room);
+      socket.data.huddle=null;
+    }
+    const result=await huddleService.run(context,channelId,action,input);
+    if(result.session) {
+      if(!socket.connected || socket.workspaceId!==context.workspaceId) {
+        await huddleService.run(context,channelId,'leave');
+        throw new ConflictError('Connection changed. Join the huddle again.');
+      }
+      const room=buildRoomName(context.workspaceId,'huddle',channelId);
+      socket.join?.(room);
+      socket.data.huddle={channelId,workspaceId:context.workspaceId,sessionId:result.session.id,room};
+    }
+    if((action==='leave' || action==='end') && socket.data.huddle?.channelId===channelId) {
+      if(socket.data.huddle.room)socket.leave?.(socket.data.huddle.room);
+      socket.data.huddle=null;
+    }
+    return result;
+  } finally {socket.data.huddleOperation=false;}
+}

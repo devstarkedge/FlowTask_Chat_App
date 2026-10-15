@@ -6,6 +6,7 @@ import FileAsset from "../modules/files/FileAsset.model.js";
 import env from "../config/environment.js";
 import logger from "../utils/logger.js";
 import { logUploadFailure } from "../utils/performanceLogger.js";
+import { scanUpload } from './uploadScanner.js';
 
 cloudinary.config({
   cloud_name: env.CLOUDINARY_CLOUD_NAME,
@@ -94,6 +95,7 @@ class FileUploadService {
    * Queues a file for upload and immediately returns the FileAsset in 'uploading' state.
    */
   async queueUpload(file, userId, workspaceId) {
+    if (file.securityScan?.status !== 'clean') file.securityScan = await scanUpload(file);
     const checksumHash = await this.generateChecksum(file.path);
 
     // Determine resource type for Cloudinary
@@ -115,7 +117,7 @@ class FileUploadService {
       workspaceId,
       checksumHash,
       status: "uploading",
-      metadata: {}, // No local server file paths stored in MongoDB
+      metadata: {securityScan:{status:file.securityScan.status,scannedAt:new Date()}},
     });
 
     await asset.save();
@@ -134,6 +136,7 @@ class FileUploadService {
    * Uploads a file to Cloudinary synchronously (blocks until done) and returns the completed FileAsset.
    */
   async uploadImmediately(file, userId, workspaceId) {
+    if (file.securityScan?.status !== 'clean') file.securityScan = await scanUpload(file);
     const checksumHash = await this.generateChecksum(file.path);
 
     // Determine resource type for Cloudinary
@@ -154,7 +157,7 @@ class FileUploadService {
       workspaceId,
       checksumHash,
       status: "uploading",
-      metadata: {}, // No local server file paths stored in MongoDB
+      metadata: {securityScan:{status:file.securityScan.status,scannedAt:new Date()}},
     });
 
     await asset.save();
@@ -415,6 +418,7 @@ class FileUploadService {
       }
 
       asset.metadata = {
+        securityScan: asset.metadata?.securityScan,
         width: result.width,
         height: result.height,
         duration: result.duration,

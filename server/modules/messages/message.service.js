@@ -1,3 +1,5 @@
+import { authorizeFileReferences } from '../files/fileAccess.service.js';
+import readReceiptRepository from '../readReceipts/readReceipt.repository.js';
 import messageRepository from './message.repository.js';
 import channelRepository from '../channels/channel.repository.js';
 import threadRepository from '../threads/thread.repository.js';
@@ -62,6 +64,8 @@ class MessageService {
     const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
+
+    await authorizeFileReferences(fileReferences, authorId, workspaceId || channel.workspaceId);
 
     // Sanitize content
     const sanitizedContent = content ? sanitizeHtml(content) : '';

@@ -1,3 +1,4 @@
+import { scanUploadedFiles } from '../../services/uploadScanner.js';
 import { Router } from 'express';
 import {
   getMessages,
@@ -75,7 +76,7 @@ const router = Router();
 router.use(protect);
 
 // ─── Workspace-agnostic routes ──────────────────────────────────────────────
-router.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, validateUploadedFileMagic, uploadFiles);
+router.post('/upload', resolveWorkspace, uploadLimiter, uploadMiddleware, handleMulterError, validateUploadedFileMagic, scanUploadedFiles, uploadFiles);
 // Proxy endpoint: streams a FileAsset from Cloudinary server-side to avoid CDN 401
 router.get('/files/:assetId/proxy', proxyFileAsset);
 
@@ -135,7 +136,7 @@ channelMessageRouter.use(requireChannelAccess());
 channelMessageRouter.get('/messages', getMessages);
 channelMessageRouter.get('/messages/around/:messageId', getMessagesAround);
 channelMessageRouter.post('/messages', validate({ body: sendMessageSchema }), sendMessage);
-channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, validateUploadedFileMagic, uploadFiles);
+channelMessageRouter.post('/upload', uploadLimiter, uploadMiddleware, handleMulterError, validateUploadedFileMagic, scanUploadedFiles, uploadFiles);
 channelMessageRouter.post('/upload/sign', getUploadSignature);
 channelMessageRouter.get('/files', getChannelFiles);
 channelMessageRouter.delete('/files/:fileId', deleteChannelFile);

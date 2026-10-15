@@ -21,7 +21,7 @@ export const resolveWorkspace = async (req, res, next) => {
     const workspaceId = req.headers['x-workspace-id'] || req.headers['workspace-id'] || req.query.workspaceId || req.query.w;
 
     if (!workspaceId) {
-      console.error('[resolveWorkspace] 400: Workspace context is required. Headers:', req.headers);
+      console.warn('[resolveWorkspace] Workspace context is required', {requestId:req.requestId});
       return res.status(400).json({
         success: false,
         message: 'Workspace context is required. Provide x-workspace-id header or workspaceId query parameter.',

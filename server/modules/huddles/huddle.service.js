@@ -4,7 +4,7 @@ import {withPresence} from './huddlePresence.js';
 import channelService from '../channels/channel.service.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import {ForbiddenError} from '../../middleware/errorHandler.js';
-import {emitToChannel,getIO} from '../../sockets/socketManager.js';
+import {emitToChannel,emitToUser,getIO} from '../../sockets/socketManager.js';
 import {buildRoomName} from '../../config/constants.js';
 import ChatUser from '../users/ChatUser.model.js';
 import {initializeHuddles} from './huddle.initialize.js';
@@ -14,9 +14,40 @@ import Channel from '../channels/Channel.model.js';
 import {completeHuddle} from './huddleSummary.js';
 import {messageSocketPayload} from '../../utils/socketPayload.js';
 import {ValidationError} from '../../middleware/errorHandler.js';
+import ChannelMember from '../channels/ChannelMember.model.js';
+import {shouldDeliverNotification} from '../notifications/dnd.gateway.js';
+import {deliverHuddleInvitations} from './huddleInvitations.js';
+import {mediaSettings} from './huddleMediaConfig.js';
 
 const engine=createHuddleEngine({
   presence:withPresence,
+  mediaCapacity:()=>mediaSettings().maxPeers,
+  notify:async(context,channelId,state)=>{
+    try {
+      return await deliverHuddleInvitations(context,channelId,state,{
+        getSockets:async()=>{
+          const sockets=await getIO()?.fetchSockets() || [];
+          const prefix=`ws:${context.workspaceId}:user:`;
+          return sockets.flatMap(socket=>[...socket.rooms].filter(room=>room.startsWith(prefix)).map(room=>({workspaceId:context.workspaceId,chatUser:{_id:room.slice(prefix.length)}})));
+        },
+        getChannel:(id,workspaceId)=>Channel.findOne({_id:id,workspaceId}).select('name type isArchived dmParticipants').lean(),
+        getMembers:(id,workspaceId,users)=>ChannelMember.find({channelId:id,workspaceId,userId:{$in:users}}).select('userId isActive notificationsEnabled').lean(),
+        authorize:async(userId,id,workspaceId)=>{
+          const membership=await WorkspaceMembership.findOne({userId,workspaceId,isActive:true}).lean();
+          if(!membership)throw new ForbiddenError('Workspace membership required');
+          await channelService.getChannelById(id,userId,workspaceId,membership);
+        },
+        allowsNotification:async(userId,senderId,id)=>{
+          if(!await shouldDeliverNotification(userId,senderId))return false;
+          const recipient=await ChatUser.findById(userId).select('isActive chatPreferences.channelMutes').lean();
+          const mutes=recipient?.chatPreferences?.channelMutes;
+          const mute=mutes?.get?.(id) || mutes?.[id];
+          return recipient?.isActive && !(mute?.muted && (!mute.muteUntil || new Date(mute.muteUntil)>new Date()));
+        },
+        emit:(userId,payload)=>emitToUser(userId,'huddle:invitation',payload,context.workspaceId),
+      });
+    } catch(error){logger.error('Huddle invitations failed',{channelId,code:error.code || 'HUDDLE_INVITATION',message:error.message});return {sent:0,error:'Invitations could not be delivered. Copy the meeting link or try Invite again.'};}
+  },
   authorize:async(context,channelId)=>{
     await initializeHuddles();
     const user=await ChatUser.findById(context.user?._id).select('_id name avatar isActive').lean();

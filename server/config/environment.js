@@ -1,8 +1,10 @@
 import dotenv from 'dotenv';
+import {validateProductionSecrets} from './productionSecurity.js';
 // Record precedence without retaining/logging a second copy of the URI.
 const mongoEnvOverriddenByDotenv = (() => {
   const supplied = process.env.MONGO_URI;
-  dotenv.config({ override: true });
+  // Hosted environment secrets must take precedence over any bundled .env.
+  dotenv.config({ override: process.env.NODE_ENV !== 'production' });
   return Boolean(supplied && supplied !== process.env.MONGO_URI);
 })();
 
@@ -49,6 +51,8 @@ if (IS_PRODUCTION) {
     process.exit(1);
   }
 }
+
+validateProductionSecrets(process.env);
 
 // ─── Parse CORS origins ─────────────────────────────────────────────────────
 function parseCorsOrigins(raw) {

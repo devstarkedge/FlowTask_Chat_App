@@ -1,11 +1,12 @@
+import { assertCloudinaryDeliveryUrl } from "./deliveryUrl.js";
+import { scanSettings } from '../../services/uploadScanner.js';
 import { v2 as cloudinary } from "cloudinary";
 import asyncHandler from "../../middleware/asyncHandler.js";
 import env from "../../config/environment.js";
 import FileAsset from "./FileAsset.model.js";
-import FileReference from "./FileReference.model.js";
-import Channel from "../channels/Channel.model.js";
-import ChannelMember from "../channels/ChannelMember.model.js";
-import WorkspaceMembership from "../workspaces/WorkspaceMembership.model.js";
+
+import { assertFileAccess } from "./fileAccess.service.js";
+
 import {
   NotFoundError,
   ForbiddenError,
@@ -35,49 +36,6 @@ function redactDeliveryUrl(url = "") {
       .replace(/([?&](signature|api_key)=)[^&]+/g, "$1redacted")
       .substring(0, 180);
   }
-}
-
-async function assertFileAccess(asset, req) {
-  const targetWorkspaceId = req.workspaceId || req.query.workspaceId || req.query.w || asset.workspaceId?.toString();
-
-  // 1. If user is the file uploader, grant access
-  if (asset.uploadedBy?.toString() === req.user?._id?.toString()) {
-    if (targetWorkspaceId) req.workspaceId = targetWorkspaceId.toString();
-    return;
-  }
-
-  // 2. If workspace context exists, verify user's active membership in the workspace
-  if (targetWorkspaceId) {
-    const isMember = await WorkspaceMembership.exists({
-      userId: req.user._id,
-      workspaceId: targetWorkspaceId,
-      isActive: true,
-    });
-    if (isMember) {
-      req.workspaceId = targetWorkspaceId.toString();
-      return;
-    }
-  }
-
-  // 3. Fallback: check channel membership from references
-  const references = await FileReference.find({
-    fileId: asset._id,
-  }).select('channelId').lean();
-
-  const channelIds = [...new Set(
-    references.map((reference) => reference.channelId?.toString()).filter(Boolean),
-  )];
-
-  if (channelIds.length > 0) {
-    const isChannelMember = await ChannelMember.exists({
-      channelId: { $in: channelIds },
-      userId: req.user._id,
-      isActive: true,
-    });
-    if (isChannelMember) return;
-  }
-
-  throw new ForbiddenError("Access denied");
 }
 
 function getResourceTypeFromUrl(url = "") {
@@ -159,12 +117,14 @@ function shouldRetryWithSignedUrl(upstream, cldError = "") {
 }
 
 async function fetchCloudinaryWithTimeout(fetchUrl, assetId) {
+  assertCloudinaryDeliveryUrl(fetchUrl, env.CLOUDINARY_CLOUD_NAME);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
     return await fetch(fetchUrl, {
       signal: controller.signal,
+      redirect: "manual",
       headers: { "User-Agent": "FlowTask-Chat/1.0" },
     });
   } catch (err) {
@@ -195,6 +155,7 @@ async function fetchCloudinaryWithTimeout(fetchUrl, assetId) {
  * Returns signed params for client-side direct upload to Cloudinary.
  */
 export const getUploadSignature = asyncHandler(async (req, res) => {
+  if (scanSettings().mode !== "off") throw new ForbiddenError("Direct uploads cannot bypass malware scanning. Use the authenticated upload endpoint.");
   const timestamp = Math.round(Date.now() / 1000);
   const folder = `flowtask-chat/uploads/${req.user._id}`;
 
@@ -334,6 +295,7 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
   } catch {
     throw new ForbiddenError("Invalid file URL");
   }
+  assertCloudinaryDeliveryUrl(storedUrl, env.CLOUDINARY_CLOUD_NAME);
   if (!parsedUrl.hostname.endsWith(".cloudinary.com")) {
     throw new ForbiddenError("Only Cloudinary CDN files can be proxied");
   }
@@ -474,15 +436,7 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
     format: asset.metadata?.format,
   });
 
-  // Set CORS headers explicitly for streaming responses
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Workspace-Id",
-  );
-
+  // CORS is enforced centrally; never reflect an untrusted request origin.
   res.setHeader("Content-Type", contentType);
   if (contentLength) res.setHeader("Content-Length", contentLength);
   const safeFilename = encodeURIComponent(asset.originalName || "file");
@@ -490,7 +444,7 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
   // Use inline disposition for images/videos/audio/PDFs to allow browser rendering
   // Use attachment for other documents/archives to trigger download
   const isInlineMedia =
-    contentType.startsWith("image/") ||
+    ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"].includes(contentType.toLowerCase().split(";")[0]) ||
     contentType.startsWith("video/") ||
     contentType.startsWith("audio/") ||
     contentType === "application/pdf";
@@ -506,7 +460,7 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
     isInlineMedia,
   });
 
-  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.setHeader("Cache-Control", "private, no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
 
   // Stream body to client with back-pressure handling

@@ -7,6 +7,7 @@ import huddleRoutes from './modules/huddles/huddle.routes.js';
 import {startHuddleSweeper} from './modules/huddles/huddle.sweeper.js';
 import {initializeHuddles} from './modules/huddles/huddle.initialize.js';
 import helmet from 'helmet';
+import { denyPublicUploads } from './middleware/privateUploads.js';
 import compression from 'compression';
 import morgan from 'morgan';
 
@@ -255,18 +256,7 @@ app.use('/api/chat/search', searchRoutes);
 app.use('/api/chat', readReceiptRoutes);
 
 // ─── Static File Serving (Uploads) ───────────────────────────────────────────
-app.use('/api/chat/uploads', express.static(path.resolve(env.UPLOAD_DIR), {
-  maxAge: '7d',
-  immutable: true,
-  setHeaders: (res, filePath) => {
-    // Serve all uploaded files as attachment to prevent XSS via HTML/SVG
-    const ext = path.extname(filePath).toLowerCase();
-    if (['.html', '.htm', '.svg', '.xml'].includes(ext)) {
-      res.setHeader('Content-Disposition', 'attachment');
-    }
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-  },
-}));
+app.use('/api/chat/uploads', denyPublicUploads);
 
 // ─── 404 Catch-All ───────────────────────────────────────────────────────────
 // Use `app.use` with a mounted path to avoid path-to-regexp parsing errors

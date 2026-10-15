@@ -3,6 +3,7 @@ import logger from '../../utils/logger.js';
 import {runSocketHuddle} from './huddleSession.js';
 import {createRtcConfiguration} from './huddleRtcConfig.js';
 import {validateAudioSignal} from './huddleSignaling.js';
+import {mediaSettings,createSfuConfiguration} from './huddleMediaConfig.js';
 
 export default function registerHuddleSocket(io,socket,huddleService=service) {
   let operations=0, windowStart=Date.now();
@@ -27,7 +28,7 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
       }
     });
   }
-  for(const action of ['hand','reaction','notes','screen-state','audio-ready','audio-state','audio-config','signal']) {
+  for(const action of ['invite','hand','reaction','notes','screen-state','audio-ready','audio-state','audio-config','signal']) {
     socket.on(`huddle:${action}`,async(payload={},ack)=>{
       if(typeof ack!=='function')return;
       try {
@@ -35,16 +36,20 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
         if(++signals>240) throw new Error('Too many audio requests');
         if(!payload || typeof payload!=='object' || socket.data.huddle?.channelId!==payload.channelId) throw new Error('Join this huddle first');
         if(action==='audio-ready' || action==='audio-config') {
+          mediaSettings();
           const config=createRtcConfiguration(socket.data.huddle.sessionId);
           const state=await huddleService.run(context(),payload.channelId,action,{muted:payload.muted});
-          ack({success:true,data:{state,...config}});
-        } else if(['hand','reaction','notes','screen-state'].includes(action)) {
+          const media=await createSfuConfiguration(context(),state,socket.data.huddle.sessionId);
+          ack({success:true,data:{state,...config,...media}});
+        } else if(['invite','hand','reaction','notes','screen-state'].includes(action)) {
           const state=await huddleService.run(context(),payload.channelId,action,{raised:payload.raised,emoji:payload.emoji,text:payload.text,version:payload.version,sharing:payload.sharing});
-          ack({success:true,data:{state}});
+          const {invitation,...snapshot}=state;
+          ack({success:true,data:{state:snapshot,...(invitation?{invitation}:{})}});
         } else if(action==='audio-state') {
           const state=await huddleService.run(context(),payload.channelId,action,{muted:payload.muted});
           ack({success:true,data:{state}});
         } else {
+          if(mediaSettings().mode==='sfu')throw new Error('This meeting requires the current TaskChat SFU client');
           const signal=validateAudioSignal(payload.signal);
           const result=await huddleService.run(context(),payload.channelId,'signal',{
             targetSessionId:payload.targetSessionId,huddleId:payload.huddleId,

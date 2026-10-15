@@ -1,4 +1,6 @@
 import messageService from "./message.service.js";
+import logger from '../../utils/logger.js';
+import {NotFoundError} from '../../middleware/errorHandler.js';
 import * as chrono from 'chrono-node';
 import fileUploadService from "../../services/fileUpload.service.js";
 import asyncHandler from "../../middleware/asyncHandler.js";
@@ -79,7 +81,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const workspaceId = req.workspaceId;
 
-  console.log("Received message:", userId, content, channelId, workspaceId);
+  logger.debug('Message send requested', {userId,channelId,workspaceId,requestId:req.requestId});
   // 1 Save user message
   const message = await messageService.sendMessage({
     channelId,

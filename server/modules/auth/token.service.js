@@ -39,7 +39,9 @@ class TokenService {
    * @throws {jwt.JsonWebTokenError|jwt.TokenExpiredError}
    */
   verifyAccessToken(token) {
-    return jwt.verify(token, env.JWT_SECRET);
+    const claims = jwt.verify(token, env.JWT_SECRET, {algorithms:["HS256"]});
+    if (claims.type !== "access") throw new jwt.JsonWebTokenError("Invalid access token type");
+    return claims;
   }
 
   // ─── Refresh Tokens ────────────────────────────────────────────────────
@@ -65,7 +67,9 @@ class TokenService {
    * @throws {jwt.JsonWebTokenError|jwt.TokenExpiredError}
    */
   verifyRefreshToken(token) {
-    return jwt.verify(token, env.JWT_REFRESH_SECRET);
+    const claims = jwt.verify(token, env.JWT_REFRESH_SECRET, {algorithms:["HS256"]});
+    if (claims.type !== "refresh") throw new jwt.JsonWebTokenError("Invalid refresh token type");
+    return claims;
   }
 
   /**
@@ -90,6 +94,7 @@ class TokenService {
       throw new Error('FlowTask integration is disabled');
     }
     return jwt.verify(token, env.FLOWTASK_JWT_SECRET, {
+      algorithms:["HS256"],
       clockTolerance: 60, // Allow 60s clock skew between Render instances
     });
   }

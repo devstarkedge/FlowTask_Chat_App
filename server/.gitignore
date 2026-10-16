@@ -1,10 +1,11 @@
 node_modules
 .env
 .env.local
-.env.example
+env.example
 
 logs/
 *.log
+*.mjs
 /config/flowtask-548109-firebase-adminsdk-7c783-6d5387c0e9.json
 config/flowtask-548109-firebase-adminsdk-7c783-6d5387c0e9.json
 # Firebase service account files

@@ -1,0 +1,17 @@
+# Run on a Linux media host with a populated, private media.env file.
+# This keeps signaling on host loopback for the host's TLS reverse proxy.
+services:
+  media:
+    build:
+      context: ../../huddle-media
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - ${MEDIA_ENV_FILE:?Set MEDIA_ENV_FILE to the private media.env on the VPS}
+    init: true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

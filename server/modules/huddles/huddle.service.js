@@ -5,7 +5,7 @@ import channelService from '../channels/channel.service.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import {ForbiddenError} from '../../middleware/errorHandler.js';
 import {emitToChannel,emitToUser,getIO} from '../../sockets/socketManager.js';
-import {buildRoomName} from '../../config/constants.js';
+import {createHuddlePublisher} from './huddlePublication.js';
 import ChatUser from '../users/ChatUser.model.js';
 import {initializeHuddles} from './huddle.initialize.js';
 import logger from '../../utils/logger.js';
@@ -19,6 +19,7 @@ import {shouldDeliverNotification} from '../notifications/dnd.gateway.js';
 import {deliverHuddleInvitations} from './huddleInvitations.js';
 import {mediaSettings} from './huddleMediaConfig.js';
 
+const publishHuddleState=createHuddlePublisher({emitToChannel,getIO});
 const engine=createHuddleEngine({
   presence:withPresence,
   mediaCapacity:()=>mediaSettings().maxPeers,
@@ -84,9 +85,7 @@ const engine=createHuddleEngine({
   },
   publish:(workspaceId,channelId,state)=>{
     logger.info('Huddle lifecycle updated',{workspaceId,channelId,huddleId:state.huddle?._id || null,event:state.huddle?'active':'ended',participants:state.participants.length,revision:state.revision});
-    const room=buildRoomName(workspaceId,'huddle',channelId);
-    emitToChannel(channelId,'huddle:state',{channelId,workspaceId,...state},workspaceId,room);
-    if(!state.huddle)getIO()?.in(room).socketsLeave(room);
+    publishHuddleState(workspaceId,channelId,state);
   },
 });
 export default engine;

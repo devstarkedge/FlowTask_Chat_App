@@ -34,6 +34,8 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       const active=await repository.active(context.workspaceId,channelId);
       let state=cached && String(cached.huddle?._id)===String(active?._id) ? structuredClone(cached) :
         {huddle:active,participants:[],revision:Math.max(cached?.revision || 0,now()*1000),emptySince:now()};
+      const previousHuddleId=cached?.huddle?._id || active?._id;
+      const publicationState=()=>({...publicState(state),...(!state.huddle && previousHuddleId?{endedHuddleId:previousHuddleId}:{})});
       // A record ended outside this presence snapshot must also remove the
       // active strip for subscribers, including when discovered by a get.
       let changed=Boolean(cached?.huddle && String(cached.huddle._id)!==String(active?._id));
@@ -68,7 +70,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
           // failed join returns, so clients cannot retain a stale Join strip.
           if(changed || cached?.huddle) {
             state.revision=Math.max(state.revision+1,now()*1000);
-            await save(state);publish(context.workspaceId,channelId,publicState(state));
+            await save(state);publish(context.workspaceId,channelId,publicationState());
           }
           throw new NotFoundError('Active huddle');
         }
@@ -150,7 +152,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       if(changed) state.revision=Math.max(state.revision+1,now()*1000);
       await save(state);
       const result=publicState(state);
-      if(changed) publish(context.workspaceId,channelId,result);
+      if(changed) publish(context.workspaceId,channelId,publicationState());
       return {...result,inviteRequested:invite,...(input.session?{session:input.session}: {}),...(route?{route}: {})};
     });
     // Recipient queries/delivery must not hold the distributed presence lock.

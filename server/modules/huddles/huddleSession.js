@@ -29,7 +29,8 @@ export async function runSocketHuddle(socket,channelId,action,input={},huddleSer
         await huddleService.run(context,channelId,'leave');
         throw new ConflictError('Connection changed. Join the huddle again.');
       }
-      const room=buildRoomName(context.workspaceId,'huddle',channelId);
+      const room=buildRoomName(context.workspaceId,'huddle',String(result.huddle._id));
+      if(socket.data.huddle?.room && socket.data.huddle.room!==room)socket.leave?.(socket.data.huddle.room);
       socket.join?.(room);
       socket.data.huddle={channelId,workspaceId:context.workspaceId,sessionId:result.session.id,room};
     }

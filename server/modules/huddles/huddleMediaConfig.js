@@ -8,7 +8,8 @@ export function mediaSettings(source=process.env) {
   if(!['p2p','sfu'].includes(mode))throw new AppError('Invalid Huddle media mode',503,'HUDDLE_CONFIG');
   if(mode==='p2p'){
     if(source.NODE_ENV==='production')throw new AppError('Production Huddles require TaskChat SFU configuration',503,'HUDDLE_CONFIG');
-    return {mode,maxPeers:2};
+    // A deliberately small development mesh; production continues to require SFU.
+    return {mode,maxPeers:4};
   }
   const secret=source.HUDDLE_MEDIA_SECRET;
   let nodes;try{nodes=JSON.parse(source.HUDDLE_MEDIA_NODES || '[]');}catch{throw new AppError('Invalid Huddle media nodes',503,'HUDDLE_CONFIG');}

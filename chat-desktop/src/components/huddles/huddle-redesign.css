@@ -62,3 +62,6 @@
 .huddle-camera-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}.huddle-participant-tile.has-camera .huddle-participant-name,.huddle-participant-tile.has-camera .huddle-preview-icons{z-index:1}
 @media(prefers-reduced-motion:reduce){.huddle-reconnect-spinner{animation:none}}
 @media(max-width:520px){.huddle-camera-control{display:inline-flex;grid-column:1/-1}}
+
+/* A level-driven local indicator; mute state alone never marks a speaker. */
+.huddle-participant-tile.is-speaking { outline: 3px solid #43b581; outline-offset: -3px; }

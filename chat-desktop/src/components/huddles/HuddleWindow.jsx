@@ -2,12 +2,11 @@ import {useEffect,useRef,useState} from 'react';
 import {useLocation} from 'react-router-dom';
 import {Headphones,Mic,MicOff,Volume2,VolumeX,Video,VideoOff,ChevronDown,Minus,X,AlertTriangle,PhoneOff,Maximize2,Minimize2,LoaderCircle} from 'lucide-react';
 import {useHuddleUiStore} from '../../stores/huddleUiStore';
-import {useHuddleStore} from '../../stores/huddleStore';
-import {useHuddleAudioStore} from '../../stores/huddleAudioStore';
+import {useHuddle} from '../../features/huddle';
+import {useHuddleDevices} from '../../features/huddle/hooks/useHuddleDevices';
 import {useAuthStore} from '../../stores/authStore';
 import {useChatStore} from '../../stores/chatStore';
 import {useChannelStore} from '../../stores/channelStore';
-import {toggleHuddleMute,toggleHuddleCamera,retryHuddleAudio} from '../../services/huddleAudioService';
 import './huddle.css';
 import './huddle-redesign.css';
 import HuddleTools from './HuddleTools';
@@ -18,27 +17,26 @@ function CameraVideo({stream,self}) {
   useEffect(()=>{const video=ref.current;video.srcObject=stream;video.play().catch(()=>{});return()=>{video.pause();video.srcObject=null;};},[stream]);
   return <video ref={ref} autoPlay playsInline muted={self} className="huddle-camera-video" aria-label={self?'Your camera':'Participant camera'}/>;
 }
-function ParticipantTile({name,avatar,muted,self,camera}) {
+function ParticipantTile({name,avatar,muted,self,camera,speaking}) {
   const [failed,setFailed]=useState(false);
   const url=typeof avatar==='string'?avatar:avatar?.url;
   useEffect(()=>setFailed(false),[url]);
-  return <div className={`huddle-participant-tile${url && !failed?' has-photo':''}${camera?' has-camera':''}`}>
+  return <div className={`huddle-participant-tile${url && !failed?' has-photo':''}${camera?' has-camera':''}${speaking && !muted?' is-speaking':''}`}>
     {camera?<CameraVideo stream={camera} self={self}/>:url && !failed?<img src={url} alt={name} onError={()=>setFailed(true)}/>:<span className="huddle-avatar-letter">{(name || '?').trim().slice(0,1).toUpperCase()}</span>}
     <span className="huddle-participant-name">{name}{self?' (you)':''}</span>
-    <div className="huddle-preview-icons"><span>{muted?<MicOff size={18}/>:<Mic size={18}/>}</span><span title="Camera is off"><VideoOff size={18}/></span></div>
+    <div className="huddle-preview-icons"><span>{muted?<MicOff size={18}/>:<Mic size={18}/>}</span><span title={camera?"Camera is on":"Camera is off"}>{camera?<Video size={18}/>:<VideoOff size={18}/>}</span></div>
   </div>;
 }
 
 export default function HuddleWindow() {
   const panel=useHuddleUiStore(s=>s.panel),openPanel=useHuddleUiStore(s=>s.openPanel),closePanel=useHuddleUiStore(s=>s.closePanel);
-  const session=useHuddleStore(s=>s.session),busy=useHuddleStore(s=>s.busy),error=useHuddleStore(s=>s.error);
-  const state=useHuddleStore(s=>s.byChannel[panel?.channelId]);
-  const act=useHuddleStore(s=>s.act),load=useHuddleStore(s=>s.load);
+  const {session,busy,error,state,startHuddle,joinHuddle,leaveHuddle,endHuddle,load,audio,toggleMute:toggleHuddleMute,toggleCamera:toggleHuddleCamera,retryAudio:retryHuddleAudio}=useHuddle(panel?.channelId);
   const user=useAuthStore(s=>s.user),status=useChatStore(s=>s.connectionStatus);
-  const channels=useChannelStore(s=>s.channels),audio=useHuddleAudioStore();
+  const channels=useChannelStore(s=>s.channels);
   const location=useLocation(),dialog=useRef(null);
   const [maximized,setMaximized]=useState(false);
-  const [devices,setDevices]=useState([]),[permission,setPermission]=useState('unknown'),[settingsHelp,setSettingsHelp]=useState(false),[microphoneHelp,setMicrophoneHelp]=useState(false),[now,setNow]=useState(Date.now());
+  const {devices,permission,sinkSupported}=useHuddleDevices(Boolean(panel && user),`${panel?.channelId}:${user?._id}:${status}`);
+  const [settingsHelp,setSettingsHelp]=useState(false),[microphoneHelp,setMicrophoneHelp]=useState(false),[now,setNow]=useState(Date.now());
   const joined=Boolean(panel && session?.channelId===panel.channelId);
   const reconnecting=joined && Boolean(audio.reconnectDeadline);
   useEffect(()=>{
@@ -48,17 +46,11 @@ export default function HuddleWindow() {
   },[location.pathname,location.search,user?._id,openPanel]);
   useEffect(()=>{
     if(!panel || !user)return;
-    setSettingsHelp(false);setMicrophoneHelp(false);setPermission('unknown');dialog.current?.focus();
+    setSettingsHelp(false);setMicrophoneHelp(false);dialog.current?.focus();
     if(status==='connected')load(panel.channelId);
-    let disposed=false,permissionStatus;
-    const refresh=async()=>{try {const list=await navigator.mediaDevices?.enumerateDevices?.();if(!disposed)setDevices(list || []);}catch {if(!disposed)setDevices([]);}};
-    refresh();navigator.mediaDevices?.addEventListener?.('devicechange',refresh);
-    navigator.permissions?.query?.({name:'microphone'}).then(result=>{
-      if(disposed)return;permissionStatus=result;setPermission(result.state);result.onchange=()=>{if(!disposed)setPermission(result.state);};
-    }).catch(()=>{if(!disposed)setPermission('unknown');});
     const escape=event=>{if(event.key==='Escape'){event.preventDefault();closePanel();}};
     document.addEventListener('keydown',escape);
-    return ()=>{disposed=true;if(permissionStatus)permissionStatus.onchange=null;navigator.mediaDevices?.removeEventListener?.('devicechange',refresh);document.removeEventListener('keydown',escape);};
+    return ()=>document.removeEventListener('keydown',escape);
   },[panel?.channelId,user?._id,status,load,closePanel]);
   useEffect(()=>{if(!joined)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[joined]);
   if(!user)return null;
@@ -77,7 +69,6 @@ export default function HuddleWindow() {
   const elapsed=Math.max(0,Math.floor((now-new Date(state?.huddle?.startedAt || now).getTime())/1000));
   const duration=`${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}`;
   const inputs=devices.filter(d=>d.kind==='audioinput' && d.deviceId && d.deviceId!=='default'),outputs=devices.filter(d=>d.kind==='audiooutput' && d.deviceId && d.deviceId!=='default');
-  const sinkSupported=typeof HTMLMediaElement.prototype.setSinkId==='function';
   const audioStatus={connected:'Audio connected',waiting:'Waiting for someone to join',connecting:'Connecting audio…',reconnecting:'Reconnecting audio…',preparing:'Preparing audio…','requesting-microphone':'Waiting for microphone permission',failed:'Audio connection needs attention',idle:'Audio is off'}[audio.connection] || 'Connecting audio…';
   return <aside ref={dialog} className={`huddle-window${joined?' is-live':''}${maximized?' is-maximized':''}${joined && people.some(p=>p.screenSharing)?' is-sharing':''}`} role="dialog" aria-modal="false" aria-labelledby="huddle-window-title" tabIndex={-1}>
     <header className="huddle-window-chrome"><Headphones size={17}/><span>{label}</span><button onClick={closePanel} aria-label="Minimize Huddle"><Minus size={17}/></button><button onClick={()=>setMaximized(value=>!value)} aria-label={maximized?'Restore Huddle':'Maximize Huddle'} aria-pressed={maximized}>{maximized?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</button><button onClick={closePanel} aria-label="Close Huddle window"><X size={18}/></button></header>
@@ -92,7 +83,7 @@ export default function HuddleWindow() {
       {joined && audio.withoutMicrophone && <details className="huddle-listener-note"><summary><MicOff size={14}/>You’re listening without a microphone <span>How to speak</span></summary><p>Click Unmute microphone to allow your headset or computer microphone and speak without leaving the Huddle.</p></details>}
       <div className="huddle-preview-card">
         <div className={`huddle-participant-grid${people.length>1?' has-peers':''}`}>
-          {people.map(person=><ParticipantTile key={person.id} name={person.name} avatar={person.avatar} self={person.id===session?.id || (!joined && String(person.userId)===String(user._id))} muted={person.id===session?.id || !joined?muted:person.muted} camera={person.id===session?.id?audio.localCameraStream:person.cameraOn?audio.remoteCameraStreams?.[person.id]:null}/>) }
+          {people.map(person=><ParticipantTile key={person.id} speaking={audio.speakingSessions?.[person.id]} name={person.name} avatar={person.avatar} self={person.id===session?.id || (!joined && String(person.userId)===String(user._id))} muted={person.id===session?.id || !joined?muted:person.muted} camera={person.id===session?.id?audio.localCameraStream:person.cameraOn?audio.remoteCameraStreams?.[person.id]:null}/>) }
         </div>
         <div className="huddle-device-row">
           <div className="huddle-device-control"><button aria-label={muted?'Unmute microphone':'Mute microphone'} onClick={()=>{if(!joined && (audio.joinWithoutMicrophone || (muted && permission==='denied'))){setMicrophoneHelp(true);return;}if(joined)toggleHuddleMute();else audio.update({startMuted:!audio.startMuted});}} disabled={busy || audio.micBusy || reconnecting} title={muted?'Unmute microphone':'Mute microphone'}>{muted?<MicOff size={18}/>:<Mic size={18}/>}</button><select aria-label="Microphone device" value={audio.inputDeviceId} onChange={event=>audio.update({inputDeviceId:event.target.value})} disabled={joined || busy || audio.joinWithoutMicrophone} title={joined?'Leave the Huddle to change microphone':'Choose microphone'}><option value="">Default mic</option>{inputs.map((device,index)=><option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index+1}`}</option>)}</select></div>
@@ -104,15 +95,14 @@ export default function HuddleWindow() {
       {joined && <HuddleTools key={session.id} state={state} session={session} audio={audio}/>}
       {joined && <HuddleMeetingLink channelId={panel.channelId} workspaceId={panel.workspaceId || state?.huddle?.workspaceId || channel?.workspaceId}/>}
       {joined && audio.invitation && <p className="huddle-connection-note" role="status">{audio.invitation.error || (audio.invitation.sent?`Invitation sent to ${audio.invitation.sent} online participant(s).`:'No available participants were notified. Share the meeting link to join.')}</p>}
-      {joined && ['failed','idle'].includes(audio.connection) && <button className="huddle-retry" onClick={retryHuddleAudio} disabled={busy || status!=='connected'}>Retry audio</button>}
-      {otherSession && <div className="huddle-warning huddle-warning--notice"><Headphones size={18}/><div><strong>You're already in another Huddle</strong><button disabled={busy} onClick={()=>act('leave',session.channelId)}>Leave current Huddle</button></div></div>}
+      {joined && (['failed','idle'].includes(audio.connection) || audio.failedPeerIds?.length>0) && <button className="huddle-retry" onClick={retryHuddleAudio} disabled={busy || status!=='connected'}>Retry audio</button>}
+      {otherSession && <div className="huddle-warning huddle-warning--notice"><Headphones size={18}/><div><strong>You're already in another Huddle</strong><button disabled={busy} onClick={leaveHuddle}>Leave current Huddle</button></div></div>}
       {status!=='connected' && !joined && <p className="huddle-connection-note" role="status">Reconnect to TaskChat to start or join a Huddle.</p>}
-      {joined && audio.notice && <details className="huddle-network-note"><summary><AlertTriangle size={14}/>Calling relay needs setup</summary><p>Calling relay is not configured. Calls across different networks may fail until your administrator completes calling setup.</p></details>}
     </div>
     <footer className="huddle-window-footer">
       {!joined && <button className="huddle-footer-action" onClick={closePanel} disabled={busy}><span className="huddle-action-icon huddle-action-cancel"><X size={23}/></span><span>Cancel</span></button>}
-      <button className="huddle-footer-action huddle-primary-action" disabled={busy || (!joined && status!=='connected') || Boolean(otherSession)} onClick={()=>act(joined?'leave':state?.huddle?'join':'start',panel.channelId)}><span className={`huddle-action-icon${joined?' huddle-action-leave':''}`}>{joined?<PhoneOff size={23}/>:<Headphones size={24}/>}</span><span>{busy?'Connecting…':joined?'Leave Huddle':state?.huddle?'Join Huddle':'Start Huddle'}</span></button>
-      {joined && String(state?.huddle?.startedBy)===String(user._id) && <button className="huddle-end-action" onClick={()=>act('end',panel.channelId)} disabled={busy}>End for everyone</button>}
+      <button className="huddle-footer-action huddle-primary-action" disabled={busy || (!joined && status!=='connected') || Boolean(otherSession)} onClick={()=>joined?leaveHuddle():state?.huddle?joinHuddle({conversationId:panel.channelId}):startHuddle({conversationId:panel.channelId})}><span className={`huddle-action-icon${joined?' huddle-action-leave':''}`}>{joined?<PhoneOff size={23}/>:<Headphones size={24}/>}</span><span>{busy?'Connecting…':joined?'Leave Huddle':state?.huddle?'Join Huddle':'Start Huddle'}</span></button>
+      {joined && String(state?.huddle?.startedBy)===String(user._id) && <button className="huddle-end-action" onClick={endHuddle} disabled={busy}>End for everyone</button>}
     </footer>
   </aside>;
 }

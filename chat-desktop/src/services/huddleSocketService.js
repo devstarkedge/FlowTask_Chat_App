@@ -3,7 +3,12 @@ import {bindHuddleAudio,retryHuddleAudio} from './huddleAudioService';
 import {useHuddleUiStore} from '../stores/huddleUiStore';
 import {useHuddleAudioStore} from '../stores/huddleAudioStore';
 import {createHuddleNetworkRecovery} from './huddleNetworkRecovery';
+// One binding per socket; independent callers release their own ownership lease.
+const bindings=new WeakMap();
 export function bindHuddleSocket(socket,getWorkspaceId) {
+  const existing=bindings.get(socket);
+  if(existing)return existing.acquire();
+  let owners=0;
   let disposed=false,heartbeatPending=false;
   const recovery=createHuddleNetworkRecovery({
     getSession:()=>useHuddleStore.getState().session,
@@ -54,5 +59,11 @@ export function bindHuddleSocket(socket,getWorkspaceId) {
     // deadline. Retry its transport, preserving the same authenticated socket.
     if(recovery.active && navigator.onLine!==false && !socket.connected && !socket.active)socket.connect?.();
   },20000);
-  return ()=>{disposed=true;recovery.dispose();unsubscribeAudio();unsubscribeSession?.();window.removeEventListener('offline',disconnected);window.removeEventListener('online',online);window.removeEventListener('focus',online);document.removeEventListener('visibilitychange',visible);clearInterval(timer);socket.off('disconnect',disconnected);socket.off('huddle:state',state);socket.off('huddle:invitation',invitation);socket.off('connect',connected);useHuddleUiStore.getState().clearInvitations();disposeAudio();};
+  const dispose=()=>{if(disposed)return;disposed=true;recovery.dispose();unsubscribeAudio();unsubscribeSession?.();window.removeEventListener('offline',disconnected);window.removeEventListener('online',online);window.removeEventListener('focus',online);document.removeEventListener('visibilitychange',visible);clearInterval(timer);socket.off('disconnect',disconnected);socket.off('huddle:state',state);socket.off('huddle:invitation',invitation);socket.off('connect',connected);useHuddleUiStore.getState().clearInvitations();disposeAudio();bindings.delete(socket);};
+  const acquire=()=>{
+    owners++;let released=false;
+    return ()=>{if(released)return;released=true;if(--owners===0)dispose();};
+  };
+  bindings.set(socket,{acquire});
+  return acquire();
 }

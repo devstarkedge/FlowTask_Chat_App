@@ -1,23 +1,29 @@
+import {HuddleMediaManager} from '../features/huddle/services/media.service';
+import {mediaError} from '../features/huddle/utils/huddle.errors';
+import {huddleLogger} from '../features/huddle/utils/huddle.logger';
 import {sendHuddleRequest as audioRequest} from './huddleRequest';
 import {useHuddleStore} from '../stores/huddleStore';
 import {useHuddleAudioStore} from '../stores/huddleAudioStore';
 import {HuddleAudioController} from './HuddleAudioController';
 import {HuddleSfuController} from './HuddleSfuController';
 
+const microphone=new HuddleMediaManager();
+let starting=null;
 let audioEpoch=0,renewTimer=null,restarting=null,muteQueue=Promise.resolve();
 const update=patch=>useHuddleAudioStore.getState().update(patch);
 const controllerOptions={
   send:(action,payload)=>audioRequest(action,payload),onUpdate:update,
-  onScreenStopped:channelId=>{const session=useHuddleStore.getState().session;if(session?.channelId!==channelId)return;audioRequest('screen-state',{channelId,sharing:false}).then(data=>{if(useHuddleStore.getState().session?.id===session.id)useHuddleStore.getState().ingest(channelId,data.state);}).catch(error=>update({error:error.message}));},
+  onScreenStopped:channelId=>{const session=useHuddleStore.getState().session;if(session?.channelId!==channelId)return;audioRequest('screen-state',{channelId,sharing:false}).then(data=>{if(useHuddleStore.getState().session?.id===session.id)useHuddleStore.getState().ingest(channelId,data.state);}).catch(error=>{if(useHuddleStore.getState().session?.id===session.id)update({error:error.message});});},
   onLocalEnded:channelId=>{
     const session=useHuddleStore.getState().session;
     if(session?.channelId!==channelId)return;
-    // Losing an input device must not remove the user from the meeting.
-    // Rebuild receive-only audio without requesting another permission.
-    update({joinWithoutMicrophone:true,withoutMicrophone:true});
-    retryHuddleAudio().then(()=>{
-      if(useHuddleStore.getState().session?.id===session.id)update({error:'Microphone disconnected. You remain in the Huddle in listen-only mode. Reconnect your microphone and rejoin when ready to speak.'});
-    }).catch(error=>update({error:error.message}));
+    // Device loss changes only the microphone. Keep camera, screen and remote
+    // audio running; the next explicit Unmute can attach a replacement input.
+    controller.setMuted(true);
+    update({joinWithoutMicrophone:true,withoutMicrophone:true,error:'Microphone disconnected. You remain in listen-only mode. Connect a microphone and click Unmute to speak.'});
+    audioRequest('audio-state',{channelId,muted:true}).then(data=>{
+      if(useHuddleStore.getState().session?.id===session.id)useHuddleStore.getState().ingest(channelId,data.state);
+    }).catch(error=>{if(useHuddleStore.getState().session?.id===session.id)update({error:error.message});});
   },
 };
 let controller=new HuddleAudioController(controllerOptions);
@@ -54,24 +60,25 @@ function scheduleRenewal(expiresAt,renewAfterMs) {
   },Number.isFinite(renewAfterMs)?Math.max(1000,Math.min(renewAfterMs,40000)):Math.max(1000,(expiresAt-Math.floor(Date.now()/1000)-20)*1000));
 }
 
-export async function startHuddleAudio(channelId,session) {
+export function startHuddleAudio(channelId,session) {
+  if(starting?.sessionId===session.id)return starting.promise;
+  if(controller.context?.sessionId===session.id && controller.stream)return Promise.resolve();
+  const promise=beginHuddleAudio(channelId,session);
+  const operation={sessionId:session.id,promise};starting=operation;
+  promise.finally(()=>{if(starting===operation)starting=null;}).catch(()=>{});
+  return promise;
+}
+
+async function beginHuddleAudio(channelId,session) {
   const epoch=audioEpoch;
   if(!globalThis.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia)throw new Error('Audio requires a supported browser over HTTPS or localhost.');
-  update({connection:useHuddleAudioStore.getState().joinWithoutMicrophone?'preparing':'requesting-microphone',error:null});
+  update({connection:useHuddleAudioStore.getState().joinWithoutMicrophone?'preparing':'requesting-microphone',error:null,errorCode:null});
   let stream;
   try {
     const {inputDeviceId,startMuted,joinWithoutMicrophone}=useHuddleAudioStore.getState();
     if(joinWithoutMicrophone)stream=new MediaStream();
     else {
-      const audio={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
-      try {
-        stream=await navigator.mediaDevices.getUserMedia({audio:{...audio,...(inputDeviceId?{deviceId:{exact:inputDeviceId}}: {})},video:false});
-      } catch(error) {
-        // A removed device must not permanently block an otherwise usable default input.
-        if(!inputDeviceId || !['NotFoundError','OverconstrainedError'].includes(error.name) || !currentSession(session,epoch))throw error;
-        stream=await navigator.mediaDevices.getUserMedia({audio,video:false});
-        if(currentSession(session,epoch))update({inputDeviceId:''});
-      }
+      stream=await microphone.getLocalAudioStream({deviceId:inputDeviceId,onFallback:()=>update({inputDeviceId:''})});
     }
     if(!currentSession(session,epoch)){stream.getTracks().forEach(track=>track.stop());return;}
     controller.begin({stream,channelId,sessionId:session.id});
@@ -81,21 +88,21 @@ export async function startHuddleAudio(channelId,session) {
     const data=await audioRequest('audio-ready',{channelId,muted});
     if(!currentSession(session,epoch))return;
     useHuddleStore.getState().ingest(channelId,data.state);
-    selectController(data.mediaMode || 'p2p');await controller.configure(data);scheduleRenewal(data.mediaExpiresAt || data.expiresAt,data.mediaRenewAfterMs);
+    selectController(data.mediaMode || 'p2p');await controller.configure(data);if(!currentSession(session,epoch))return;scheduleRenewal(data.mediaExpiresAt || data.expiresAt,data.mediaRenewAfterMs);
     update({invitation:data.state?.invitation || null});
   } catch(error) {
     if(currentSession(session,epoch)) {
       stopHuddleAudio();
-      const message=error.name==='NotAllowedError'?'Microphone access was denied. Allow your headset or computer microphone in browser and device settings, or select Join without microphone.':error.name==='NotFoundError'?'No microphone was found. Connect a headset with a microphone or enable your computer’s built-in microphone. You can also select Join without microphone to listen and share your screen.':error.name==='NotReadableError'?'The microphone is busy or unavailable. Close other recording apps, or select Join without microphone.':error.message;
-      update({error:message});throw new Error(message);
+      const failure=mediaError(error);
+      update({error:failure.message,errorCode:failure.code});throw failure;
     }
     stream?.getTracks().forEach(track=>track.stop());
   }
 }
 
 export function stopHuddleAudio() {
-  audioEpoch++;restarting=null;clearTimeout(renewTimer);renewTimer=null;controller.stop();
-  update({deafened:false,playbackBlocked:false,invitation:null,withoutMicrophone:false,micBusy:false,cameraBusy:false,reconnectDeadline:null});
+  audioEpoch++;starting=null;restarting=null;microphone.stopLocalStream({stopTracks:microphone.stream!==controller.stream});huddleLogger.debug('CLEANUP');clearTimeout(renewTimer);renewTimer=null;controller.stop();
+  update({deafened:false,playbackBlocked:false,invitation:null,withoutMicrophone:false,micBusy:false,cameraBusy:false,screenBusy:false,reconnectDeadline:null});
 }
 
 export async function retryHuddleAudio() {
@@ -103,13 +110,13 @@ export async function retryHuddleAudio() {
   const session=useHuddleStore.getState().session;if(!session)return false;
   const epoch=audioEpoch,token=Symbol('audio-restart');restarting=token;
   try {
-    if(!controller.stream){await startHuddleAudio(session.channelId,session);return true;}
+    if(!controller.stream){await startHuddleAudio(session.channelId,session);return currentSession(session,epoch);}
     controller.pause();
     let data=await audioRequest('audio-ready',{channelId:session.channelId,muted:controller.muted});
     if(!currentSession(session,epoch))return false;
     if(controller.cameraStream){await audioRequest('camera-state',{channelId:session.channelId,enabled:true});data=await audioRequest('audio-config',{channelId:session.channelId});if(!currentSession(session,epoch))return false;}
     useHuddleStore.getState().ingest(session.channelId,data.state);
-    selectController(data.mediaMode || 'p2p');controller.restoreTracks();await controller.configure(data);scheduleRenewal(data.mediaExpiresAt || data.expiresAt,data.mediaRenewAfterMs);
+    selectController(data.mediaMode || 'p2p');controller.restoreTracks();await controller.configure(data);if(!currentSession(session,epoch))return false;scheduleRenewal(data.mediaExpiresAt || data.expiresAt,data.mediaRenewAfterMs);
     return true;
   } catch(error){if(currentSession(session,epoch))update({connection:'failed',error:error.message});return false;}
   finally {if(restarting===token)restarting=null;}
@@ -121,7 +128,7 @@ export async function toggleHuddleMute() {
     const epoch=audioEpoch;let stream;update({micBusy:true,error:null});
     try {
       const inputDeviceId=useHuddleAudioStore.getState().inputDeviceId;
-      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,...(inputDeviceId?{deviceId:{exact:inputDeviceId}}:{})},video:false});
+      stream=await microphone.getLocalAudioStream({deviceId:inputDeviceId,onFallback:()=>update({inputDeviceId:''})});
       if(!currentSession(session,epoch)){stream.getTracks().forEach(track=>track.stop());return;}
       await controller.setMicrophone(stream);
       if(!currentSession(session,epoch)){stream.getTracks().forEach(track=>track.stop());return;}
@@ -194,10 +201,10 @@ export async function toggleHuddleScreen() {
   } catch(error) {
     stream?.getTracks().forEach(t=>t.stop());
     if(currentSession(session,epoch)) {
-      if(stream)audioRequest('screen-state',{channelId:session.channelId,sharing:false}).then(data=>useHuddleStore.getState().ingest(session.channelId,data.state)).catch(e=>update({error:e.message}));
+      if(stream)audioRequest('screen-state',{channelId:session.channelId,sharing:false}).then(data=>{if(currentSession(session,epoch))useHuddleStore.getState().ingest(session.channelId,data.state);}).catch(e=>{if(currentSession(session,epoch))update({error:e.message});});
       update({error:error.name==='NotAllowedError'?'Screen sharing was cancelled or denied. You can try again.':error.message});
     }
-  } finally {update({screenBusy:false});}
+  } finally {if(currentSession(session,epoch))update({screenBusy:false});}
 }
 
 export async function updateHuddleFeature(action,payload) {

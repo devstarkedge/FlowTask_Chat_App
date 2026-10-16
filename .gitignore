@@ -5,7 +5,10 @@ chat-desktop(mac)/dist-electron/
 *.asar
 *.dmg
 *.zip
-
+*.md
+*.test.js
+*.example
+*.test.mjs
 # Mobile generated builds
 chat-mobile/dist_check/
 chat-mobile/dist_test2/

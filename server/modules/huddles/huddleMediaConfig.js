@@ -2,13 +2,18 @@ import {createHash} from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import {AppError} from '../../middleware/errorHandler.js';
 import Huddle from './Huddle.model.js';
+import {createRtcConfiguration} from './huddleRtcConfig.js';
 
 export function mediaSettings(source=process.env) {
   const mode=source.HUDDLE_MEDIA_MODE || 'p2p';
   if(!['p2p','sfu'].includes(mode))throw new AppError('Invalid Huddle media mode',503,'HUDDLE_CONFIG');
   if(mode==='p2p'){
-    if(source.NODE_ENV==='production')throw new AppError('Production Huddles require TaskChat SFU configuration',503,'HUDDLE_CONFIG');
-    // A deliberately small development mesh; production continues to require SFU.
+    if(source.NODE_ENV==='production'){
+      if(source.HUDDLE_MEDIA_MODE!=='p2p')throw new AppError('Production Huddles require an explicit media mode: sfu or p2p',503,'HUDDLE_CONFIG');
+      // Validate before admission so Start cannot succeed with unusable ICE settings.
+      createRtcConfiguration('configuration-check',source);
+    }
+    // Bound mesh capacity independently of the SFU capacity setting.
     return {mode,maxPeers:4};
   }
   const secret=source.HUDDLE_MEDIA_SECRET;

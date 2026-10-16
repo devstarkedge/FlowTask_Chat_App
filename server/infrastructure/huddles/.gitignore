@@ -4,3 +4,12 @@ runtime/
 turnserver.conf
 backend.env
 media.env
+# Publish only templates/instructions, never populated deployment credentials.
+!DEPLOYMENT.md
+!SETUP.md
+!media.env.example
+!turnserver.conf.example
+!media-nginx.conf.example
+!sfu-backend.env.example
+!verify-deployment.mjs
+!verify-deployment.test.mjs

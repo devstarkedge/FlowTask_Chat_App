@@ -13,8 +13,8 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: /etc/letsencrypt
-        target: /etc/letsencrypt
+        source: ${TURN_CERTS_DIR:?Set TURN_CERTS_DIR to the private copied TURN certificate directory}
+        target: /etc/coturn/certs
         read_only: true
         bind:
           create_host_path: false

@@ -3,7 +3,7 @@
 services:
   media:
     build:
-      context: ../../huddle-media
+      context: ../../../huddle-media
     restart: unless-stopped
     network_mode: host
     env_file:

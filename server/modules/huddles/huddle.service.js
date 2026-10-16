@@ -67,13 +67,13 @@ const engine=createHuddleEngine({
     },
     start:async(context,channelId)=>{
       let row;
-      try {row=await Huddle.findOneAndUpdate({workspaceId:context.workspaceId,channelId,status:'active'},{$setOnInsert:{startedBy:context.user._id,startedAt:new Date()}},{upsert:true,new:true,setDefaultsOnInsert:true}).lean();}
+      try {row=await Huddle.findOneAndUpdate({workspaceId:context.workspaceId,channelId,status:'active'},{$setOnInsert:{startedBy:context.user._id,startedAt:new Date()}},{upsert:true,returnDocument:'after',setDefaultsOnInsert:true}).lean();}
       catch(error) {if(error.code!==11000) throw error; row=await Huddle.findOne({workspaceId:context.workspaceId,channelId,status:'active'}).lean();}
       return JSON.parse(JSON.stringify(row));
     },
     attend:(id,userId)=>Huddle.updateOne({_id:id},{$addToSet:{attendees:userId}}),
     notes:async(id,text,version)=>{
-      const row=await Huddle.findOneAndUpdate({_id:id,status:'active',notesVersion:version},{$set:{notes:text},$inc:{notesVersion:1}},{new:true}).lean();
+      const row=await Huddle.findOneAndUpdate({_id:id,status:'active',notesVersion:version},{$set:{notes:text},$inc:{notesVersion:1}},{returnDocument:'after'}).lean();
       if(!row)throw new ValidationError('Notes changed. Reopen notes to load the latest version before saving.');
       return JSON.parse(JSON.stringify(row));
     },

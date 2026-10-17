@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {ForbiddenError, NotFoundError, ValidationError} from '../../middleware/errorHandler.js';
+import {verifiesSessionProof} from './huddleSessionProof.js';
 const GRACE=30000, RECONNECT_GRACE=300000, LEASE=60000;
 const publicState = state => ({huddle:state.huddle, revision:state.revision,
   participants:state.participants.map(({secret,socketId,expiresAt,...profile})=>profile)});
@@ -24,7 +25,7 @@ function signalPeers(state,context,input,time) {
   return {sender,target};
 }
 
-export function createHuddleEngine({authorize,repository,presence,publish,notify=async()=>({sent:0}),mediaCapacity=()=>2,connectedParticipants=async()=>new Set(),now=Date.now}) {
+export function createHuddleEngine({authorize,repository,presence,publish,notify=async()=>({sent:0}),mediaCapacity=()=>2,connectedParticipants=async()=>new Set(),hasBoundSession=async()=>false,now=Date.now}) {
   async function run(context,channelId,action,input={}) {
     if(!/^[a-f\d]{24}$/i.test(channelId || '')) throw new ValidationError('Invalid channel ID');
     if(action!=='sweep') await authorize(context,channelId);
@@ -53,6 +54,19 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       let changed=Boolean(cached?.huddle && String(cached.huddle._id)!==String(active?._id));
       let route;
       let invite=false;
+      // Rebuild only a previously registered identity on its same authenticated
+      // live socket, with the exact resume secret. Never reopen ended meetings.
+      if(action==='resume' && state.huddle && verifiesSessionProof(context,channelId,state.huddle._id,input)){
+        let retained=state.participants.find(p=>p.id===input.sessionId);
+        if(!retained){
+          if(state.participants.length>=mediaCapacity())throw new ValidationError('Huddle participant limit reached');
+          retained={id:input.sessionId,secret:input.secret,userId:String(context.user._id),name:context.user.name,
+            avatar:context.user.avatar || null,socketId:context.socketId,connection:'reconnecting',audioReady:false,
+            mediaId:null,muted:true,screenSharing:false,cameraOn:false};
+          state.participants.push(retained);changed=true;
+        }
+        if(retained.userId===String(context.user._id) && retained.secret===input.secret)retained.expiresAt=now()+LEASE;
+      }
       const before=state.participants.length;
       // A request on the authenticated, already-bound socket is direct proof
       // of liveness. Renew before pruning; otherwise the heartbeat that should
@@ -88,7 +102,8 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       // null is not an epoch timestamp. An unknown empty-room timer starts now.
       if(state.huddle && !state.participants.length && !Number.isFinite(state.emptySince))state.emptySince=now();
       if(state.huddle && !state.participants.length && now()-state.emptySince>=GRACE) {
-        await repository.end(state.huddle._id); state.huddle=null; changed=true;endingReason='EMPTY_ROOM_TIMEOUT';
+        if(await hasBoundSession(context.workspaceId,channelId,state.huddle._id))state.emptySince=now();
+        else {await repository.end(state.huddle._id); state.huddle=null; changed=true;endingReason='EMPTY_ROOM_TIMEOUT';}
       }
       if(action==='start' && !state.huddle) {
         state.huddle=await repository.start(context,channelId);

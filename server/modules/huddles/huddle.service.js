@@ -15,7 +15,7 @@ import Message from '../messages/Message.model.js';
 import Channel from '../channels/Channel.model.js';
 import {completeHuddle} from './huddleSummary.js';
 import {publishHuddleNotes} from './huddleNotes.js';
-import {connectedHuddleParticipants} from './huddleLiveness.js';
+import {connectedHuddleParticipants,hasBoundHuddleSession} from './huddleLiveness.js';
 import {messageSocketPayload} from '../../utils/socketPayload.js';
 import {ValidationError} from '../../middleware/errorHandler.js';
 import ChannelMember from '../channels/ChannelMember.model.js';
@@ -27,6 +27,7 @@ const publishHuddleState=createHuddlePublisher({emitToChannel,getIO});
 const engine=createHuddleEngine({
   presence:createHuddlePresence({checkpoint:createHuddleCheckpoint(Huddle)}),
   connectedParticipants:(workspaceId,huddleId,participants)=>connectedHuddleParticipants(getIO(),workspaceId,huddleId,participants),
+  hasBoundSession:(workspaceId,channelId,huddleId)=>hasBoundHuddleSession(getIO(),workspaceId,channelId,huddleId),
   mediaCapacity:()=>mediaSettings().maxPeers,
   notify:async(context,channelId,state)=>{
     try {

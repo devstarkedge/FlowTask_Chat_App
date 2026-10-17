@@ -3,6 +3,17 @@ import {ForbiddenError, NotFoundError, ValidationError} from '../../middleware/e
 const GRACE=30000, RECONNECT_GRACE=300000, LEASE=60000;
 const publicState = state => ({huddle:state.huddle, revision:state.revision,
   participants:state.participants.map(({secret,socketId,expiresAt,...profile})=>profile)});
+function membershipError(error,state,context,cached,reason){
+  const own=state.participants.filter(p=>p.userId===String(context.user._id));
+  const sender=own.find(p=>p.socketId===context.socketId);
+  error.huddleDiagnostic={
+    reason:reason || (!state.huddle?'HUDDLE_ENDED':sender?'PARTICIPANT_RECONNECTING':own.length?'SOCKET_CHANGED':'PARTICIPANT_MISSING'),
+    huddleId:state.huddle?String(state.huddle._id):null,
+    participantCount:state.participants.length,sameUserParticipants:own.length,
+    presenceMatched:Boolean(cached?.huddle && String(cached.huddle._id)===String(state.huddle?._id)),
+  };
+  return error;
+}
 function signalPeers(state,context,input,time) {
   const sender=state?.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
   const target=state?.participants.find(p=>p.id===input.targetSessionId);
@@ -84,7 +95,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
           throw new NotFoundError('Active huddle');
         }
         const existing=state.participants.find(p=>p.id===input.sessionId);
-        if(action==='resume' && (!existing || existing.userId!==String(context.user._id) || existing.secret!==input.secret)) throw new ForbiddenError('Huddle session cannot be resumed');
+        if(action==='resume' && (!existing || existing.userId!==String(context.user._id) || existing.secret!==input.secret)) throw membershipError(new ForbiddenError('Huddle session cannot be resumed'),state,context,cached,existing?'RESUME_REJECTED':'SESSION_MISSING');
         let participant=existing;
         if(action!=='resume') participant=state.participants.find(p=>p.socketId===context.socketId);
         if(!participant) {
@@ -100,7 +111,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         input.session={id:participant.id,secret:participant.secret};
       } else if(['invite','hand','reaction','notes','screen-state','camera-state','audio-ready','audio-state','audio-config','signal'].includes(action)) {
         const sender=state.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
-        if(!state.huddle || !sender || sender.connection!=='connected') throw new ForbiddenError('Join this huddle before using audio');
+        if(!state.huddle || !sender || sender.connection!=='connected') throw membershipError(new ForbiddenError('Join this huddle before using audio'),state,context,cached);
         if(action==='invite') {
           if(!sender.audioReady)throw new ForbiddenError('Enable audio before inviting participants');
           if(state.lastInviteAt!=null && now()-state.lastInviteAt<15000)throw new ValidationError('Please wait before inviting again');
@@ -151,7 +162,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
             if(action==='disconnect' || participant.connection==='connected')participant.expiresAt=now()+(action==='disconnect'?RECONNECT_GRACE:LEASE);
             if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.cameraOn=false;participant.handRaised=false;participant.mediaId=null;changed=true;}
           }
-        } else if(action==='heartbeat') throw new NotFoundError('Huddle participant');
+        } else if(action==='heartbeat') throw membershipError(new NotFoundError('Huddle participant'),state,context,cached);
       } else if(action==='end') {
         if(state.huddle && String(state.huddle.startedBy)!==String(context.user._id) && !['owner','admin'].includes(context.membership.role)) throw new ForbiddenError('Only the starter or workspace owner/admin can end this huddle');
         if(state.huddle) await repository.end(state.huddle._id);

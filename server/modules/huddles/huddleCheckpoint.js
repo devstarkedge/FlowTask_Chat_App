@@ -6,7 +6,7 @@ export function createHuddleCheckpoint(model) {
   const scope=key=>{const [workspaceId,channelId]=key.split(':');return {workspaceId,channelId,status:'active'};};
   return {
     async load(key){
-      const row=await model.findOne(scope(key)).select('_id +presenceCheckpoint').lean();
+      const row=await model.findOne(scope(key)).select({_id:1,presenceCheckpoint:1}).lean();
       const snapshot=row?.presenceCheckpoint;
       return snapshot && String(snapshot.huddle?._id)===String(row._id)?snapshot:null;
     },

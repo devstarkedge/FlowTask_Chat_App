@@ -5,6 +5,14 @@ import {createRtcConfiguration} from './huddleRtcConfig.js';
 import {validateAudioSignal} from './huddleSignaling.js';
 import {mediaSettings,createSfuConfiguration} from './huddleMediaConfig.js';
 
+function failureDetails(error){
+  const details=error.huddleDiagnostic;
+  const revision=process.env.RENDER_GIT_COMMIT || '';
+  return {...(details?{reason:details.reason,huddleId:details.huddleId,participantCount:details.participantCount,
+    sameUserParticipants:details.sameUserParticipants,presenceMatched:details.presenceMatched}:{}),
+    ...(/^[a-f\d]{7,64}$/i.test(revision)?{revision}:{})};
+}
+
 export default function registerHuddleSocket(io,socket,huddleService=service) {
   let operations=0, windowStart=Date.now();
   let signals=0, signalWindow=Date.now();
@@ -24,7 +32,7 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
         if(terminal && socket.data.huddle?.channelId===payload?.channelId) {
           socket.leave(socket.data.huddle.room);socket.data.huddle=null;
         }
-        logger.warn('Huddle operation failed',{action,userId:String(socket.chatUser._id),code:error.code || 'HUDDLE_ERROR',...(error.code==='CONFLICT'?{reason:error.message}:{})});
+        logger.warn('Huddle operation failed',{action,userId:String(socket.chatUser._id),code:error.code || 'HUDDLE_ERROR',...(error.code==='CONFLICT'?{reason:error.message}:{}),...failureDetails(error)});
         ack({success:false,error:{message:error.message,code:error.code || 'HUDDLE_ERROR'}});
       }
     });
@@ -61,7 +69,7 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
           ack({success:true,data:{delivered:true}});
         }
       } catch(error) {
-        logger.warn('Huddle audio operation failed',{action,code:error.code || 'HUDDLE_AUDIO',...(error.code==='CONFLICT'?{reason:error.message}:{})});
+        logger.warn('Huddle audio operation failed',{action,code:error.code || 'HUDDLE_AUDIO',...(error.code==='CONFLICT'?{reason:error.message}:{}),...failureDetails(error)});
         ack({success:false,error:{message:error.message,code:error.code || 'HUDDLE_AUDIO'}});
       }
     });

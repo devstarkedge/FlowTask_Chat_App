@@ -92,7 +92,7 @@ const engine=createHuddleEngine({
     },
   },
   publish:(workspaceId,channelId,state)=>{
-    logger.info('Huddle lifecycle updated',{workspaceId,channelId,huddleId:state.huddle?._id || null,event:state.huddle?'active':'ended',participants:state.participants.length,revision:state.revision});
+    logger.info('Huddle lifecycle updated',{workspaceId,channelId,huddleId:state.huddle?._id || state.endedHuddleId || null,event:state.huddle?'active':'ended',participants:state.participants.length,revision:state.revision,...(state.endedReason?{reason:state.endedReason,action:state.triggerAction}:{})});
     publishHuddleState(workspaceId,channelId,state);
   },
 });

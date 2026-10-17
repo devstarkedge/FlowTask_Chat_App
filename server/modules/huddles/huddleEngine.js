@@ -46,13 +46,22 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       let state=cached && String(cached.huddle?._id)===String(active?._id) ? structuredClone(cached) :
         {huddle:active,participants:[],revision:Math.max(cached?.revision || 0,now()*1000),emptySince:now()};
       const previousHuddleId=cached?.huddle?._id || active?._id;
-      const publicationState=()=>({...publicState(state),...(!state.huddle && previousHuddleId?{endedHuddleId:previousHuddleId}:{})});
+      let endingReason='RECORD_ALREADY_ENDED';
+      const publicationState=()=>({...publicState(state),...(!state.huddle && previousHuddleId?{endedHuddleId:previousHuddleId,endedReason:endingReason,triggerAction:action}:{})});
       // A record ended outside this presence snapshot must also remove the
       // active strip for subscribers, including when discovered by a get.
       let changed=Boolean(cached?.huddle && String(cached.huddle._id)!==String(active?._id));
       let route;
       let invite=false;
       const before=state.participants.length;
+      // A request on the authenticated, already-bound socket is direct proof
+      // of liveness. Renew before pruning; otherwise the heartbeat that should
+      // save a delayed lease can itself remove its participant.
+      const liveActions=['heartbeat','invite','hand','reaction','notes','screen-state','camera-state','audio-ready','audio-state','audio-config'];
+      if(liveActions.includes(action)){
+        const caller=state.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
+        if(caller?.connection==='connected')caller.expiresAt=now()+LEASE;
+      }
       const overdue=state.participants.filter(p=>p.connection==='connected' && p.expiresAt<=now());
       // A missed renderer timer is not evidence of transport loss. Preserve
       // healthy peer/media state when the exact server-bound socket is alive.
@@ -76,8 +85,10 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       });
       if(state.participants.length!==before) changed=true;
       if(before && !state.participants.length) state.emptySince=now();
+      // null is not an epoch timestamp. An unknown empty-room timer starts now.
+      if(state.huddle && !state.participants.length && !Number.isFinite(state.emptySince))state.emptySince=now();
       if(state.huddle && !state.participants.length && now()-state.emptySince>=GRACE) {
-        await repository.end(state.huddle._id); state.huddle=null; changed=true;
+        await repository.end(state.huddle._id); state.huddle=null; changed=true;endingReason='EMPTY_ROOM_TIMEOUT';
       }
       if(action==='start' && !state.huddle) {
         state.huddle=await repository.start(context,channelId);
@@ -92,7 +103,9 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
             state.revision=Math.max(state.revision+1,now()*1000);
             await save(state);publish(context.workspaceId,channelId,publicationState());
           }
-          throw new NotFoundError('Active huddle');
+          const failure=membershipError(new NotFoundError('Active huddle'),state,context,cached,'HUDDLE_ENDED');
+          failure.huddleDiagnostic.huddleId=previousHuddleId?String(previousHuddleId):null;
+          throw failure;
         }
         const existing=state.participants.find(p=>p.id===input.sessionId);
         if(action==='resume' && (!existing || existing.userId!==String(context.user._id) || existing.secret!==input.secret)) throw membershipError(new ForbiddenError('Huddle session cannot be resumed'),state,context,cached,existing?'RESUME_REJECTED':'SESSION_MISSING');
@@ -166,7 +179,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       } else if(action==='end') {
         if(state.huddle && String(state.huddle.startedBy)!==String(context.user._id) && !['owner','admin'].includes(context.membership.role)) throw new ForbiddenError('Only the starter or workspace owner/admin can end this huddle');
         if(state.huddle) await repository.end(state.huddle._id);
-        state.huddle=null; state.participants=[]; changed=true;
+        state.huddle=null; state.participants=[]; changed=true;endingReason='EXPLICIT_END';
       }
       if(!state.participants.length && state.emptySince===null) state.emptySince=now();
       if(changed) state.revision=Math.max(state.revision+1,now()*1000);

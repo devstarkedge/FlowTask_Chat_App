@@ -5,7 +5,7 @@ import {AppError, ConflictError} from '../../middleware/errorHandler.js';
 import logger from '../../utils/logger.js';
 import {createHuddleOperationQueue} from './huddleOperationQueue.js';
 
-export function createHuddlePresence({environment=env,getClient=()=>redisManager.getSharedClient()}={}) {
+export function createHuddlePresence({environment=env,getClient=()=>redisManager.getSharedClient(),checkpoint=null}={}) {
 const memory = new Map(), queued=createHuddleOperationQueue();
 const mode=environment.HUDDLE_PRESENCE_MODE || (environment.IS_PRODUCTION ? 'redis' : 'memory');
 // One serialized lifecycle operation per channel. Redis state survives API
@@ -37,12 +37,24 @@ async function withPresence(key, operation) {
   },5000);
   renew.unref();
   try {
-    const raw=await client.get(state);
-    return await operation(raw ? JSON.parse(raw) : null, async value => {
+    const save=async value => {
       if(lost) throw new AppError('Huddle lease changed. Try again.',503,'HUDDLE_UNAVAILABLE');
+      // Persist before acknowledging the shared Redis write. A lost/evicted
+      // cache key must not silently erase authenticated participant identities.
+      await checkpoint?.save(key,value);
       const saved=await client.eval("if redis.call('get',KEYS[1])~=ARGV[1] then return 0 end redis.call('set',KEYS[2],ARGV[2],'EX',3600) return 1",2,lock,state,token,JSON.stringify(value));
       if(!saved) throw new AppError('Huddle lease changed. Try again.',503,'HUDDLE_UNAVAILABLE');
-    });
+    };
+    const raw=await client.get(state);
+    let snapshot=raw?JSON.parse(raw):null;
+    if(!snapshot && checkpoint){
+      snapshot=await checkpoint.load(key);
+      if(snapshot){
+        await save(snapshot);
+        logger.warn('Huddle presence restored from checkpoint',{code:'HUDDLE_PRESENCE_RESTORED',reason:'REDIS_STATE_MISSING',huddleId:String(snapshot.huddle._id),participants:snapshot.participants.length});
+      }
+    }
+    return await operation(snapshot,save);
   } finally {
     clearInterval(renew);
     try {await client.eval("if redis.call('get',KEYS[1])==ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end",1,lock,token);}
@@ -56,7 +68,7 @@ withPresence.read=async key=>{
   const client=checkedClient();
   if(!client)return structuredClone(memory.get(key) || null);
   const raw=await client.get(`huddle-state:${key}`);
-  return raw?JSON.parse(raw):null;
+  return raw?JSON.parse(raw):(checkpoint?await checkpoint.load(key):null);
 };
 return withPresence;
 }

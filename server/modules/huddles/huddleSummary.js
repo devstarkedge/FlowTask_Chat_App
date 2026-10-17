@@ -14,7 +14,7 @@ export async function completeHuddle(huddle,{messages,users,huddles,channels,pub
   const message=await messages.findById(huddle._id).lean();
   const completion=message.huddleMeta.endedAt;
   await channels.updateOne({_id:huddle.channelId,workspaceId:huddle.workspaceId,$or:[{lastMessageAt:{$lte:completion}},{lastMessageAt:null}]},{$set:{lastMessagePreview:'Huddle ended',lastMessageAt:completion}});
-  await huddles.updateOne({_id:huddle._id,status:'active'},{$set:{status:'ended',endedAt:completion}});
+  await huddles.updateOne({_id:huddle._id,status:'active'},{$set:{status:'ended',endedAt:completion},$unset:{presenceCheckpoint:1}});
   // Re-emitting the same ID is safe for the existing message-ID reconciliation.
   publish(String(huddle.channelId),'message:create',{message:serialize(message)},String(huddle.workspaceId));
   return message;

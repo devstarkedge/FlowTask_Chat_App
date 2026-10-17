@@ -8,6 +8,7 @@ const schema = new mongoose.Schema({
   notes: {type:String,default:'',maxlength:10000},
   notesVersion: {type:Number,default:0},
   notesMessageId: {type:mongoose.Schema.Types.ObjectId,default:null},
+  presenceCheckpoint: {type:mongoose.Schema.Types.Mixed,select:false,default:null},
   mediaNodeId: {type:String,default:null},
   attendees: [{type:mongoose.Schema.Types.ObjectId,ref:'ChatUser'}],
 }, {timestamps:true});

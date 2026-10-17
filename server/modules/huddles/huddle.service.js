@@ -1,7 +1,8 @@
 import Huddle from './Huddle.model.js';
 import {Types} from 'mongoose';
 import {createHuddleEngine} from './huddleEngine.js';
-import {withPresence} from './huddlePresence.js';
+import {createHuddlePresence} from './huddlePresence.js';
+import {createHuddleCheckpoint} from './huddleCheckpoint.js';
 import channelService from '../channels/channel.service.js';
 import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import {ForbiddenError} from '../../middleware/errorHandler.js';
@@ -24,7 +25,7 @@ import {mediaSettings} from './huddleMediaConfig.js';
 
 const publishHuddleState=createHuddlePublisher({emitToChannel,getIO});
 const engine=createHuddleEngine({
-  presence:withPresence,
+  presence:createHuddlePresence({checkpoint:createHuddleCheckpoint(Huddle)}),
   connectedParticipants:(workspaceId,huddleId,participants)=>connectedHuddleParticipants(getIO(),workspaceId,huddleId,participants),
   mediaCapacity:()=>mediaSettings().maxPeers,
   notify:async(context,channelId,state)=>{

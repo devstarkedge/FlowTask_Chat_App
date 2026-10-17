@@ -13,7 +13,7 @@ function signalPeers(state,context,input,time) {
   return {sender,target};
 }
 
-export function createHuddleEngine({authorize,repository,presence,publish,notify=async()=>({sent:0}),mediaCapacity=()=>2,now=Date.now}) {
+export function createHuddleEngine({authorize,repository,presence,publish,notify=async()=>({sent:0}),mediaCapacity=()=>2,connectedParticipants=async()=>new Set(),now=Date.now}) {
   async function run(context,channelId,action,input={}) {
     if(!/^[a-f\d]{24}$/i.test(channelId || '')) throw new ValidationError('Invalid channel ID');
     if(action!=='sweep') await authorize(context,channelId);
@@ -42,8 +42,17 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       let route;
       let invite=false;
       const before=state.participants.length;
+      const overdue=state.participants.filter(p=>p.connection==='connected' && p.expiresAt<=now());
+      // A missed renderer timer is not evidence of transport loss. Preserve
+      // healthy peer/media state when the exact server-bound socket is alive.
+      // Adapter failures defer cleanup rather than treating unknown as offline.
+      const connected=overdue.length && state.huddle
+        ? await connectedParticipants(context.workspaceId,state.huddle._id,overdue):new Set();
       state.participants=state.participants.filter(p=>{
         if(p.expiresAt>now())return true;
+        if(p.connection==='connected' && connected.has(p.id)){
+          p.expiresAt=now()+LEASE;return true;
+        }
         // A delayed browser heartbeat is not an explicit Leave. Retain the
         // secret-bound identity for a bounded resume window, just as on a
         // transport disconnect. Anchor expiry to the missed lease, not sweeps.

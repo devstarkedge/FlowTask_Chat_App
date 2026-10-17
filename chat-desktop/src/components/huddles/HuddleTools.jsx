@@ -27,7 +27,7 @@ export default function HuddleTools({state,session,audio}) {
     </div>
     {reactionsOpen && <div className="huddle-reactions" aria-label="Huddle reactions">{['👍','❤️','😂','🎉','👏','🙌'].map(emoji=><button key={emoji} aria-label={`React ${emoji}`} onClick={()=>{perform('reaction',{emoji});setReactionsOpen(false);}}>{emoji}</button>)}</div>}
     <div className="huddle-participant-signals" aria-live="polite">{state?.participants.map(p=><ParticipantSignal key={p.id} person={p}/>)}</div>
-    {notesOpen && <div className="huddle-notes"><h3>Meeting notes</h3><p>Shared with this channel. Saved notes appear in chat when the Huddle ends.</p><textarea aria-label="Meeting notes" value={draft} maxLength={10000} onChange={event=>setDraft(event.target.value)} rows={7}/><div><button onClick={save} disabled={saving}>{saving?'Saving…':'Save notes'}</button><button onClick={()=>{setDraft(state?.huddle?.notes || '');setVersion(state?.huddle?.notesVersion || 0);setFeedback('Latest notes loaded');}}>Load latest</button></div></div>}
+    {notesOpen && <div className="huddle-notes"><h3>Meeting notes</h3><p>Shared with this conversation. Save notes to publish them in chat immediately.</p><textarea aria-label="Meeting notes" value={draft} maxLength={10000} onChange={event=>setDraft(event.target.value)} rows={7}/><div><button onClick={save} disabled={saving}>{saving?'Saving…':'Save notes'}</button><button onClick={()=>{setDraft(state?.huddle?.notes || '');setVersion(state?.huddle?.notesVersion || 0);setFeedback('Latest notes loaded');}}>Load latest</button></div></div>}
     {feedback && <p role="status">{feedback}</p>}
   </section>;
 }

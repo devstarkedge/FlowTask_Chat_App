@@ -65,3 +65,12 @@
 
 /* A level-driven local indicator; mute state alone never marks a speaker. */
 .huddle-participant-tile.is-speaking { outline: 3px solid #43b581; outline-offset: -3px; }
+
+/* Give shared content the available width instead of squeezing it into a
+   shallow strip. Contain preserves the entire screen, including portrait shares. */
+.huddle-window.is-sharing .huddle-screen-stage video {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: contain;
+}

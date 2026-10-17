@@ -1,4 +1,5 @@
 import Huddle from './Huddle.model.js';
+import {Types} from 'mongoose';
 import {createHuddleEngine} from './huddleEngine.js';
 import {withPresence} from './huddlePresence.js';
 import channelService from '../channels/channel.service.js';
@@ -12,6 +13,8 @@ import logger from '../../utils/logger.js';
 import Message from '../messages/Message.model.js';
 import Channel from '../channels/Channel.model.js';
 import {completeHuddle} from './huddleSummary.js';
+import {publishHuddleNotes} from './huddleNotes.js';
+import {connectedHuddleParticipants} from './huddleLiveness.js';
 import {messageSocketPayload} from '../../utils/socketPayload.js';
 import {ValidationError} from '../../middleware/errorHandler.js';
 import ChannelMember from '../channels/ChannelMember.model.js';
@@ -22,6 +25,7 @@ import {mediaSettings} from './huddleMediaConfig.js';
 const publishHuddleState=createHuddlePublisher({emitToChannel,getIO});
 const engine=createHuddleEngine({
   presence:withPresence,
+  connectedParticipants:(workspaceId,huddleId,participants)=>connectedHuddleParticipants(getIO(),workspaceId,huddleId,participants),
   mediaCapacity:()=>mediaSettings().maxPeers,
   notify:async(context,channelId,state)=>{
     try {
@@ -73,8 +77,11 @@ const engine=createHuddleEngine({
     },
     attend:(id,userId)=>Huddle.updateOne({_id:id},{$addToSet:{attendees:userId}}),
     notes:async(id,text,version)=>{
-      const row=await Huddle.findOneAndUpdate({_id:id,status:'active',notesVersion:version},{$set:{notes:text},$inc:{notesVersion:1}},{returnDocument:'after'}).lean();
+      const current=await Huddle.findOne({_id:id,status:'active',notesVersion:version}).select('notesMessageId').lean();
+      if(!current)throw new ValidationError('Notes changed. Reopen notes to load the latest version before saving.');
+      const row=await Huddle.findOneAndUpdate({_id:id,status:'active',notesVersion:version},{$set:{notes:text,notesMessageId:current.notesMessageId || new Types.ObjectId()},$inc:{notesVersion:1}},{returnDocument:'after'}).lean();
       if(!row)throw new ValidationError('Notes changed. Reopen notes to load the latest version before saving.');
+      await publishHuddleNotes(row,{messages:Message,users:ChatUser,channels:Channel,publish:emitToChannel,serialize:messageSocketPayload});
       return JSON.parse(JSON.stringify(row));
     },
     end:async id=>{

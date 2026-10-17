@@ -7,6 +7,7 @@ const schema = new mongoose.Schema({
   startedAt: {type:Date,default:Date.now}, endedAt: Date,
   notes: {type:String,default:'',maxlength:10000},
   notesVersion: {type:Number,default:0},
+  notesMessageId: {type:mongoose.Schema.Types.ObjectId,default:null},
   mediaNodeId: {type:String,default:null},
   attendees: [{type:mongoose.Schema.Types.ObjectId,ref:'ChatUser'}],
 }, {timestamps:true});

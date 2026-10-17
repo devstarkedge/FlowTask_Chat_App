@@ -264,14 +264,14 @@ const messageSchema = new Schema({
     default: null,
   },
   huddleMeta: {
-    type: new Schema({huddleId:Schema.Types.ObjectId,startedAt:Date,endedAt:Date,notes:String,
+    type: new Schema({kind:{type:String,enum:['notes','summary']},huddleId:Schema.Types.ObjectId,startedAt:Date,endedAt:Date,notes:String,
       attendees:[{type:Schema.Types.ObjectId,ref:'ChatUser'}]}, {_id:false}),
     default:null,
   },
   gifMeta: {
     type: gifMetaSchema,
     default: null,
-  },
+  },      
   audioMeta: {
     type: audioMetaSchema,
     default: null,

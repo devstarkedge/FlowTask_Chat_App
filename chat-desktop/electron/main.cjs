@@ -1,6 +1,7 @@
+const { installHuddleInvitations } = require('./huddleInvitations.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 
@@ -12,7 +13,7 @@ if (isDev) {
 }
 
 // Set the App ID for all platforms (Windows, Mac, Linux) to ensure OS-level integrations work
-app.setAppUserModelId(isDev ? 'com.taskchat.dev' : 'com.taskchat.app');
+app.setAppUserModelId(isDev ? 'com.taskchat.dev' : 'com.flowtask.chat');
 
 let mainWindow;
 let tray = null;
@@ -62,6 +63,11 @@ function createWindow() {
   });
 
   installDisplayCapture(mainWindow, {BrowserWindow,ipcMain,desktopCapturer});
+  const callWindow=mainWindow;
+  installHuddleInvitations(callWindow,{ipcMain,Notification,
+    icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),
+    showWindow:()=>{if(callWindow.isMinimized())callWindow.restore();callWindow.show();if(process.platform==='darwin' && app.dock)app.dock.show();callWindow.focus();}});
+
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

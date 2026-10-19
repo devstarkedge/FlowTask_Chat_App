@@ -1,6 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  showHuddleInvitation: invitation => ipcRenderer.send('huddle-invitation:show', invitation),
+  closeHuddleInvitation: id => ipcRenderer.send('huddle-invitation:close', id),
+  onHuddleInvitationAction: callback => {
+    const handler = (_event, action) => callback(action);
+    ipcRenderer.on('huddle-invitation:action', handler);
+    return () => ipcRenderer.removeListener('huddle-invitation:action', handler);
+  },
   hasNativeWindowControls: process.platform === 'win32' || process.platform === 'linux',
   showNotification: (title, body, data) => ipcRenderer.send('show-notification', { title, body, data }),
   onNotificationClicked: (callback) => ipcRenderer.on('notification-clicked', (_event, data) => callback(data)),

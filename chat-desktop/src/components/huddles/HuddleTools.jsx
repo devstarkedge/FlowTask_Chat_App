@@ -4,8 +4,8 @@ import {toggleHuddleScreen,updateHuddleFeature} from '../../services/huddleAudio
 
 function Screen({stream}) {
   const ref=useRef(null),[blocked,setBlocked]=useState(false);
-  useEffect(()=>{const video=ref.current;video.srcObject=stream;video.play().catch(()=>setBlocked(true));return()=>{video.srcObject=null;};},[stream]);
-  return <div className="huddle-screen-stage"><video ref={ref} autoPlay muted playsInline/>{blocked && <button onClick={()=>ref.current.play().then(()=>setBlocked(false)).catch(()=>{})}>Show shared screen</button>}</div>;
+  useEffect(()=>{const video=ref.current;let active=true;setBlocked(false);video.srcObject=stream;video.play().catch(error=>{if(active && error.name!=='AbortError')setBlocked(true);});return()=>{active=false;video.srcObject=null;};},[stream]);
+  return <div className="huddle-screen-stage"><video ref={ref} autoPlay muted playsInline onPlaying={()=>setBlocked(false)}/>{blocked && <button onClick={()=>ref.current.play().then(()=>setBlocked(false)).catch(()=>{})}>Show shared screen</button>}</div>;
 }
 
 export default function HuddleTools({state,session,audio}) {

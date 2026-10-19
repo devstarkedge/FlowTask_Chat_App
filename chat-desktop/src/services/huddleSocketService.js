@@ -21,6 +21,8 @@ export function bindHuddleSocket(socket,getWorkspaceId) {
   const state=payload=>{
     if(payload.workspaceId!==getWorkspaceId())return;
     useHuddleStore.getState().ingest(payload.channelId,payload);
+    const snapshot=useHuddleStore.getState().byChannel?.[payload.channelId] || payload;
+    useHuddleUiStore.getState().reconcileInvitations?.(payload.channelId,snapshot);
   };
   const disposeAudio=bindHuddleAudio(socket);
   const invitation=payload=>{
@@ -29,7 +31,7 @@ export function bindHuddleSocket(socket,getWorkspaceId) {
   };
   socket.on('huddle:invitation',invitation);
   const connected=()=>recovery.reconnect();
-  const disconnected=()=>recovery.begin();
+  const disconnected=()=>{useHuddleUiStore.getState().clearInvitations();recovery.begin();};
   const heartbeat=async()=>{
     if(disposed || heartbeatPending || !useHuddleStore.getState().session)return;
     heartbeatPending=true;const id=useHuddleStore.getState().session.id;

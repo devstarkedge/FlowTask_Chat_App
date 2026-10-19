@@ -5,7 +5,7 @@ export class HuddleAudioController {
     this.send=send; this.update=onUpdate; this.onLocalEnded=onLocalEnded;
     this.onScreenStopped=onScreenStopped;
     this.PeerConnection=PeerConnection; this.makeStream=makeStream;
-    this.peers=new Map(); this.remoteAudio=new Map(); this.remoteCameras=new Map(); this.remoteScreens=new Map(); this.context=null; this.stream=null; this.pending=[]; this.initialized=false; this.muted=false;
+    this.peers=new Map(); this.remoteAudio=new Map(); this.remoteCameras=new Map(); this.remoteScreens=new Map(); this.remoteScreenPresenter=null; this.context=null; this.stream=null; this.pending=[]; this.initialized=false; this.muted=false;
   }
 
   begin({stream,channelId,sessionId}) {
@@ -33,12 +33,13 @@ export class HuddleAudioController {
       this.closePeer();this.update({connection:'reconnecting'});return;
     }
     const remotes=state.participants.filter(p=>p.id!==own.id && p.audioReady && p.connection==='connected');
+    this.remoteScreenPresenter=remotes.find(remote=>remote.screenSharing)?.id || null;
     const desired=new Map(remotes.map(remote=>[remote.id,remote]));
     for(const peer of this.peers.values()) {
       if(desired.get(peer.id)?.mediaId!==peer.mediaId)this.closePeer(peer);
     }
     for(const remote of remotes)if(!this.peers.has(remote.id))this.createPeer(own,remote);
-    this.publishConnection();
+    this.publishConnection();this.publishRemote(this.remoteScreens);
     // Lifecycle snapshots and signaling can arrive on different socket paths.
     // Replay bounded early signals only after authoritative presence creates a peer.
     const waiting=this.pending.splice(0);
@@ -55,7 +56,8 @@ export class HuddleAudioController {
     pc.ontrack=event=>{
       if(!this.isCurrent(peer))return;
       const stream=this.makeStream([event.track]);
-      const camera=event.track.kind==='video' && event.transceiver===peer.cameraTransceiver;
+      const cameraSlot=this.negotiatedVideoSlots(peer)[0] || peer.cameraTransceiver;
+      const camera=event.track.kind==='video' && event.transceiver===cameraSlot;
       const collection=event.track.kind==='audio'?this.remoteAudio:camera?this.remoteCameras:this.remoteScreens;
       collection.set(peer.id,stream);
       this.publishRemote(collection);
@@ -91,15 +93,31 @@ export class HuddleAudioController {
         else this.fail(peer,new Error('Audio connection failed. Retry audio or check your TURN server.'));
       }
     };
-    for(const track of this.stream.getAudioTracks())peer.audioSender=pc.addTrack(track,this.stream);
-    // Keep audio negotiation/receipt when joining without a capture device.
-    if(!this.stream.getAudioTracks().length)peer.audioSender=pc.addTransceiver('audio',{direction:'sendrecv'}).sender;
-    peer.cameraTransceiver=pc.addTransceiver?.('video',{direction:'sendrecv'});
-    if(this.cameraStream)peer.cameraTransceiver?.sender.replaceTrack(this.cameraStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
-    // Reserve one bidirectional screen slot so either participant can share
-    // without racing offers or renegotiating the microphone connection.
-    peer.screenSender=pc.addTransceiver?.('video',{direction:'sendrecv'}).sender;
-    if(this.screenStream)peer.screenSender?.replaceTrack(this.screenStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
+    // Only the deterministic offerer reserves slots. An answerer's locally
+    // added transceivers are not associated with the incoming offer by JSEP.
+    if(!peer.polite) {
+      for(const track of this.stream.getAudioTracks())peer.audioSender=pc.addTrack(track,this.stream);
+      if(!this.stream.getAudioTracks().length)peer.audioSender=pc.addTransceiver('audio',{direction:'sendrecv'}).sender;
+      peer.cameraTransceiver=pc.addTransceiver('video',{direction:'sendrecv'});
+      if(this.cameraStream)peer.cameraTransceiver.sender.replaceTrack(this.cameraStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
+      peer.screenSender=pc.addTransceiver('video',{direction:'sendrecv'}).sender;
+      if(this.screenStream)peer.screenSender.replaceTrack(this.screenStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
+    }
+  }
+
+  negotiatedVideoSlots(peer) {
+    return (peer.pc.getTransceivers?.() || []).filter(item=>item.mid!=null && item.receiver.track.kind==='video');
+  }
+
+  async bindAnswerTracks(peer) {
+    // Remote-created transceivers already own the offered mids, including the
+    // two distinct camera/screen slots. Configure them before creating an answer.
+    const slots=(peer.pc.getTransceivers?.() || []).filter(item=>item.mid!=null);
+    const audio=slots.find(item=>item.receiver.track.kind==='audio');
+    const [camera,screen]=this.negotiatedVideoSlots(peer);
+    peer.audioSender=audio?.sender;peer.cameraTransceiver=camera;peer.screenSender=screen?.sender;
+    const replacements=[[audio,this.stream?.getAudioTracks()[0]],[camera,this.cameraStream?.getVideoTracks()[0]],[screen,this.screenStream?.getVideoTracks()[0]]];
+    await Promise.all(replacements.filter(([slot])=>slot).map(([slot,track])=>{slot.direction='sendrecv';return slot.sender.replaceTrack(track || null);}));
   }
 
   transmit(peer,signal) {
@@ -141,6 +159,8 @@ export class HuddleAudioController {
         const candidates=peer.candidates.splice(0);
         for(const queued of candidates)await this.addCandidate(peer,queued);
         if(description.type==='offer') {
+          if(peer.polite)await this.bindAnswerTracks(peer);
+          if(!this.isCurrent(peer))return;
           await pc.setLocalDescription();
           if(this.isCurrent(peer))this.transmit(peer,{description:{type:pc.localDescription.type,sdp:pc.localDescription.sdp}});
         }
@@ -237,7 +257,7 @@ export class HuddleAudioController {
       }
       this.update({remoteStream:tracks.length?this.remoteStream:null,remoteAudioStreams:Object.fromEntries(collection)});
     } else if(collection===this.remoteCameras)this.update({remoteCameraStreams:Object.fromEntries(collection)});
-    else this.update({remoteScreenStream:collection.values().next().value || null});
+    else this.update({remoteScreenStream:collection.get(this.remoteScreenPresenter) || null});
   }
 
   fail(peer,error) {
@@ -270,6 +290,7 @@ export class HuddleAudioController {
     this.cameraStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.cameraStream=null;
     this.update({localCameraStream:null,remoteCameraStreams:{}});
     this.screenStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.screenStream=null;
+    this.remoteScreenPresenter=null;
     this.initialized=false;this.pending=[];this.closePeer();
     this.stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});
     this.stream=null;this.context=null;

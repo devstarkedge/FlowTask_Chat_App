@@ -33,8 +33,6 @@ export default function HuddleTools({state,session,audio}) {
 }
 
 function ParticipantSignal({person}) {
-  const [reaction,setReaction]=useState(null);
-  useEffect(()=>{const item=person.reaction;if(!item)return;const remaining=5000-(Date.now()-item.at);if(remaining<=0)return;setReaction(item.emoji);const timer=setTimeout(()=>setReaction(null),remaining);return()=>{clearTimeout(timer);};},[person.reaction?.id]);
-  if(!person.handRaised && !reaction)return null;
-  return <span>{person.name} {person.handRaised?'✋':''} {reaction}</span>;
+  if(!person.handRaised)return null;
+  return <span>{person.name} ✋</span>;
 }

@@ -6,7 +6,7 @@ import logger from '../../utils/logger.js';
 import {createHuddleOperationQueue} from './huddleOperationQueue.js';
 
 export function createHuddlePresence({environment=env,getClient=()=>redisManager.getSharedClient(),checkpoint=null}={}) {
-const memory = new Map(), queued=createHuddleOperationQueue();
+const memory = new Map(), ownedMeetings=new Map(), queued=createHuddleOperationQueue();
 const mode=environment.HUDDLE_PRESENCE_MODE || (environment.IS_PRODUCTION ? 'redis' : 'memory');
 // One serialized lifecycle operation per channel. Redis state survives API
 // process restarts; production must never silently fall back to local memory.
@@ -24,7 +24,13 @@ function checkedClient() {
 async function withPresence(key, operation) {
   return queued(key,async()=>{
   const client=checkedClient();
-  if(!client)return operation(structuredClone(memory.get(key) || null),value=>memory.set(key,structuredClone(value)));
+  if(!client)return operation(structuredClone(memory.get(key) || null),value=>{
+    memory.set(key,structuredClone(value));
+    // Reading a meeting from Mongo does not make this isolated development
+    // process its owner. Only locally admitted participants establish ownership.
+    if(value.huddle && value.participants?.length)ownedMeetings.set(key,String(value.huddle._id));
+    if(!value.huddle)ownedMeetings.delete(key);
+  });
   const token=randomUUID(), lock=`huddle-lock:${key}`, state=`huddle-state:${key}`,deadline=Date.now()+2500;
   while(await client.set(lock,token,'PX',30000,'NX') !== 'OK') {
     if(Date.now()>=deadline)throw new ConflictError('Huddle is updating. Try again.');
@@ -69,6 +75,14 @@ withPresence.read=async key=>{
   if(!client)return structuredClone(memory.get(key) || null);
   const raw=await client.get(`huddle-state:${key}`);
   return raw?JSON.parse(raw):(checkpoint?await checkpoint.load(key):null);
+};
+// A local memory server cannot see Render's participants. It must never sweep
+// their shared Mongo records just because its own process-local map is empty.
+withPresence.canSweep=async(key,huddleId)=>{
+  const client=checkedClient();
+  if(client)return true;
+  const id=huddleId || memory.get(key)?.huddle?._id;
+  return Boolean(id && ownedMeetings.get(key)===String(id));
 };
 return withPresence;
 }

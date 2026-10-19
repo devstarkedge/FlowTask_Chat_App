@@ -30,6 +30,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
     if(!/^[a-f\d]{24}$/i.test(channelId || '')) throw new ValidationError('Invalid channel ID');
     if(action!=='sweep') await authorize(context,channelId);
     const key=`${context.workspaceId}:${channelId}`;
+    if(action==='sweep' && presence.canSweep && !await presence.canSweep(key))return {skipped:true};
     if(action==='signal' && typeof presence.read==='function') {
       const state=await presence.read(key);
       const {target}=signalPeers(state,context,input,now());
@@ -101,7 +102,8 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       if(before && !state.participants.length) state.emptySince=now();
       // null is not an epoch timestamp. An unknown empty-room timer starts now.
       if(state.huddle && !state.participants.length && !Number.isFinite(state.emptySince))state.emptySince=now();
-      if(state.huddle && !state.participants.length && now()-state.emptySince>=GRACE) {
+      if(state.huddle && !state.participants.length && now()-state.emptySince>=GRACE &&
+        (!presence.canSweep || await presence.canSweep(key,state.huddle._id))) {
         if(await hasBoundSession(context.workspaceId,channelId,state.huddle._id))state.emptySince=now();
         else {await repository.end(state.huddle._id); state.huddle=null; changed=true;endingReason='EMPTY_ROOM_TIMEOUT';}
       }

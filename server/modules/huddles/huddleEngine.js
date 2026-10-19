@@ -109,6 +109,9 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       }
       if(action==='start' && !state.huddle) {
         state.huddle=await repository.start(context,channelId);
+        // An ended room can retain its presence snapshot. Invitation flags
+        // belong to the new meeting, not to the channel's previous call.
+        state.announced=false;state.lastInviteAt=null;
         state.emptySince=now(); changed=true;
       }
       if(action==='start' || action==='join' || action==='resume') {

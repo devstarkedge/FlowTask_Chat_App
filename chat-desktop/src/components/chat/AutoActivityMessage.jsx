@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { ExternalLink, FileText } from 'lucide-react'
+import HuddleSummary from '../huddles/HuddleSummary'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { buildRedirectFromMeta } from '../../utils/flowTaskUrl'
 import { useLiveProfileData } from '../../hooks/useLiveProfileData'
@@ -109,6 +110,8 @@ export default function AutoActivityMessage({ message }) {
   const navigate = useNavigate()
   const location = useLocation()
   message = useLiveProfileData(message)
+  // The chat list routes system messages here before MessageItem.
+  if (message.huddleMeta) return <HuddleSummary message={message} />
   const meta = { ...message.activityMeta }
   if (meta.actorId?.name) {
     meta.actorName = meta.actorId.name

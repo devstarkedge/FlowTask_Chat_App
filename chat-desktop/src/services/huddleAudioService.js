@@ -190,7 +190,7 @@ export async function toggleHuddleScreen() {
       return;
     }
     if(!navigator.mediaDevices?.getDisplayMedia)throw new Error('Screen sharing requires HTTPS or a supported desktop build.');
-    stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:15,max:30}},audio:false});
+    stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:15,max:30}},audio:{restrictOwnAudio:true},systemAudio:"include"});
     if(!currentSession(session,epoch)){stream.getTracks().forEach(t=>t.stop());return;}
     const data=await audioRequest('screen-state',{channelId:session.channelId,sharing:true});
     if(!currentSession(session,epoch)){stream.getTracks().forEach(t=>t.stop());return;}

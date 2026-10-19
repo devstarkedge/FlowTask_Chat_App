@@ -1,7 +1,9 @@
 import {huddleLogger} from '../features/huddle/utils/huddle.logger';
+import {HuddleAudioMixer} from '../features/huddle/services/audioMixer.service';
 // Native small-group transport. Session IDs own independent peer connections; React never captures media.
 export class HuddleAudioController {
-  constructor({send,onUpdate,onLocalEnded=()=>{},onScreenStopped=()=>{},PeerConnection=globalThis.RTCPeerConnection,makeStream=tracks=>new MediaStream(tracks)}) {
+  constructor({send,onUpdate,onLocalEnded=()=>{},onScreenStopped=()=>{},PeerConnection=globalThis.RTCPeerConnection,makeStream=tracks=>new MediaStream(tracks),AudioMixer=HuddleAudioMixer}) {
+    this.audioMixer=new AudioMixer();
     this.send=send; this.update=onUpdate; this.onLocalEnded=onLocalEnded;
     this.onScreenStopped=onScreenStopped;
     this.PeerConnection=PeerConnection; this.makeStream=makeStream;
@@ -96,8 +98,9 @@ export class HuddleAudioController {
     // Only the deterministic offerer reserves slots. An answerer's locally
     // added transceivers are not associated with the incoming offer by JSEP.
     if(!peer.polite) {
-      for(const track of this.stream.getAudioTracks())peer.audioSender=pc.addTrack(track,this.stream);
-      if(!this.stream.getAudioTracks().length)peer.audioSender=pc.addTransceiver('audio',{direction:'sendrecv'}).sender;
+      const audioTrack=this.audioMixer.track || this.stream.getAudioTracks()[0];
+      if(audioTrack)peer.audioSender=pc.addTrack(audioTrack,this.stream);
+      else peer.audioSender=pc.addTransceiver('audio',{direction:'sendrecv'}).sender;
       peer.cameraTransceiver=pc.addTransceiver('video',{direction:'sendrecv'});
       if(this.cameraStream)peer.cameraTransceiver.sender.replaceTrack(this.cameraStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
       peer.screenSender=pc.addTransceiver('video',{direction:'sendrecv'}).sender;
@@ -116,7 +119,7 @@ export class HuddleAudioController {
     const audio=slots.find(item=>item.receiver.track.kind==='audio');
     const [camera,screen]=this.negotiatedVideoSlots(peer);
     peer.audioSender=audio?.sender;peer.cameraTransceiver=camera;peer.screenSender=screen?.sender;
-    const replacements=[[audio,this.stream?.getAudioTracks()[0]],[camera,this.cameraStream?.getVideoTracks()[0]],[screen,this.screenStream?.getVideoTracks()[0]]];
+    const replacements=[[audio,this.audioMixer.track || this.stream?.getAudioTracks()[0]],[camera,this.cameraStream?.getVideoTracks()[0]],[screen,this.screenStream?.getVideoTracks()[0]]];
     await Promise.all(replacements.filter(([slot])=>slot).map(([slot,track])=>{slot.direction='sendrecv';return slot.sender.replaceTrack(track || null);}));
   }
 
@@ -191,7 +194,10 @@ export class HuddleAudioController {
   async setMicrophone(stream) {
     const context=this.context;
     const track=stream.getAudioTracks()[0];
-    await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>peer.audioSender.replaceTrack(track)));
+    track.enabled=!this.muted;
+    const outgoing=await this.audioMixer.setSources(stream,this.screenStream);
+    if(this.context!==context || !context)throw new Error('Media session changed');
+    await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>peer.audioSender?.replaceTrack(outgoing)));
     if(this.context!==context || !context)throw new Error('Media session changed');
     track.enabled=!this.muted;
     const old=this.stream;this.stream=stream;this.update({localMicrophoneStream:stream});
@@ -212,7 +218,15 @@ export class HuddleAudioController {
   async setScreen(stream) {
     const old=this.screenStream;
     const context=this.context;
-    await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>peer.screenSender?.replaceTrack(stream?.getVideoTracks()[0] || null)));
+    try {
+      const outgoing=await this.audioMixer.setSources(this.stream,stream);
+      if(this.context!==context || !context)throw new Error('Media session changed');
+      await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).flatMap(peer=>[
+        peer.screenSender?.replaceTrack(stream?.getVideoTracks()[0] || null),peer.audioSender?.replaceTrack(outgoing)]));
+    } catch(error) {
+      if(this.context===context){this.audioMixer.stop();await Promise.allSettled([...this.peers.values()].flatMap(peer=>[peer.audioSender?.replaceTrack(this.stream?.getAudioTracks()[0] || null),peer.screenSender?.replaceTrack(old?.getVideoTracks()[0] || null)]));}
+      throw error;
+    }
     if(this.context!==context || !context)throw new Error('Media session changed');
     this.screenStream=stream || null;
     old?.getTracks().forEach(track=>{track.onended=null;track.stop();});
@@ -220,6 +234,7 @@ export class HuddleAudioController {
   }
 
   pause() {
+    this.audioMixer.stop();
     this.cameraStream?.getTracks().forEach(track=>{track.enabled=false;});
     this.screenStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.screenStream=null;
     this.update({localScreenStream:null,remoteScreenStream:null});
@@ -287,6 +302,7 @@ export class HuddleAudioController {
   }
 
   stop() {
+    this.audioMixer.stop();
     this.cameraStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.cameraStream=null;
     this.update({localCameraStream:null,remoteCameraStreams:{}});
     this.screenStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.screenStream=null;

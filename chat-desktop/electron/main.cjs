@@ -1,7 +1,8 @@
 const { installHuddleInvitations } = require('./huddleInvitations.cjs');
+const { createIncomingCallWindow } = require('./incomingCallWindow.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 
@@ -65,6 +66,7 @@ function createWindow() {
   installDisplayCapture(mainWindow, {BrowserWindow,ipcMain,desktopCapturer});
   const callWindow=mainWindow;
   installHuddleInvitations(callWindow,{ipcMain,Notification,
+    createCallAlert:(invitation,onAction,onUnavailable)=>createIncomingCallWindow({BrowserWindow,ipcMain,screen,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png')},invitation,onAction,onUnavailable),
     icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),
     showWindow:()=>{if(callWindow.isMinimized())callWindow.restore();callWindow.show();if(process.platform==='darwin' && app.dock)app.dock.show();callWindow.focus();}});
 

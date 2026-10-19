@@ -3,5 +3,6 @@
 <body><header><div class="share-mark" aria-hidden="true">↗</div><div><h1>What would you like to share?</h1><p>Choose a screen or window for your Huddle.</p></div></header>
 <nav aria-label="Source type"><button id="screens" aria-pressed="true">Entire screen</button><button id="windows" aria-pressed="false">Application window</button></nav>
 <main><div id="sources" role="group" aria-label="Available screens and windows"></div><p id="empty" hidden>No sources available. Check your device’s screen-recording permission and try again.</p></main>
+<section id="audio-options" hidden><label><input id="share-audio" type="checkbox"> Share system audio</label><p>Includes sound from all other apps, even when sharing one window. TaskChat call audio is excluded.</p></section>
 <footer><p>Only your selected source is shared.<br><span>Check for sensitive information before sharing.</span></p><div><button id="cancel">Cancel</button><button id="share" disabled>Share screen <span aria-hidden="true">↗</span></button></div></footer>
 <script src="source-picker.js"></script></body></html>

@@ -18,6 +18,6 @@ function render(){
 }
 for(const [id,type] of [['screens','screen'],['windows','window']])document.getElementById(id).addEventListener('click',()=>{kind=type;selected=null;render();});
 document.getElementById('cancel').addEventListener('click',()=>window.capturePicker.select(null));
-share.addEventListener('click',()=>{if(selected && !share.disabled)window.capturePicker.select(selected);});
+share.addEventListener('click',()=>{if(selected && !share.disabled)window.capturePicker.select(selected,document.getElementById('share-audio').checked);});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')window.capturePicker.select(null);});
-window.capturePicker.onSources(list=>{sources=list;selected=null;kind=list.some(source=>source.kind==='screen')?'screen':'window';render();});
+window.capturePicker.onSources((list,audioAvailable)=>{document.getElementById('audio-options').hidden=!audioAvailable;document.getElementById('share-audio').checked=false;sources=list;selected=null;kind=list.some(source=>source.kind==='screen')?'screen':'window';render();});

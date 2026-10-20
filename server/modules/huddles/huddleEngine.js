@@ -1,8 +1,10 @@
 import {randomUUID} from 'node:crypto';
 import {ForbiddenError, NotFoundError, ValidationError} from '../../middleware/errorHandler.js';
 import {verifiesSessionProof} from './huddleSessionProof.js';
+import {updateSharedNotes} from './huddleNotesCollaboration.js';
 const GRACE=30000, RECONNECT_GRACE=300000, LEASE=60000;
 const publicState = state => ({huddle:state.huddle, revision:state.revision,
+  ...(state.notesDocument?{notesDocument:state.notesDocument}:{}),
   participants:state.participants.map(({secret,socketId,expiresAt,...profile})=>profile)});
 function membershipError(error,state,context,cached,reason){
   const own=state.participants.filter(p=>p.userId===String(context.user._id));
@@ -72,7 +74,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
       // A request on the authenticated, already-bound socket is direct proof
       // of liveness. Renew before pruning; otherwise the heartbeat that should
       // save a delayed lease can itself remove its participant.
-      const liveActions=['heartbeat','invite','hand','reaction','notes','screen-state','camera-state','audio-ready','audio-state','audio-config'];
+      const liveActions=['heartbeat','invite','hand','reaction','notes','notes-sync','notes-edit','notes-typing','notes-save','screen-state','camera-state','audio-ready','audio-state','audio-config'];
       if(liveActions.includes(action)){
         const caller=state.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
         if(caller?.connection==='connected')caller.expiresAt=now()+LEASE;
@@ -112,6 +114,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         // An ended room can retain its presence snapshot. Invitation flags
         // belong to the new meeting, not to the channel's previous call.
         state.announced=false;state.lastInviteAt=null;
+        delete state.notesDocument;
         state.emptySince=now(); changed=true;
       }
       if(action==='start' || action==='join' || action==='resume') {
@@ -142,7 +145,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         participant.socketId=context.socketId; participant.expiresAt=now()+LEASE;
         state.emptySince=null;
         input.session={id:participant.id,secret:participant.secret};
-      } else if(['invite','hand','reaction','notes','screen-state','camera-state','audio-ready','audio-state','audio-config','signal'].includes(action)) {
+      } else if(['invite','hand','reaction','notes','notes-sync','notes-edit','notes-typing','notes-save','screen-state','camera-state','audio-ready','audio-state','audio-config','signal'].includes(action)) {
         const sender=state.participants.find(p=>p.socketId===context.socketId && p.userId===String(context.user._id));
         if(!state.huddle || !sender || sender.connection!=='connected') throw membershipError(new ForbiddenError('Join this huddle before using audio'),state,context,cached);
         if(action==='invite') {
@@ -155,8 +158,19 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         } else if(action==='reaction') {
           if(!['👍','❤️','😂','🎉','👏','🙌'].includes(input.emoji))throw new ValidationError('Unsupported reaction');
           sender.reaction={emoji:input.emoji,at:now(),id:randomUUID()};changed=true;
+        } else if(['notes-sync','notes-edit','notes-save'].includes(action)) {
+          if(action==='notes-edit' && (typeof input.update!=='string' || (input.typing!==undefined && typeof input.typing!=='boolean')))throw new ValidationError('Invalid notes update');
+          const shared=updateSharedNotes(state,action==='notes-edit'?input.update:undefined);
+          state.notesDocument=shared.document;
+          if(action==='notes-edit')sender.notesTypingAt=input.typing===false?null:now();
+          if(action==='notes-save')state.huddle=await repository.notes(state.huddle._id,shared.text,state.huddle.notesVersion || 0);
+          changed=true;
+        } else if(action==='notes-typing') {
+          if(typeof input.typing!=='boolean')throw new ValidationError('Invalid notes typing state');
+          sender.notesTypingAt=input.typing?now():null;changed=true;
         } else if(action==='notes') {
           if(typeof input.text!=='string' || input.text.length>10000 || !Number.isInteger(input.version))throw new ValidationError('Invalid meeting notes');
+          if(state.notesDocument && updateSharedNotes(state).text!==input.text)throw new ValidationError('Notes are being edited live. Use the latest TaskChat app to save the shared draft.');
           state.huddle=await repository.notes(state.huddle._id,input.text,input.version);changed=true;
         } else if(action==='screen-state') {
           if(!sender.audioReady || typeof input.sharing!=='boolean')throw new ValidationError('Invalid screen sharing state');
@@ -193,7 +207,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
           if(action==='leave') {state.participants=state.participants.filter(p=>p!==participant); changed=true;}
           else {
             if(action==='disconnect' || participant.connection==='connected')participant.expiresAt=now()+(action==='disconnect'?RECONNECT_GRACE:LEASE);
-            if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.cameraOn=false;participant.handRaised=false;participant.mediaId=null;changed=true;}
+            if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.cameraOn=false;participant.handRaised=false;participant.notesTypingAt=null;participant.mediaId=null;changed=true;}
           }
         } else if(action==='heartbeat') throw membershipError(new NotFoundError('Huddle participant'),state,context,cached);
       } else if(action==='end') {

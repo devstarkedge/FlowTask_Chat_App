@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { taskChatDevServer } from "./scripts/dev-server.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -57,6 +58,7 @@ export default ({ mode }) => {
     base: mode === "production" ? "./" : "/",
 
     plugins: [
+      taskChatDevServer(__dirname),
       (() => {
         const plugins = react({ disableOxcRecommendation: true });
         plugins.forEach((p) => {

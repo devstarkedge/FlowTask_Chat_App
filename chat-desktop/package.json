@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "electron": "npm run electron:dev",
-    "electron:dev": "concurrently -k \"cross-env BROWSER=none vite\" \"wait-on tcp:5174 && electron .\"",
+    "electron:dev": "node scripts/electron-dev.mjs",
     "build:win": "vite build && electron-builder --win --config.electronDist=node_modules/electron/dist",
     "build:mac": "vite build && electron-builder --mac",
     "build:linux": "vite build && electron-builder --linux",

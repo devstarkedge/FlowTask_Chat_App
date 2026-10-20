@@ -25,7 +25,10 @@ const overlayWindows = new WeakSet();
 // Ensure single instance behavior — prevent second launch from opening unauthenticated LevelDB locked process
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
+  if (isDev) console.info('[TaskChat] TaskChat is already running. Bringing the existing window to the front.');
   app.quit();
+  // Do not initialize windows, sessions or the tray in the duplicate process.
+  return;
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {

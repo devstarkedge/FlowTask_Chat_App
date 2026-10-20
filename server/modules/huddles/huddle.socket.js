@@ -16,6 +16,7 @@ function failureDetails(error){
 export default function registerHuddleSocket(io,socket,huddleService=service) {
   let operations=0, windowStart=Date.now();
   let signals=0, signalWindow=Date.now();
+  let notesOperations=0,notesWindow=Date.now();
   const context=()=>({user:socket.chatUser,workspaceId:socket.workspaceId,socketId:socket.id});
   for(const action of ['get','start','join','resume','leave','end','heartbeat']) {
     socket.on(`huddle:${action}`,async(payload={},ack)=>{
@@ -37,12 +38,17 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
       }
     });
   }
-  for(const action of ['invite','hand','reaction','notes','screen-state','camera-state','audio-ready','audio-state','audio-config','signal']) {
+  for(const action of ['invite','hand','reaction','notes','notes-sync','notes-edit','notes-typing','notes-save','screen-state','camera-state','audio-ready','audio-state','audio-config','signal']) {
     socket.on(`huddle:${action}`,async(payload={},ack)=>{
       if(typeof ack!=='function')return;
       try {
-        if(Date.now()-signalWindow>60000){signals=0;signalWindow=Date.now();}
-        if(++signals>240) throw new Error('Too many audio requests');
+        if(action.startsWith('notes')){
+          if(Date.now()-notesWindow>60000){notesOperations=0;notesWindow=Date.now();}
+          if(++notesOperations>180)throw new Error('Notes are syncing too quickly. Wait a moment and try again.');
+        }else{
+          if(Date.now()-signalWindow>60000){signals=0;signalWindow=Date.now();}
+          if(++signals>240) throw new Error('Too many audio requests');
+        }
         if(!payload || typeof payload!=='object' || socket.data.huddle?.channelId!==payload.channelId) throw new Error('Join this huddle first');
         if(action==='audio-ready' || action==='audio-config') {
           mediaSettings();
@@ -50,8 +56,8 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
           const state=await huddleService.run(context(),payload.channelId,action,{muted:payload.muted});
           const media=await createSfuConfiguration(context(),state,socket.data.huddle.sessionId);
           ack({success:true,data:{state,...config,...media}});
-        } else if(['invite','hand','reaction','notes','screen-state','camera-state'].includes(action)) {
-          const state=await huddleService.run(context(),payload.channelId,action,{raised:payload.raised,emoji:payload.emoji,text:payload.text,version:payload.version,sharing:payload.sharing,enabled:payload.enabled});
+        } else if(['invite','hand','reaction','notes','notes-sync','notes-edit','notes-typing','notes-save','screen-state','camera-state'].includes(action)) {
+          const state=await huddleService.run(context(),payload.channelId,action,{raised:payload.raised,emoji:payload.emoji,text:payload.text,version:payload.version,sharing:payload.sharing,enabled:payload.enabled,update:payload.update,typing:payload.typing});
           const {invitation,...snapshot}=state;
           ack({success:true,data:{state:snapshot,...(invitation?{invitation}:{})}});
         } else if(action==='audio-state') {

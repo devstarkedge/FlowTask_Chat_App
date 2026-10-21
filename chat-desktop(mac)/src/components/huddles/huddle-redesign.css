@@ -1,0 +1,150 @@
+/* Calling surface. Kept separate from shared channel strips/invitations. */
+.huddle-window{inset:24px auto 24px 24px;width:min(460px,calc(100vw - 48px));background:#f7f5f8;border:1px solid #d9d4df;border-radius:18px;box-shadow:0 24px 90px #14101e55;box-sizing:border-box}
+.huddle-window *{box-sizing:border-box}
+.huddle-window button,.huddle-window select,.huddle-window textarea{font-family:inherit}
+.huddle-window-chrome{height:44px;min-height:44px;gap:10px;padding:0 12px 0 18px;background:#eeebf1;border-bottom:1px solid #dfdae5;color:#675a72}
+.huddle-window-chrome>span{text-align:left;font-weight:600}.huddle-window-chrome>button{height:30px;border-radius:7px}.huddle-window-chrome>button:hover{background:#0000000b}
+.huddle-window-content{padding:20px 22px;scrollbar-width:thin}
+.huddle-heading{padding:8px 0 20px;text-align:center}.huddle-eyebrow{display:block;font-size:10px;letter-spacing:1.8px;font-weight:700;color:#9d8caf;margin-bottom:8px}
+.huddle-window .huddle-heading h2{font-size:23px;font-weight:400;line-height:1.35;padding:0;background:transparent;border-radius:0;margin:0;letter-spacing:-.5px}.huddle-heading h2 strong{font-weight:650}
+.huddle-heading>p{font-size:12px;color:#92859f;margin:8px 0 0}
+.huddle-window .huddle-preview-card{padding:0;border:0;background:transparent;gap:14px}
+.huddle-participant-grid{gap:12px}.huddle-participant-grid.has-peers{grid-template-columns:repeat(auto-fit,minmax(185px,1fr))}
+.huddle-participant-tile,.huddle-participant-tile.has-photo{height:clamp(220px,32vh,340px);min-height:220px;border:1px solid #ffffff0a;border-radius:16px;background:radial-gradient(ellipse at 50% 40%,#463b57 0,#2c283b 65%,#242735 100%)}
+.huddle-participant-tile img,.huddle-avatar-letter{display:grid;place-items:center;width:108px;height:108px;flex:0 0 108px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 7px #ffffff0a,0 10px 36px #0003}
+.huddle-avatar-letter{font-size:42px;font-weight:600;background:#8a66b1;color:#fff}
+.huddle-participant-name{top:auto;right:auto;bottom:14px;left:14px;max-width:calc(100% - 68px);padding:5px 8px;background:#11131b66;font-weight:500}
+.huddle-preview-icons{bottom:14px;right:14px;gap:6px}.huddle-preview-icons>span{width:28px;height:28px;border-radius:8px;background:#11131b66;color:#c5bdcc}.huddle-preview-icons>span:last-child{display:none}
+.huddle-device-row{gap:8px}.huddle-device-control{height:40px;border-radius:9px;border:1px solid #e1dce6}.huddle-device-control button{width:36px;border-radius:8px;color:#655a70}.huddle-device-control select{color:#655a70;padding:5px 4px}
+.huddle-camera-control{height:40px;border-radius:9px;background:#eeeaf1;border-color:#e1dce6;color:#877c92}
+.huddle-camera-note{padding:9px 11px;margin:0 0 8px;background:#eeebf2;font-size:11px;color:#756a80}.huddle-camera-note input{accent-color:#7b5ab7}
+.huddle-warning{gap:10px;padding:12px 14px;margin-bottom:12px;border:1px solid #ebd5ac;border-radius:10px;font-size:12px;line-height:1.55}.huddle-warning p{margin:4px 0 6px}.huddle-warning strong{font-size:12px}.huddle-warning button{margin:4px 14px 0 0}
+.huddle-warning--notice{background:#fff7e7;color:#715321}.huddle-warning--mic{background:#fff0f1;color:#963d50;border-color:#f1d1d8}
+.huddle-call-status{padding:14px 2px;font-size:11px;color:#aaa0b7;gap:8px}.huddle-call-status>span:last-child{color:#d3d0dc}
+.huddle-status-dot{width:6px;height:6px;background:#d9ac55;box-shadow:0 0 0 4px #d9ac5510}.huddle-status-dot.is-connected{background:#65d6ae;box-shadow:0 0 0 4px #65d6ae10}
+.huddle-window-footer{gap:22px;padding:18px 22px;background:#eeebf1;border-top:1px solid #dfdae5;min-height:82px}
+.huddle-footer-action{flex-direction:row;gap:8px;border-radius:10px;padding:10px 18px;background:#eee8f4;color:#5c4971;font-size:12px;min-height:42px}
+.huddle-action-icon{width:auto;height:auto;border:0;box-shadow:none;background:none;color:inherit}.huddle-action-icon svg{width:18px;height:18px}
+.huddle-primary-action{background:#7753a5;color:#fff;font-weight:650}.huddle-end-action{max-width:none;font-size:11px;text-decoration:none;color:#998aa8}.huddle-end-action:hover{text-decoration:underline;color:#d395a4}
+.huddle-tools{padding:4px 0;font-size:12px}.huddle-tools-bar{gap:8px;justify-content:center}
+.huddle-tools button{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #ffffff15;background:#ffffff08;color:#d8d2e4;border-radius:10px;padding:11px 14px;font-size:12px;transition:background .15s,border-color .15s}
+.huddle-tools button:hover{background:#ffffff12;border-color:#ffffff30}.huddle-tools button[aria-pressed=true]{background:#a98cd72b;border-color:#a98cd76b;color:#d9c5f8}
+.huddle-reactions{justify-content:center;padding:10px 0}.huddle-reactions button{font-size:23px;padding:6px 10px}
+.huddle-participant-signals{justify-content:center;margin:8px 0}.huddle-participant-signals:empty{display:none}.huddle-participant-signals span{background:#ffffff0b;padding:7px 10px;font-size:11px;color:#ddd2eb}
+.huddle-screen-stage{background:#0c1016;border:1px solid #ffffff15;border-radius:12px;margin-bottom:14px}.huddle-screen-stage video{max-height:42vh}.huddle-screen-label{margin:0 0 8px;font-size:11px;color:#c4b8d1}
+.huddle-notes{padding:18px;background:#f6f4f8;color:#332940;border-radius:12px}.huddle-notes h3{font-size:16px}.huddle-notes p{font-size:11px;line-height:1.6;color:#82768e}.huddle-notes textarea{border-color:#ded7e6;border-radius:8px;padding:12px;font-size:13px;line-height:1.6}.huddle-notes button{border-color:#ded7e6;background:#fff;color:#695378;font-size:11px;padding:8px}
+.huddle-meeting-link{padding:12px 0 0}.huddle-meeting-link button{border:0;background:none;color:#ac9bc2;font-size:11px;margin:0 5px 5px;padding:8px}.huddle-meeting-link button:hover{color:#e5d3ff}.huddle-meeting-link p{font-size:11px;color:#b9aac9}
+.huddle-window .huddle-connection-note{font-size:11px;line-height:1.6;margin:5px 0;text-align:center;color:#a399ae}
+.huddle-listener-note,.huddle-network-note{font-size:11px;line-height:1.7;border:1px solid #ffffff0d;border-radius:9px;color:#afa6bd;margin:0 0 14px;background:#ffffff04}
+.huddle-listener-note summary,.huddle-network-note summary{display:flex;gap:8px;align-items:center;cursor:pointer;list-style:none;padding:9px 12px}.huddle-listener-note summary::-webkit-details-marker,.huddle-network-note summary::-webkit-details-marker{display:none}.huddle-listener-note summary>span{margin-left:auto;color:#c6b0e1;font-size:10px}.huddle-listener-note p,.huddle-network-note p{margin:0;padding:0 12px 12px}
+.huddle-network-note{border:0;background:transparent;margin:4px 0 0;color:#c0a76f}.huddle-network-note summary{justify-content:center;padding:8px}
+.huddle-window.is-live{left:50%;top:28px;bottom:28px;transform:translateX(-50%);width:min(1000px,calc(100vw - 64px));background:#141923;border-color:#3b3748}
+.is-live .huddle-window-chrome{background:#1d212c;color:#b9aec6;border-color:#ffffff0b}.is-live .huddle-window-chrome>button:hover{background:#ffffff0c}
+.is-live .huddle-window-content{background:radial-gradient(ellipse at 50% 10%,#292437 0%,#171c26 60%);color:#f4f0f8;padding:18px 32px 20px}
+.is-live .huddle-heading{padding:5px 0 20px}.is-live .huddle-preview-card{max-width:850px;margin:0 auto}.is-live .huddle-participant-tile{height:clamp(200px,32vh,340px);min-height:200px}
+.is-live .huddle-device-control,.is-live .huddle-camera-control{background:#ffffff05;border-color:#ffffff12;color:#a299b0}.is-live .huddle-device-control button,.is-live .huddle-device-control select{color:#b3a8c3}.is-live .huddle-device-control select option{background:#252331;color:#e5dcec}
+.is-live .huddle-window-footer{background:#1a1e28;border-color:#ffffff0b;min-height:78px;padding:16px;gap:24px}.is-live .huddle-primary-action{background:#bd4b68;box-shadow:none;padding:11px 22px}
+.is-live .huddle-window-content:has(.huddle-notes){padding-right:340px}.is-live .huddle-notes{right:16px;top:62px;bottom:94px;width:290px;margin:0}.is-live .huddle-notes textarea{min-height:45vh}.is-live .huddle-participant-signals{color:#ddd2eb}
+.is-sharing .huddle-participant-grid{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}.is-sharing .huddle-participant-tile{width:130px;height:90px;min-height:90px;border-radius:10px}.is-sharing .huddle-participant-tile img,.is-sharing .huddle-avatar-letter{width:36px;height:36px;flex-basis:36px;font-size:18px;border-radius:50%;box-shadow:0 0 0 4px #ffffff08;margin-top:-14px}.is-sharing .huddle-participant-name{top:auto;bottom:5px;left:7px;max-width:calc(100% - 14px);font-size:10px;background:none;padding:0}.is-sharing .huddle-screen-stage video{max-height:36vh}
+.huddle-window button:focus-visible,.huddle-window select:focus-visible,.huddle-window textarea:focus-visible,.huddle-window summary:focus-visible{outline:2px solid #ac8fe0;outline-offset:3px}
+@media(max-width:850px){.huddle-window.is-live{inset:10px;transform:none;width:calc(100vw - 20px)}.is-live .huddle-window-content{padding:16px}.is-live .huddle-window-content:has(.huddle-notes){padding-right:16px}.is-live .huddle-notes{position:static;width:auto}.is-live .huddle-notes textarea{min-height:180px}}
+@media(max-width:520px){.huddle-window{inset:8px;width:calc(100vw - 16px);border-radius:12px}.huddle-window-content{padding:14px}.huddle-device-row{grid-template-columns:1fr 1fr}.huddle-camera-control{display:none}.huddle-tools-bar{display:grid;grid-template-columns:1fr 1fr}.huddle-tools-bar button{padding:10px}.huddle-participant-grid.has-peers{grid-template-columns:1fr 1fr}.huddle-participant-tile img,.huddle-avatar-letter{width:80px;height:80px;flex-basis:80px;font-size:30px}.huddle-listener-note summary{flex-wrap:wrap}.huddle-listener-note summary>span{margin-left:22px}.huddle-window-footer{gap:16px}.huddle-end-action{max-width:85px}}
+@media(max-height:740px){.huddle-window,.huddle-window.is-live{top:12px;bottom:12px}.is-live .huddle-window-content{padding-top:12px}.is-live .huddle-participant-tile{height:190px;min-height:190px}.huddle-window-footer,.is-live .huddle-window-footer{min-height:66px;padding:12px}.is-sharing .huddle-participant-tile{height:70px;min-height:70px}.huddle-call-status{padding:10px 2px}.huddle-tools button{padding:9px 12px}.huddle-meeting-link{padding-top:5px}}
+@media(prefers-reduced-motion:reduce){.huddle-tools button{transition:none}}
+
+.huddle-window.is-maximized{inset:8px;width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:none;transform:none;border-radius:12px}
+/* Electron's native caption buttons live above the web content, regardless of
+   z-index. Keep the Huddle chrome below their reserved title-bar rectangle. */
+.has-native-window-controls .huddle-window{top:max(24px,calc(env(titlebar-area-height,48px) + 8px))}
+.has-native-window-controls .huddle-window.is-maximized{top:calc(env(titlebar-area-height,48px) + 8px);height:calc(100dvh - env(titlebar-area-height,48px) - 16px)}
+.huddle-window-chrome>button{-webkit-app-region:no-drag;flex-shrink:0}
+.huddle-reconnecting{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px;border:1px solid #b895e955;border-radius:12px;background:#8864b51a;color:#dfd0f3}.huddle-reconnecting p{margin:5px 0;font-size:12px}.huddle-reconnecting span{font-size:11px;color:#b8a8ca}.huddle-reconnect-spinner{flex-shrink:0;animation:huddle-reconnect-spin 1s linear infinite}@keyframes huddle-reconnect-spin{to{transform:rotate(360deg)}}
+.huddle-camera-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}.huddle-participant-tile.has-camera .huddle-participant-name,.huddle-participant-tile.has-camera .huddle-preview-icons{z-index:1}
+@media(prefers-reduced-motion:reduce){.huddle-reconnect-spinner{animation:none}}
+@media(max-width:520px){.huddle-camera-control{display:inline-flex;grid-column:1/-1}}
+
+/* A level-driven local indicator; mute state alone never marks a speaker. */
+.huddle-participant-tile.is-speaking { outline: 3px solid #43b581; outline-offset: -3px; }
+.huddle-participant-hand{position:absolute;top:8px;right:8px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#372a45;color:#f8d477;border:1px solid #f8d47740;pointer-events:none}
+
+/* Keep the same media and participant elements mounted when the layout changes. */
+.huddle-call-layout{display:contents}
+.huddle-window.is-sharing .huddle-window-content{display:flex;flex-direction:column;overflow:auto;padding:10px 20px;min-height:0}
+.huddle-window.is-sharing .huddle-window-content> *{flex-shrink:0}
+.huddle-window.is-sharing .huddle-heading{padding:0 0 8px}
+.huddle-window.is-sharing .huddle-eyebrow{display:none}
+.huddle-window.is-sharing .huddle-heading h2{font-size:18px;padding:0}
+.huddle-window.is-sharing .huddle-heading>p{margin-top:3px}
+.huddle-window.is-sharing .huddle-listener-note{margin-bottom:8px}
+/* The screen owns the flexible column; the participant rail scrolls independently. */
+.huddle-window.is-sharing .huddle-call-layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(130px,15vw,210px);grid-template-rows:auto minmax(180px,1fr) auto;gap:8px 14px;flex:1 0 300px;min-height:0;min-width:0}
+.huddle-window.is-sharing .huddle-preview-card{display:contents}
+.huddle-window.is-sharing .huddle-participant-grid{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;flex-wrap:nowrap;justify-content:flex-start;gap:10px;overflow:auto;min-height:0;padding:3px}
+.huddle-window.is-sharing .huddle-participant-tile{width:100%;height:auto;min-height:100px;aspect-ratio:16/10;flex:0 0 auto;box-sizing:border-box}
+.huddle-window.is-sharing .huddle-device-row{grid-column:1;grid-row:3;min-width:0}
+.huddle-window.is-sharing .huddle-device-control,.huddle-window.is-sharing .huddle-camera-control{height:34px;min-width:0}
+.huddle-window.is-sharing .huddle-device-control select{min-width:0}
+.huddle-window.is-sharing .huddle-call-status{grid-column:1;grid-row:1;padding:0 2px;min-width:0}
+.huddle-window.is-sharing .huddle-tools{grid-column:1;grid-row:2;display:flex;flex-direction:column;min-height:0;min-width:0;padding:0;overflow:auto}
+.huddle-window.is-sharing .huddle-screen-stage{flex:1 0 140px;min-height:0;margin-bottom:8px}
+.huddle-window.is-sharing .huddle-screen-stage video{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain}
+.huddle-window.is-sharing .huddle-tools-bar,.huddle-window.is-sharing .huddle-screen-label,.huddle-window.is-sharing .huddle-reactions,.huddle-window.is-sharing .huddle-participant-signals{flex-shrink:0}
+.huddle-window.is-sharing .huddle-tools-bar button{padding:8px 12px}
+.huddle-window.is-sharing .huddle-screen-label{margin:0 0 6px}
+.huddle-window.is-sharing .huddle-meeting-link{padding-top:4px}
+.huddle-window.is-sharing .huddle-meeting-link button{margin-bottom:0;padding:5px 8px}
+.huddle-window.is-sharing .huddle-window-footer{flex-shrink:0;min-height:62px;padding:10px 16px}
+/* Notes retain their existing panel, beside the call on roomy windows. */
+.huddle-window.is-sharing .huddle-window-content:has(.huddle-notes){padding-right:340px}
+@media(max-width:850px){
+ .huddle-window.is-sharing .huddle-window-content:has(.huddle-notes){padding-right:20px}
+ .huddle-window.is-sharing .huddle-notes{flex-shrink:0;box-sizing:border-box}
+}
+/* On phones the rail becomes a filmstrip, leaving the screen full width. */
+@media(max-width:600px){
+ .huddle-window.is-sharing .huddle-window-content{padding:10px 12px}
+ .huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(230px,1fr) auto auto;flex-basis:440px;gap:8px}
+ .huddle-window.is-sharing .huddle-participant-grid{grid-column:1;grid-row:3;flex-direction:row;overflow:auto;padding:3px;min-height:0}
+ .huddle-window.is-sharing .huddle-participant-tile{width:120px;min-height:76px}
+ .huddle-window.is-sharing .huddle-device-row{grid-row:4}
+ .huddle-window.is-sharing .huddle-tools-bar{display:flex;flex-wrap:wrap}
+ .huddle-window.is-sharing .huddle-tools-bar button{padding:7px 9px}
+}
+
+/* Transient reactions float over the call without intercepting its controls. */
+.huddle-floating-reactions{position:absolute;inset:48px 8px 76px;overflow:hidden;pointer-events:none;z-index:5}
+.huddle-floating-reaction{position:absolute;bottom:14%;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:170px;animation:huddle-reaction-float 5s ease-out both;will-change:transform,opacity}
+.huddle-floating-emoji{font-size:52px;line-height:1.2;filter:drop-shadow(0 4px 10px #0005)}
+.huddle-floating-name{max-width:170px;padding:6px 10px;border-radius:20px;background:#252331ed;border:1px solid #ffffff25;color:#f5f0fb;font-size:12px;line-height:1.4;text-align:center;overflow-wrap:anywhere;box-shadow:0 4px 12px #0003}
+@keyframes huddle-reaction-float{0%{opacity:0;transform:translate(-50%,30px) scale(.65)}12%{opacity:1;transform:translate(-50%,0) scale(1.08)}25%{transform:translate(-45%,-35px) scale(1)}75%{opacity:1;transform:translate(-60%,-180px) scale(1)}100%{opacity:0;transform:translate(-40%,-260px) scale(.95)}}
+@media(prefers-reduced-motion:reduce){.huddle-floating-reaction{animation-name:huddle-reaction-fade;will-change:opacity;transform:translateX(-50%)}@keyframes huddle-reaction-fade{0%,100%{opacity:0}15%,80%{opacity:1}}}
+
+/* Presentation gets the available window; Fit preserves the complete source.
+   Zoom/100% provide readable pixels without stretching or cropping by default. */
+.huddle-window.is-sharing.is-maximized{inset:8px;width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:none;transform:none}
+.has-native-window-controls .huddle-window.is-sharing.is-maximized{top:calc(env(titlebar-area-height,48px) + 8px);height:calc(100dvh - env(titlebar-area-height,48px) - 16px)}
+.huddle-window.is-sharing .huddle-window-content{padding:8px 12px;overflow:auto}
+.huddle-window.is-sharing .huddle-heading{display:flex;align-items:baseline;justify-content:center;gap:12px;padding:0 0 6px}
+.huddle-window.is-sharing .huddle-heading h2{font-size:16px}.huddle-window.is-sharing .huddle-heading>p{margin:0;font-size:11px}
+.huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr) clamp(120px,12vw,190px);gap:6px 10px;flex:1 0 300px}
+.huddle-window.is-sharing .huddle-participant-tile{min-height:82px}
+.huddle-window.is-sharing .huddle-tools{overflow:visible}
+.huddle-window.is-sharing .huddle-screen-stage{display:flex;flex-direction:column;flex:1 1 180px;min-height:180px;margin:0 0 6px;isolation:isolate;border:0;background:transparent;box-shadow:none}
+.huddle-window .huddle-screen-stage.is-local-share .huddle-screen-viewport{border:2px solid #36d17d;box-shadow:0 0 0 1px #36d17d44}
+.huddle-screen-controls-footer{display:flex;justify-content:center;flex-shrink:0;padding:8px 0 2px}
+.huddle-screen-toolbar{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;max-width:100%;padding:4px 8px;background:#181e28;border:1px solid #ffffff20;border-radius:12px;box-shadow:0 4px 14px #0003;flex-wrap:wrap;z-index:2}
+.huddle-window .huddle-screen-stage .huddle-screen-toolbar button{position:static;inset:auto;display:inline-flex;align-items:center;justify-content:center;padding:4px 7px;min-width:28px;height:28px;font-size:11px;border-radius:6px;flex-shrink:0}
+.huddle-screen-toolbar-divider{width:1px;height:18px;background:#ffffff25;margin:0 4px}
+.huddle-sharing-indicator{margin-right:auto;color:#70e7a5;font-size:11px;white-space:nowrap}
+.huddle-screen-viewport{position:relative;flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;background:#080c12;border:1px solid #ffffff15;border-radius:10px;scrollbar-width:thin}
+.huddle-screen-surface{position:relative;min-width:100%;min-height:100%}
+.huddle-window.is-sharing .huddle-screen-stage video{position:absolute;inset:0;display:block;width:100%;height:100%;max-height:none;object-fit:contain}
+.huddle-screen-ink-input{position:absolute;inset:0;touch-action:none;cursor:crosshair}
+.huddle-screen-ink-input.is-eraser{cursor:cell}
+.huddle-window .huddle-screen-stage .huddle-screen-play{position:absolute;inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);height:auto;z-index:3}
+.huddle-screen-error{margin:0;padding:5px 10px;color:#ffd496;font-size:11px;background:#181e28}
+.huddle-screen-stage:fullscreen{display:flex;flex-direction:column;width:100vw;height:100dvh;border:0;border-radius:0;background:#080c12;margin:0}
+.huddle-screen-stage:fullscreen .huddle-screen-controls-footer{padding:8px 12px}
+.huddle-screen-stage:fullscreen .huddle-screen-toolbar button{position:static;inset:auto;height:30px;padding:4px 8px}
+.huddle-screen-stage:fullscreen video{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain}
+@media(max-width:600px){.huddle-window.is-sharing .huddle-heading{display:block}.huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr)}.huddle-sharing-indicator{display:none}.huddle-window .huddle-screen-stage .huddle-screen-toolbar button{padding:4px;min-width:26px}}

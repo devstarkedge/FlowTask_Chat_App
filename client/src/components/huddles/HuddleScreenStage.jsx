@@ -1,17 +1,18 @@
 import {createPortal} from 'react-dom';
 import {useEffect,useRef,useState} from 'react';
-import {Maximize2,Minimize2,Minus,Plus,Pencil,Eraser,MousePointer2,Trash2} from 'lucide-react';
-import {screenPresentation,screenPoint} from '../../features/huddle/services/screenPresentation.service';
+import {Maximize2,Minimize2,Minus,Plus} from 'lucide-react';
+import ScreenAnnotationLayer from './ScreenAnnotationLayer';
+import ScreenSharePresenterControls from './ScreenSharePresenterControls';
 
-export default function HuddleScreenStage({stream,local=false,controlsHost}) {
+export default function HuddleScreenStage({stream,local=false,controlsHost,share,busy=false,presenterName}) {
   const video=useRef(null),stage=useRef(null),viewport=useRef(null),drawing=useRef(false);
-  const [blocked,setBlocked]=useState(false),[zoom,setZoom]=useState(1),[tool,setTool]=useState('pointer');
+  const [blocked,setBlocked]=useState(false),[zoom,setZoom]=useState(1),[tool,setTool]=useState('pointer'),[color,setColor]=useState('#facc15');
   const [fullscreen,setFullscreen]=useState(false),[error,setError]=useState('');
   useEffect(()=>{
     const element=video.current;let active=true;setBlocked(false);setZoom(1);setTool('pointer');
     element.srcObject=stream;
     element.play().catch(e=>{if(active && e.name!=='AbortError')setBlocked(true);});
-    return()=>{active=false;drawing.current=false;screenPresentation.endStroke();element.pause();element.srcObject=null;};
+    return()=>{active=false;drawing.current=false;element.pause();element.srcObject=null;};
   },[stream]);
   useEffect(()=>{const owner=stage.current.ownerDocument;const changed=()=>setFullscreen(owner.fullscreenElement===stage.current);owner.addEventListener('fullscreenchange',changed);return()=>owner.removeEventListener('fullscreenchange',changed);},[]);
   const present=async()=>{
@@ -23,29 +24,24 @@ export default function HuddleScreenStage({stream,local=false,controlsHost}) {
     const element=video.current,rect=viewport.current.getBoundingClientRect();
     if(element.videoWidth && rect.width && rect.height)setZoom(Math.max(1,Math.min(12,Math.max(element.videoWidth/rect.width,element.videoHeight/rect.height))));
   };
-  const point=event=>{
-    if(!local || tool==='pointer' || !screenPresentation.owns(stream))return;
-    const element=video.current;
-    const position=screenPoint(event,element.getBoundingClientRect(),element.videoWidth,element.videoHeight);
-    if(position)screenPresentation.point(position,{tool,start:event.type==='pointerdown'});
-  };
-  const finish=()=>{drawing.current=false;screenPresentation.endStroke();};
   const controls=(<div className="huddle-screen-controls-footer">
       <div className="huddle-screen-toolbar" role="toolbar" aria-label="Shared screen controls">
-        {local && <><span className="huddle-sharing-indicator">You’re sharing</span><button aria-label="Pointer" aria-pressed={tool==='pointer'} onClick={()=>setTool('pointer')}><MousePointer2 size={16}/></button><button aria-label="Draw on shared screen" aria-pressed={tool==='pen'} onClick={()=>setTool('pen')}><Pencil size={16}/></button><button aria-label="Erase drawing" aria-pressed={tool==='eraser'} onClick={()=>setTool('eraser')}><Eraser size={16}/></button><button aria-label="Clear drawings" onClick={()=>screenPresentation.clear()}><Trash2 size={16}/></button><span className="huddle-screen-toolbar-divider"/></>}
+
         <button onClick={()=>setZoom(1)} aria-pressed={zoom===1}>Fit</button><button onClick={nativeSize} title="Original pixel size">100%</button>
         <button aria-label="Zoom out shared screen" disabled={zoom<=1} onClick={()=>setZoom(value=>Math.max(1,value-.25))}><Minus size={16}/></button>
         <button aria-label="Zoom in shared screen" disabled={zoom>=12} onClick={()=>setZoom(value=>Math.min(12,value+.25))}><Plus size={16}/></button>
         <button aria-label={fullscreen?'Exit shared screen fullscreen':'View shared screen fullscreen'} onClick={present}>{fullscreen?<Minimize2 size={16}/>:<Maximize2 size={16}/>}</button>
       </div>
     </div>);
-  return <div ref={stage} className={`huddle-screen-stage${local?' is-local-share':''}`} onKeyDown={event=>{if(stage.current.ownerDocument.fullscreenElement===stage.current && event.key==='Escape')event.stopPropagation();}}>
+  return <div ref={stage} className="huddle-screen-stage" onKeyDown={event=>{if(stage.current.ownerDocument.fullscreenElement===stage.current && event.key==='Escape')event.stopPropagation();}}>
     <div ref={viewport} className="huddle-screen-viewport" tabIndex={0} aria-label="Shared screen. Zoom in to read smaller text.">
       <div className={`huddle-screen-surface${local && tool!=='pointer'?' is-drawing':''}`} style={{width:`${zoom*100}%`,height:`${zoom*100}%`}}>
         <video ref={video} autoPlay muted playsInline aria-label={local?'Your shared screen':'Participant shared screen'} onPlaying={()=>setBlocked(false)}/>
-        {local && tool!=='pointer' && <div className={`huddle-screen-ink-input is-${tool}`} aria-label="Draw on your shared screen" onPointerDown={event=>{if(event.button!==0)return;drawing.current=true;event.currentTarget.setPointerCapture(event.pointerId);point(event);}} onPointerMove={event=>{if(drawing.current)point(event);}} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish}/>}
+        <ScreenAnnotationLayer video={video} share={share} tool={tool} color={color} allowed={local && share?.state!=='paused' && !globalThis.electronAPI?.updateHuddleShare} onError={setError}/>
+        {share?.state==='paused' && <div className="huddle-share-paused" role="status">Screen sharing paused</div>}
       </div>
     </div>
+    {local && share && !globalThis.electronAPI?.updateHuddleShare && <ScreenSharePresenterControls share={share} busy={busy} tool={tool} setTool={setTool} color={color} setColor={setColor}/>}
     {controlsHost && !fullscreen?createPortal(controls,controlsHost):controls}
     {blocked && <button className="huddle-screen-play" onClick={()=>video.current.play().then(()=>setBlocked(false)).catch(()=>setError('Could not play the shared screen. Try reconnecting.'))}>Show shared screen</button>}
     {error && <p className="huddle-screen-error" role="status">{error}</p>}

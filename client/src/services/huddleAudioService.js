@@ -6,23 +6,24 @@ import {useHuddleStore} from '../stores/huddleStore';
 import {useHuddleAudioStore} from '../stores/huddleAudioStore';
 import {HuddleAudioController} from './HuddleAudioController';
 import {HuddleSfuController} from './HuddleSfuController';
-import {screenPresentation} from '../features/huddle/services/screenPresentation.service';
-import {SCREEN_CAPTURE_VIDEO,prepareScreenTrack} from '../features/huddle/services/screenQuality.service';
+import {ScreenShareSession} from '../features/huddle/services/screenShareSession.service';
+import {screenAnnotations} from '../features/huddle/services/screenAnnotations.service';
+import {captureDisplaySource} from '../features/huddle/services/screenCapture.service';
 import {huddleCaptureDevices} from '../features/huddle/services/huddlePopout.service';
 
 const microphone=new HuddleMediaManager();
 let starting=null;
 let audioEpoch=0,renewTimer=null,restarting=null,muteQueue=Promise.resolve();
+let screenSharing;
 const update=patch=>{
   if(Object.hasOwn(patch,'localScreenStream') && !patch.localScreenStream){
-    screenPresentation.stop();
-    globalThis.electronAPI?.setHuddleScreenSharing?.(false);
+    if(screenSharing?.current)void screenSharing.stop('connection_lost',{transportGone:true});
   }
   useHuddleAudioStore.getState().update(patch);
 };
 const controllerOptions={
   send:(action,payload)=>audioRequest(action,payload),onUpdate:update,
-  onScreenStopped:channelId=>{const session=useHuddleStore.getState().session;if(session?.channelId!==channelId)return;audioRequest('screen-state',{channelId,sharing:false}).then(data=>{if(useHuddleStore.getState().session?.id===session.id)useHuddleStore.getState().ingest(channelId,data.state);}).catch(error=>{if(useHuddleStore.getState().session?.id===session.id)update({error:error.message});});},
+  onScreenStopped:()=>{void screenSharing?.stop('connection_lost',{transportGone:true});},
   onLocalEnded:channelId=>{
     const session=useHuddleStore.getState().session;
     if(session?.channelId!==channelId)return;
@@ -110,6 +111,7 @@ async function beginHuddleAudio(channelId,session) {
 }
 
 export function stopHuddleAudio() {
+  void screenSharing?.stop('huddle_leave',{transportGone:true});
   audioEpoch++;starting=null;restarting=null;microphone.stopLocalStream({stopTracks:microphone.stream!==controller.stream});huddleLogger.debug('CLEANUP');clearTimeout(renewTimer);renewTimer=null;controller.stop();
   update({deafened:false,playbackBlocked:false,invitation:null,withoutMicrophone:false,micBusy:false,cameraBusy:false,screenBusy:false,reconnectDeadline:null});
 }
@@ -187,45 +189,44 @@ export async function toggleHuddleCamera() {
   } finally {if(currentSession(session,epoch))update({cameraBusy:false});}
 }
 
-export async function toggleHuddleScreen() {
-  const session=useHuddleStore.getState().session,epoch=audioEpoch;
-  if(!session || useHuddleAudioStore.getState().screenBusy)return;
-  update({screenBusy:true,error:null});let stream,source;
-  const releaseCapture=()=>{
-    if(source && screenPresentation.source===source)screenPresentation.stop();
-    else for(const track of new Set([...(source?.getTracks() || []),...(stream?.getTracks() || [])])){track.onended=null;track.stop();}
-  };
-  try {
-    if(controller.screenStream) {
-      await controller.setScreen(null);
-      const data=await audioRequest('screen-state',{channelId:session.channelId,sharing:false});
-      if(currentSession(session,epoch))useHuddleStore.getState().ingest(session.channelId,data.state);
-      return;
-    }
-    const captureDevices=huddleCaptureDevices();
-    if(!captureDevices?.getDisplayMedia)throw new Error('Screen sharing requires HTTPS or a supported desktop build.');
-    source=await captureDevices.getDisplayMedia({video:SCREEN_CAPTURE_VIDEO,audio:{restrictOwnAudio:true},systemAudio:"include"});
-    stream=source;
-    if(!currentSession(session,epoch)){releaseCapture();return;}
-    prepareScreenTrack(source.getVideoTracks()[0]);
-    stream=await screenPresentation.start(source);
-    if(!currentSession(session,epoch)){releaseCapture();return;}
-    const data=await audioRequest('screen-state',{channelId:session.channelId,sharing:true});
-    if(!currentSession(session,epoch)){releaseCapture();return;}
-    useHuddleStore.getState().ingest(session.channelId,data.state);
-    if(controller.mediaMode==='sfu'){const config=await audioRequest('audio-config',{channelId:session.channelId});if(!currentSession(session,epoch)){releaseCapture();return;}await controller.updateConfiguration(config);}
+screenSharing=new ScreenShareSession({
+  log:(event,details)=>huddleLogger.debug(event,details),
+  context:()=>{const session=useHuddleStore.getState().session;return session?{...session,huddleId:useHuddleStore.getState().byChannel?.[session.channelId]?.huddle?._id}:null;},
+  capture:()=>captureDisplaySource({devices:huddleCaptureDevices(),native:globalThis.electronAPI,log:(event,details)=>huddleLogger.debug(event,details)}),
+  publish:async stream=>{
+    if(controller.mediaMode==='sfu' && stream){const session=useHuddleStore.getState().session;const config=await audioRequest('audio-config',{channelId:session.channelId});await controller.updateConfiguration(config);}
     await controller.setScreen(stream);
-    if(!currentSession(session,epoch)){releaseCapture();return;}
-    globalThis.electronAPI?.setHuddleScreenSharing?.(true);
-    source.getVideoTracks()[0].onended=()=>{if(currentSession(session,epoch))toggleHuddleScreen();};
-  } catch(error) {
-    releaseCapture();
-    if(currentSession(session,epoch))globalThis.electronAPI?.setHuddleScreenSharing?.(false);
-    if(currentSession(session,epoch)) {
-      if(stream)audioRequest('screen-state',{channelId:session.channelId,sharing:false}).then(data=>{if(currentSession(session,epoch))useHuddleStore.getState().ingest(session.channelId,data.state);}).catch(e=>{if(currentSession(session,epoch))update({error:e.message});});
-      update({error:error.name==='NotAllowedError'?'Screen sharing was cancelled or denied. You can try again.':error.message});
-    }
-  } finally {if(currentSession(session,epoch))update({screenBusy:false});}
+  },
+  signal:async payload=>{
+    const session=useHuddleStore.getState().session;if(!session)return;
+    const data=await audioRequest('screen-state',{channelId:session.channelId,...payload});
+    if(useHuddleStore.getState().session?.id===session.id)useHuddleStore.getState().ingest(session.channelId,data.state);
+  },
+  update,present:value=>globalThis.electronAPI?.updateHuddleShare?.(value),resetAnnotations:id=>screenAnnotations.reset(id),
+});
+export const toggleHuddleScreen=()=>screenSharing.current?screenSharing.stop():screenSharing.start();
+export const switchHuddleScreen=()=>screenSharing.start({switching:true});
+export const pauseHuddleScreen=()=>screenSharing.pause();
+export const stopHuddleScreen=reason=>screenSharing.stop(reason);
+export async function sendScreenAnnotation(event){
+  const session=useHuddleStore.getState().session;if(!session)return;
+  const data=await audioRequest('screen-annotation',{channelId:session.channelId,...event},0);
+  return event.type==='snapshot'?data:data.events;
+}
+let nativeStroke=null;
+function presenterAction(event){
+  const share=screenSharing.current;if(!share || event?.sessionId!==share.id)return;
+  if(event.action==='stop')return void screenSharing.stop(event.reason || 'user_stop');
+  if(event.action==='switch')return void switchHuddleScreen();
+  if(event.action==='pause')return void pauseHuddleScreen();
+  if(['clear','undo','annotation'].includes(event.action)){
+    const type=event.action==='annotation'?event.type:event.action;
+    if(type==='start')nativeStroke=crypto.randomUUID();
+    if(['move','end'].includes(type) && !nativeStroke)return;
+    const message={id:crypto.randomUUID(),shareId:share.id,creatorSessionId:share.context.id,type,strokeId:nativeStroke,points:event.points || [],tool:event.tool,color:event.color};
+    screenAnnotations.receive(message,{optimistic:true});void sendScreenAnnotation(message).catch(error=>update({error:error.message}));
+    if(type==='end')nativeStroke=null;
+  }
 }
 
 export async function updateHuddleFeature(action,payload) {
@@ -237,14 +238,21 @@ export async function updateHuddleFeature(action,payload) {
 }
 
 export function bindHuddleAudio(socket) {
-  const signal=message=>controller.receive(message),disconnected=()=>{clearTimeout(renewTimer);controller.pause();};
+  const signal=message=>controller.receive(message),disconnected=()=>{clearTimeout(renewTimer);void screenSharing.stop('connection_lost',{transportGone:true});controller.pause();};
+  const ink=event=>screenAnnotations.receive(event);socket.on('huddle:screen-annotation',ink);
+  const disposePresenter=globalThis.electronAPI?.onHuddleShareAction?.(presenterAction);
+  const disposeInk=screenAnnotations.subscribe(()=>{const share=screenSharing.current;if(share)globalThis.electronAPI?.updateHuddleAnnotations?.({sessionId:share.id,strokes:screenAnnotations.get(share.id),pointer:screenAnnotations.pointer(share.id) || null});});
   socket.on('huddle:signal',signal);socket.on('disconnect',disconnected);
   window.addEventListener('offline',disconnected);
   const unsubscribe=useHuddleStore.subscribe(state=>{
     const context=controller.context;
     if(!context)return;
     if(state.session?.id!==context.sessionId){stopHuddleAudio();return;}
+    const own=state.byChannel[context.channelId]?.participants?.find(person=>person.id===context.sessionId);
+    if(screenSharing.current && !screenSharing.pending && own?.screenSharing===false)void screenSharing.stop('session_reset');
+    const activeShares=new Set((state.byChannel[context.channelId]?.participants || []).map(person=>person.screenShare?.id).filter(Boolean));
+    for(const id of screenAnnotations.documents.keys())if(!activeShares.has(id))screenAnnotations.reset(id);
     controller.sync(state.byChannel[context.channelId]);
   });
-  return ()=>{window.removeEventListener('offline',disconnected);socket.off('huddle:signal',signal);socket.off('disconnect',disconnected);unsubscribe();stopHuddleAudio();};
+  return ()=>{disposePresenter?.();disposeInk();screenAnnotations.reset();socket.off('huddle:screen-annotation',ink);window.removeEventListener('offline',disconnected);socket.off('huddle:signal',signal);socket.off('disconnect',disconnected);unsubscribe();stopHuddleAudio();};
 }

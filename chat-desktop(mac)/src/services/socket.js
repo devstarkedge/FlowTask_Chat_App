@@ -1,3 +1,5 @@
+import {bindHuddleSocket} from './huddleSocketService';
+import {useHuddleStore} from '../stores/huddleStore';
 import { authAPI } from './api'
 import { io } from 'socket.io-client'
 import { queryClient } from '../queries/queryClient'
@@ -21,6 +23,7 @@ import { useUserProfileStore } from '../stores/userProfileStore'
 import { showDesktopNotification } from './desktopService'
 import { notificationService } from '../notifications'
 
+let disposeHuddleSocket = null;
 let socket = null
 let _disconnectTime = 0   // timestamp when socket last disconnected
 const BRIEF_DISCONNECT_THRESHOLD_MS = 5000  // under 5s = brief blip, skip full cascade
@@ -261,6 +264,8 @@ export function connectSocket() {
     reconnectionDelayMax: 5000,
   })
 
+  disposeHuddleSocket?.();
+  disposeHuddleSocket=bindHuddleSocket(socket,()=>useWorkspaceStore.getState().activeWorkspaceId);
   socket.on('connect', () => {
     logger.log('[SOCKET] Connected:', socket.id)
     _disconnectTime = 0
@@ -946,6 +951,7 @@ export function connectSocket() {
 }
 
 export function disconnectSocket() {
+  disposeHuddleSocket?.();disposeHuddleSocket=null;useHuddleStore.getState().reset();
   if (socket) {
     socket.disconnect()
     socket = null
@@ -958,6 +964,7 @@ export function disconnectSocket() {
  * Falls back to full reconnect if socket is not connected.
  */
 export function reconnectWithWorkspace() {
+  useHuddleStore.getState().reset();
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
 
   // Clear transient state across all stores

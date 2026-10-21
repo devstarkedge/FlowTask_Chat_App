@@ -1,14 +1,22 @@
 // Vector-only, bounded, per-share documents. Neither video nor application
 // pixels are modified. Identity/permissions are checked again by the server.
 export class ScreenAnnotations {
-  constructor(){this.documents=new Map();this.listeners=new Set();this.revision=0;this.seen=new Set();this.syncing=new Map();}
+  constructor(){this.documents=new Map();this.pointers=new Map();this.pointerTimers=new Map();this.listeners=new Set();this.revision=0;this.seen=new Set();this.syncing=new Map();}
   subscribe=callback=>{this.listeners.add(callback);return()=>this.listeners.delete(callback);};
   snapshot=()=>this.revision;
   changed(){this.revision++;for(const callback of this.listeners)callback();}
-  reset(id){if(id){this.documents.delete(id);this.syncing.delete(id);}else {this.documents.clear();this.seen.clear();this.syncing.clear();}this.changed();}
+  reset(id){if(id){this.documents.delete(id);this.syncing.delete(id);this.pointers.delete(id);clearTimeout(this.pointerTimers.get(id));this.pointerTimers.delete(id);}else {this.documents.clear();this.seen.clear();this.syncing.clear();this.pointers.clear();for(const timer of this.pointerTimers.values())clearTimeout(timer);this.pointerTimers.clear();}this.changed();}
   get(id){return this.documents.get(id) || [];}
-  receive(event){
-    const buffered=this.syncing.get(event?.shareId);if(buffered){buffered.events.push(event);if(buffered.events.length>1500)buffered.events.shift();return;}
+  pointer(id){return this.pointers.get(id);}
+  setPointer(id,point){
+    clearTimeout(this.pointerTimers.get(id));this.pointerTimers.delete(id);
+    if(point){this.pointers.set(id,point);const timer=setTimeout(()=>{this.pointers.delete(id);this.pointerTimers.delete(id);this.changed();},2000);timer.unref?.();this.pointerTimers.set(id,timer);}
+    else this.pointers.delete(id);
+    while(this.pointers.size>4){const old=this.pointers.keys().next().value;this.pointers.delete(old);clearTimeout(this.pointerTimers.get(old));this.pointerTimers.delete(old);}this.changed();
+  }
+  receive(event,{optimistic=false}={}){
+    if(event?.shareId && ['pointer','pointer-hide'].includes(event.type)){const key=`${event.shareId}:${event.id}`;if(this.seen.has(key))return;this.seen.add(key);while(this.seen.size>4096)this.seen.delete(this.seen.values().next().value);this.setPointer(event.shareId,event.type==='pointer'?event.points?.[0]:null);return;}
+    const buffered=this.syncing.get(event?.shareId);if(buffered){buffered.events.push(event);if(buffered.events.length>1500)buffered.events.shift();if(!optimistic)return;}
     const key=`${event?.shareId}:${event?.id}`;
     if(!event?.shareId || !event.id || this.seen.has(key))return;
     this.seen.add(key);while(this.seen.size>4096)this.seen.delete(this.seen.values().next().value);
@@ -40,7 +48,7 @@ export class ScreenAnnotations {
 }
 export const screenAnnotations=new ScreenAnnotations();
 
-export function paintAnnotations(canvas,strokes,width,height){
+export function paintAnnotations(canvas,strokes,width,height,pointer){
   const context=canvas.getContext('2d');if(!context)return;
   canvas.width=Math.max(1,width);canvas.height=Math.max(1,height);
   for(const stroke of strokes){
@@ -49,4 +57,5 @@ export function paintAnnotations(canvas,strokes,width,height){
     context.lineCap='round';context.lineJoin='round';context.beginPath();
     stroke.points.forEach((point,index)=>context[index?'lineTo':'moveTo'](point.x*width,point.y*height));context.stroke();
   }
+  if(pointer){context.globalCompositeOperation='source-over';context.beginPath();context.arc(pointer.x*width,pointer.y*height,Math.max(4,width/180),0,Math.PI*2);context.fillStyle='#ff526d';context.fill();context.strokeStyle='#ffffff';context.lineWidth=2;context.stroke();}
 }

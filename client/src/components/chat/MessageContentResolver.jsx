@@ -1,5 +1,7 @@
 import React from "react";
 import CanvasDocumentCard from "./CanvasDocumentCard";
+import HuddleLinkCard from '../huddles/HuddleLinkCard';
+import {huddleLinksFromMessage} from '../../features/huddle/utils/huddleLinks';
 
 /**
  * Helper to extract Canvas sharing info from a URL string.
@@ -25,7 +27,13 @@ function parseCanvasUrl(url) {
  * to detect canonical share URLs (like Canvas) and replaces or augments
  * the raw text with a rich document card representation.
  */
-export default function MessageContentResolver({ rawContent, message, children }) {
+export default function MessageContentResolver(props){
+  const links=huddleLinksFromMessage({...props.message,content:props.rawContent});
+  const content=<ResolvedMessageContent {...props}/>;
+  return links.length?<div className="taskchat-huddle-link-message">{content}{links.map(link=><HuddleLinkCard key={`${link.workspaceId}:${link.channelId}`} link={link}/>)}</div>:content;
+}
+
+function ResolvedMessageContent({ rawContent, message, children }) {
   if (message?.contentType === "canvas_share" && message?.canvasMeta) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

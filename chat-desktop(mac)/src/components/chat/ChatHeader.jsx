@@ -1,3 +1,5 @@
+import {useHuddleUiStore} from '../../stores/huddleUiStore';
+import HuddleHeaderMenu from '../huddles/HuddleHeaderMenu';
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -427,7 +429,7 @@ export default function ChatHeader({
               </p>
               <DropItem icon={Search}   iconColor="purple" label="Search messages"   onClick={() => { onToggleSearch(); setShowMoreActions(false); }} />
               <DropItem icon={Pin}      iconColor="amber"  label="Pinned messages"   sublabel={pinCount > 0 ? `${pinCount} pinned` : undefined} onClick={() => { onTogglePins(); setShowMoreActions(false); }} />
-              <DropItem icon={Headphones} iconColor="teal" label="Start a huddle"    onClick={() => { logger.log("Huddle", channel?._id); setShowMoreActions(false); }} className="md:hidden" />
+              <DropItem icon={Headphones} iconColor="teal" label="Start a huddle"    onClick={() => { useHuddleUiStore.getState().openPanel({channelId,label:displayChannelName,workspaceId}); setShowMoreActions(false); }} className="md:hidden" />
             </div>
 
             {/* ── Divider ── */}

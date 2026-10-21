@@ -51,7 +51,7 @@ export class HuddleSfuController {
     const cameras=Object.fromEntries(consumers.filter(c=>c.appData.source==='camera').map(c=>[c.appData.sessionId,streamFor(c)]));
     if(!this.remoteAudioTracks || audio.length!==this.remoteAudioTracks.length || audio.some((track,index)=>track!==this.remoteAudioTracks[index]))this.remoteAudioStream=audio.length?new MediaStream(audio):null;
     this.remoteAudioTracks=audio;
-    this.update({remoteAudioStreams,remoteStream:this.remoteAudioStream,remoteScreenStream:screen?streamFor(screen):null,remoteCameraStreams:cameras,connection:consumers.length?'connected':'waiting'});
+    this.update({remoteAudioStreams,remoteStream:this.remoteAudioStream,remoteScreenStream:screen?streamFor(screen):null,remoteScreenStreams:Object.fromEntries(consumers.filter(c=>c.appData.source==='screen').map(c=>[c.appData.sessionId,streamFor(c)])),remoteCameraStreams:cameras,connection:consumers.length?'connected':'waiting'});
   }
   sync(state){if(!this.initialized)return;const own=state?.participants?.find(p=>p.id===this.context?.sessionId);if(!own?.audioReady || own.mediaId!==this.context.mediaId)this.pause();}
   receive(){}
@@ -72,7 +72,21 @@ export class HuddleSfuController {
     this.cameraStream=stream || null;old?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.update({localCameraStream:this.cameraStream});
   }
   async setScreen(stream){
-    const epoch=this.epoch,previous=this.screenStream;this.screenStream=null;if(!stream)this.update({localScreenStream:null});
+    const epoch=this.epoch,previous=this.screenStream;
+    if(stream && this.screenProducer){
+      const outgoing=await this.audioMixer.setSources(this.stream,stream);this.live(epoch);
+      let createdAudio;
+      try{
+        await this.screenProducer.replaceTrack({track:stream.getVideoTracks()[0]});
+        if(this.audioProducer && outgoing)await this.audioProducer.replaceTrack({track:outgoing});
+        else if(!this.audioProducer && outgoing){createdAudio=await this.send.produce({track:outgoing,appData:{source:'microphone'},stopTracks:false});this.live(epoch);this.audioProducer=createdAudio;}
+        else if(this.audioProducer && !outgoing){const old=this.audioProducer;this.audioProducer=null;old.close();await this.request('close-producer',{producerId:old.id});}
+        this.live(epoch);
+      }
+      catch(error){if(createdAudio){createdAudio.close();if(this.audioProducer===createdAudio)this.audioProducer=null;await this.request('close-producer',{producerId:createdAudio.id}).catch(()=>{});}if(this.epoch===epoch){await this.screenProducer?.replaceTrack({track:previous.getVideoTracks()[0]}).catch(()=>{});const oldAudio=await this.audioMixer.setSources(this.stream,previous);if(this.audioProducer && oldAudio)await this.audioProducer.replaceTrack({track:oldAudio}).catch(()=>{});}throw error;}
+      this.screenStream=stream;previous?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.update({localScreenStream:stream});return;
+    }
+    this.screenStream=null;if(!stream)this.update({localScreenStream:null});
     try {
       if(this.screenProducer){const old=this.screenProducer;this.screenProducer=null;old.close();await this.request('close-producer',{producerId:old.id});}
       const track=await this.audioMixer.setSources(this.stream,stream);this.live(epoch);
@@ -89,7 +103,7 @@ export class HuddleSfuController {
     } finally {previous?.getTracks().forEach(t=>{t.onended=null;t.stop();});}
   }
   async updateConfiguration(config){if(!this.socket?.connected)throw new Error('Media connection is unavailable');const socket=this.socket;await new Promise((resolve,reject)=>socket.timeout(8000).emit('media:renew',config.media.token,(error,result)=>error || !result?.ok?reject(new Error('Media authorization could not be renewed')):resolve()));const changed=JSON.stringify(this.rtcConfiguration?.iceServers)!==JSON.stringify(config.rtcConfiguration.iceServers);if(changed && (!this.iceExpiresAt || this.iceExpiresAt-Date.now()/1000<300)){await Promise.all([this.send,this.recv].filter(Boolean).map(transport=>transport.updateIceServers({iceServers:config.rtcConfiguration.iceServers})));this.rtcConfiguration=config.rtcConfiguration;this.iceExpiresAt=config.expiresAt;}}
-  pause(){this.audioMixer.stop();this.epoch++;this.initialized=false;this.refreshPending=false;this.refreshQueue=null;const socket=this.socket;this.socket=null;socket?.removeAllListeners();socket?.disconnect();this.send?.close();this.recv?.close();this.send=this.recv=null;this.audioProducer=this.screenProducer=this.cameraProducer=null;for(const consumer of this.consumers.values())consumer.close();this.consumers.clear();this.remoteAudioTracks=null;this.remoteAudioStream=null;this.screenStream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.screenStream=null;this.cameraStream?.getTracks().forEach(t=>{t.enabled=false;});this.stream?.getAudioTracks().forEach(t=>{t.enabled=false;});this.update({remoteStream:null,remoteAudioStreams:{},remoteScreenStream:null,remoteCameraStreams:{},localScreenStream:null,connection:this.context?'reconnecting':'idle'});}
+  pause(){this.audioMixer.stop();this.epoch++;this.initialized=false;this.refreshPending=false;this.refreshQueue=null;const socket=this.socket;this.socket=null;socket?.removeAllListeners();socket?.disconnect();this.send?.close();this.recv?.close();this.send=this.recv=null;this.audioProducer=this.screenProducer=this.cameraProducer=null;for(const consumer of this.consumers.values())consumer.close();this.consumers.clear();this.remoteAudioTracks=null;this.remoteAudioStream=null;this.screenStream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.screenStream=null;this.cameraStream?.getTracks().forEach(t=>{t.enabled=false;});this.stream?.getAudioTracks().forEach(t=>{t.enabled=false;});this.update({remoteStream:null,remoteAudioStreams:{},remoteScreenStream:null,remoteScreenStreams:{},remoteCameraStreams:{},localScreenStream:null,connection:this.context?'reconnecting':'idle'});}
   restoreTracks(){this.stream?.getAudioTracks().forEach(t=>{t.enabled=!this.muted;});this.cameraStream?.getTracks().forEach(t=>{t.enabled=true;});}
   stop(){this.context=null;this.pause();this.cameraStream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.cameraStream=null;this.stream?.getTracks().forEach(t=>{t.onended=null;t.stop();});this.stream=null;this.context=null;this.update({connection:'idle',localMicrophoneStream:null,muted:false,notice:null,localCameraStream:null});}
 }

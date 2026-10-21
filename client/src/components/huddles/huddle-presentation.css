@@ -1,4 +1,20 @@
 /* Presentation mode: one footer, a full-height screen and a compact participant rail. */
+.huddle-capture-alert{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:0;border:1px solid #d8ab5766;border-radius:8px;background:#d8ab5712;color:#e5c990;font-size:11px;line-height:1.4;flex-shrink:0}
+.huddle-capture-alert>svg{flex-shrink:0}.huddle-capture-alert>span{flex:1;min-width:0}.huddle-capture-alert strong,.huddle-capture-alert>span>span{display:block}
+.huddle-capture-alert button{flex-shrink:0;border:0;border-radius:5px;padding:5px;background:#ffffff0b;color:inherit;font:inherit;cursor:pointer}
+/* Available call height belongs to the two-person grid, rather than fixed tiles.
+   Short windows and longer content can still scroll in the content region. */
+.huddle-window.is-small-call:not(.is-sharing) .huddle-window-content{display:flex;flex-direction:column;gap:8px;padding:12px 22px;min-height:0}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-window-content>*{flex-shrink:0}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-heading{padding:2px 0 6px}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-preview-card{width:100%;flex:1 1 180px;min-height:160px;gap:8px}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-participant-grid{flex:1;min-height:110px;grid-auto-rows:minmax(110px,1fr)}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-participant-tile{height:100%;min-height:110px}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-device-row{flex-shrink:0}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-call-status{padding:4px 2px}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-meeting-link{padding:0}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-connection-note{margin:0}
+.huddle-window.is-small-call:not(.is-sharing) .huddle-tools{padding:0}
 .huddle-window.is-sharing .huddle-window-content{overflow:hidden;padding:6px 10px;gap:0}
 .huddle-window.is-sharing .huddle-heading{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%)}
 .huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr) clamp(180px,16vw,280px);grid-template-rows:20px minmax(0,1fr);flex:1 1 0;gap:4px 10px;min-height:0}
@@ -49,3 +65,15 @@
  .huddle-sharing-footer .huddle-screen-toolbar{flex-wrap:wrap}
  .huddle-window.is-sharing .huddle-window-footer{justify-content:center}
 }
+
+/* Source toolbar stays outside the call; presenters and viewers focus media. */
+.huddle-window .huddle-screen-stage.is-local-share .huddle-screen-viewport{border:1px solid #ffffff15;box-shadow:none}
+.huddle-window.is-sharing .huddle-share-focus-surface{display:flex;flex-direction:column;flex:1;min-height:0}
+.huddle-share-focus-surface[hidden]{display:none!important}
+.huddle-focus-share{align-self:flex-start;font-size:11px!important;padding:5px 9px!important;margin-bottom:4px}
+.huddle-presenter-status{padding:8px 10px;border:1px solid #36d17d44;border-radius:8px;color:#8be3b1;font-size:12px;margin:0 0 10px}
+.huddle-share-paused{position:absolute;inset:0;display:grid;place-items:center;background:#10151ff2;color:#ddd4e9;font-size:16px;pointer-events:none;z-index:2}
+.huddle-vector-annotations{z-index:1}
+.huddle-web-presenter{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;padding:8px;background:#20222e;border:1px solid #655473;border-radius:9px}
+.huddle-web-presenter input{width:28px;height:28px;padding:0;border:0}
+.huddle-screen-stage .huddle-web-presenter button{position:static;inset:auto;height:auto;min-height:30px;padding:5px 8px}

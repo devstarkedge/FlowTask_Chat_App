@@ -53,14 +53,18 @@ export class HuddleAudioController {
 
   createPeer(own,remote) {
     const pc=new this.PeerConnection(this.config);
-    const peer={id:remote.id,mediaId:remote.mediaId,pc,polite:own.id>remote.id,makingOffer:false,ignoreOffer:false,settingAnswer:false,candidates:[],inbound:Promise.resolve(),outbound:Promise.resolve(),restarts:0};
+    const peer={id:remote.id,mediaId:remote.mediaId,pc,remoteSources:new Map(),polite:own.id>remote.id,makingOffer:false,ignoreOffer:false,settingAnswer:false,candidates:[],inbound:Promise.resolve(),outbound:Promise.resolve(),restarts:0};
     huddleLogger.debug('PEER_CREATED',{participantId:peer.id});
     this.peers.set(peer.id,peer);this.update({connection:'connecting',error:null});
     pc.ontrack=event=>{
       if(!this.isCurrent(peer))return;
       const stream=this.makeStream([event.track]);
-      const cameraSlot=this.negotiatedVideoSlots(peer)[0] || peer.cameraTransceiver;
-      const camera=event.track.kind==='video' && event.transceiver===cameraSlot;
+      const source=peer.remoteSources.get(event.transceiver?.mid);
+      if(event.track.kind==='video' && peer.remoteSources.size && !['camera','screen'].includes(source))return;
+      // Old clients use the established reserved SDP slots. New descriptions
+      // identify sources by MID, independently of video arrival/slot order.
+      const cameraSlot=peer.cameraTransceiver || this.negotiatedVideoSlots(peer)[0];
+      const camera=event.track.kind==='video' && (peer.remoteSources.size?source==='camera':event.transceiver===cameraSlot);
       const collection=event.track.kind==='audio'?this.remoteAudio:camera?this.remoteCameras:this.remoteScreens;
       collection.set(peer.id,stream);
       this.publishRemote(collection);
@@ -117,8 +121,9 @@ export class HuddleAudioController {
     // Remote-created transceivers already own the offered mids, including the
     // two distinct camera/screen slots. Configure them before creating an answer.
     const slots=(peer.pc.getTransceivers?.() || []).filter(item=>item.mid!=null);
-    const audio=slots.find(item=>item.receiver.track.kind==='audio');
-    const [camera,screen]=this.negotiatedVideoSlots(peer);
+    const named=source=>slots.find(slot=>peer.remoteSources.get(slot.mid)===source);
+    const audio=peer.remoteSources.size?named('microphone'):slots.find(item=>item.receiver.track.kind==='audio');
+    const [camera,screen]=peer.remoteSources.size?[named('camera'),named('screen')]:this.negotiatedVideoSlots(peer);
     peer.audioSender=audio?.sender;peer.cameraTransceiver=camera;peer.screenSender=screen?.sender;
     const replacements=[[audio,this.audioMixer.track || this.stream?.getAudioTracks()[0]],[camera,this.cameraStream?.getVideoTracks()[0]],[screen,this.screenStream?.getVideoTracks()[0]]];
     await Promise.all(replacements.filter(([slot])=>slot).map(([slot,track])=>{slot.direction='sendrecv';return slot.sender.replaceTrack(track || null);}));
@@ -127,6 +132,10 @@ export class HuddleAudioController {
 
   transmit(peer,signal) {
     const context=this.context;
+    if(signal.description){
+      const mediaSources=(peer.pc.getTransceivers?.() || []).filter(slot=>slot.mid!=null).map(slot=>({mid:slot.mid,source:slot.sender===peer.audioSender?'microphone':slot===peer.cameraTransceiver?'camera':slot.sender===peer.screenSender?'screen':null})).filter(slot=>slot.source);
+      if(mediaSources.length)signal={...signal,mediaSources};
+    }
     peer.outbound=peer.outbound.then(async()=>{
       if(!this.isCurrent(peer) || !this.initialized || !context)return;
       huddleLogger.debug(signal.description?.type?.toUpperCase() || 'ICE_SENT',{participantId:peer.id});
@@ -148,7 +157,7 @@ export class HuddleAudioController {
     if(message.huddleId!==context.huddleId || message.toMediaId!==context.mediaId || message.fromSessionId!==peer.id || message.fromMediaId!==peer.mediaId)return;
     peer.inbound=peer.inbound.then(async()=>{
       if(!this.isCurrent(peer))return;
-      const {description,candidate,restart}=message.signal;
+      const {description,candidate,restart,mediaSources}=message.signal;
       const pc=peer.pc;
       if(restart) {
         if(!peer.polite)pc.restartIce();
@@ -157,6 +166,7 @@ export class HuddleAudioController {
         const collision=description.type==='offer' && !readyForOffer;
         peer.ignoreOffer=!peer.polite && collision;
         if(peer.ignoreOffer)return;
+        peer.remoteSources=new Map((mediaSources || []).map(({mid,source})=>[mid,source]));
         peer.settingAnswer=description.type==='answer';
         try {await pc.setRemoteDescription(description);}
         finally {peer.settingAnswer=false;}
@@ -227,7 +237,7 @@ export class HuddleAudioController {
         peer.screenSender?.replaceTrack(stream?.getVideoTracks()[0] || null),peer.audioSender?.replaceTrack(outgoing)]));
       if(stream)await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>configureScreenSender(peer.screenSender).catch(error=>huddleLogger.debug('SCREEN_QUALITY_UNAVAILABLE',{message:error.message}))));
     } catch(error) {
-      if(this.context===context){this.audioMixer.stop();await Promise.allSettled([...this.peers.values()].flatMap(peer=>[peer.audioSender?.replaceTrack(this.stream?.getAudioTracks()[0] || null),peer.screenSender?.replaceTrack(old?.getVideoTracks()[0] || null)]));}
+      if(this.context===context){const restored=await this.audioMixer.setSources(this.stream,old).catch(()=>this.stream?.getAudioTracks()[0] || null);await Promise.allSettled([...this.peers.values()].flatMap(peer=>[peer.audioSender?.replaceTrack(restored),peer.screenSender?.replaceTrack(old?.getVideoTracks()[0] || null)]));}
       throw error;
     }
     if(this.context!==context || !context)throw new Error('Media session changed');
@@ -240,7 +250,7 @@ export class HuddleAudioController {
     this.audioMixer.stop();
     this.cameraStream?.getTracks().forEach(track=>{track.enabled=false;});
     this.screenStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.screenStream=null;
-    this.update({localScreenStream:null,remoteScreenStream:null});
+    this.update({localScreenStream:null,remoteScreenStream:null,remoteScreenStreams:{}});
     this.initialized=false;this.pending=[];this.closePeer();
     this.stream?.getAudioTracks().forEach(track=>{track.enabled=false;});
     if(this.context)this.update({connection:'reconnecting'});
@@ -275,7 +285,7 @@ export class HuddleAudioController {
       }
       this.update({remoteStream:tracks.length?this.remoteStream:null,remoteAudioStreams:Object.fromEntries(collection)});
     } else if(collection===this.remoteCameras)this.update({remoteCameraStreams:Object.fromEntries(collection)});
-    else this.update({remoteScreenStream:collection.get(this.remoteScreenPresenter) || null});
+    else this.update({remoteScreenStream:collection.get(this.remoteScreenPresenter) || null,remoteScreenStreams:Object.fromEntries(collection)});
   }
 
   fail(peer,error) {

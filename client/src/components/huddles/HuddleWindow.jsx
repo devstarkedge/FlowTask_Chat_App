@@ -1,4 +1,5 @@
 import {huddlePeople} from '../../features/huddle/utils/huddlePeople';
+import {screenShareViews} from '../../features/huddle/utils/screenShareViews';
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {useHuddlePopout} from '../../features/huddle/hooks/useHuddlePopout';
@@ -10,6 +11,7 @@ import {useHuddleDevices} from '../../features/huddle/hooks/useHuddleDevices';
 import {useAuthStore} from '../../stores/authStore';
 import {useChatStore} from '../../stores/chatStore';
 import {useChannelStore} from '../../stores/channelStore';
+import {toggleHuddleScreen,switchHuddleScreen} from '../../services/huddleAudioService';
 import './huddle.css';
 import './huddle-redesign.css';
 import './huddle-presentation.css';
@@ -41,12 +43,14 @@ export default function HuddleWindow() {
   const channels=useChannelStore(s=>s.channels);
   const location=useLocation(),dialog=useRef(null);
   const [maximized,setMaximized]=useState(false);
-  const [sharingFooter,setSharingFooter]=useState(null);
+  const [sharingFooter,setSharingFooter]=useState(null),[screenFocused,setScreenFocused]=useState(true);
   const popout=useHuddlePopout({panel:user?panel:null,session:user?session:null,closePanel});
   const {devices,permission,sinkSupported}=useHuddleDevices(Boolean(panel && user),`${panel?.channelId}:${user?._id}:${status}`);
   const [settingsHelp,setSettingsHelp]=useState(false),[microphoneHelp,setMicrophoneHelp]=useState(false),[now,setNow]=useState(Date.now());
   const joined=Boolean(panel && session?.channelId===panel.channelId);
-  const sharing=joined && Boolean(audio.localScreenStream || audio.remoteScreenStream || state?.participants?.some(person=>person.screenSharing));
+  const shareKey=screenShareViews(state,audio,session?.id).filter(share=>share.stream?.getVideoTracks?.().some(track=>track.readyState==='live')).map(share=>share.id).join('|');
+  useEffect(()=>{setScreenFocused(true);},[shareKey]);
+  const sharing=screenFocused && joined && Boolean(shareKey);
   const beforeSharingSize=useRef(null);
   useEffect(()=>{
     if(sharing && beforeSharingSize.current===null){beforeSharingSize.current=maximized;setMaximized(true);}
@@ -90,7 +94,7 @@ export default function HuddleWindow() {
           <div className="huddle-device-control"><button aria-label={audio.deafened?'Enable speaker':'Deafen speaker'} onClick={audio.toggleDeafen} title={audio.deafened?'Enable speaker':'Deafen speaker'}>{audio.deafened?<VolumeX size={18}/>:<Volume2 size={18}/>}</button><select aria-label="Speaker device" value={audio.outputDeviceId} onChange={event=>audio.update({outputDeviceId:event.target.value})} disabled={!sinkSupported} title={!sinkSupported?'This browser uses your system speaker':'Choose speaker'}><option value="">Default speaker</option>{outputs.map((device,index)=><option key={device.deviceId} value={device.deviceId}>{device.label || `Speaker ${index+1}`}</option>)}</select></div>
           <button className="huddle-camera-control" onClick={toggleHuddleCamera} disabled={!joined || busy || audio.cameraBusy || (reconnecting && !audio.localCameraStream)} aria-label={audio.localCameraStream?'Turn camera off':'Turn camera on'} aria-pressed={Boolean(audio.localCameraStream)} title={joined?'Toggle camera':'Join the Huddle to turn on your camera'}>{audio.localCameraStream?<Video size={18}/>:<VideoOff size={18}/>}<span>{audio.cameraBusy?'Opening…':audio.localCameraStream?'Camera on':'Camera off'}</span></button>
         </div>);
-  const content=<aside ref={dialog} className={`huddle-window${joined?' is-live':''}${maximized?' is-maximized':''}${sharing?' is-sharing':''}`} role="dialog" aria-modal="false" aria-labelledby="huddle-window-title" tabIndex={-1}>
+  const content=<aside ref={dialog} className={`huddle-window${joined?' is-live':''}${joined && people.length<=2?' is-small-call':''}${maximized?' is-maximized':''}${sharing?' is-sharing':''}`} role="dialog" aria-modal="false" aria-labelledby="huddle-window-title" tabIndex={-1}>
     <header className="huddle-window-chrome"><Headphones size={17}/><span>{label}</span><button onClick={popout.minimize} aria-label="Minimize Huddle"><Minus size={17}/></button><button onClick={()=>{if(popout.host)popout.maximize()?.then(result=>{if(result?.ok)setMaximized(result.maximized);}).catch(()=>{});else setMaximized(value=>!value);}} aria-label={maximized?'Restore Huddle':'Maximize Huddle'} aria-pressed={maximized}>{maximized?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</button><button onClick={closePanel} aria-label="Close Huddle window"><X size={18}/></button></header>
     <div className="huddle-window-content">
       {reconnecting && <div className="huddle-reconnecting" role="status" aria-live="polite"><LoaderCircle className="huddle-reconnect-spinner" size={22}/><div><strong>Reconnecting…</strong><p>Waiting for the network. The call will close if it cannot reconnect within 5 minutes.</p><span>{Math.max(0,Math.ceil((audio.reconnectDeadline-now)/1000))} seconds remaining</span></div></div>}
@@ -100,6 +104,7 @@ export default function HuddleWindow() {
       {!joined && <div className="huddle-camera-note"><VideoOff size={17}/><span>Your camera stays off until you turn it on during the Huddle.</span></div>}
       {!joined && <label className="huddle-camera-note"><input type="checkbox" checked={Boolean(audio.joinWithoutMicrophone)} disabled={busy} onChange={event=>audio.update({joinWithoutMicrophone:event.target.checked})}/>Join without microphone — listen and share your screen</label>}
       <div className="huddle-heading"><span className="huddle-eyebrow">{joined?'YOUR HUDDLE':'READY WHEN YOU ARE'}</span><h2 id="huddle-window-title">{joined?'Huddle in':state?.huddle?'Join huddle with':'Start huddle with'} <strong>{label}</strong></h2><p>{joined?`${people.length} ${people.length===1?'person':'people'} here · Camera ${audio.localCameraStream?'on':'off'}`:'A little room for a conversation. Join when you’re ready.'}</p></div>
+      {joined && audio.screenError && <div className="huddle-capture-alert" role="alert"><AlertTriangle size={16}/><span><strong>Screen sharing {audio.localScreenShare?'needs attention':"couldn’t start"}</strong><span>{audio.screenError.message}</span></span><button onClick={()=>audio.localScreenShare?switchHuddleScreen():toggleHuddleScreen()} disabled={audio.screenBusy}>Retry screen sharing</button><button onClick={()=>audio.update({screenError:null})} aria-label="Dismiss screen sharing error"><X size={16}/></button></div>}
       {joined && audio.withoutMicrophone && <details className="huddle-listener-note"><summary><MicOff size={14}/>You’re listening without a microphone <span>How to speak</span></summary><p>Click Unmute microphone to allow your headset or computer microphone and speak without leaving the Huddle.</p></details>}
       <div className="huddle-call-layout">
       <div className="huddle-preview-card">
@@ -109,7 +114,7 @@ export default function HuddleWindow() {
         {sharing && sharingFooter?createPortal(deviceControls,sharingFooter):deviceControls}
       </div>
       {joined && <div className="huddle-call-status" role="status"><span className={`huddle-status-dot${audio.connection==='connected'?' is-connected':''}`}/>{audioStatus}<span>{duration}</span></div>}
-      {joined && <HuddleTools key={session.id} state={state} session={session} audio={audio} controlsHost={sharing?sharingFooter:null}/>}
+      {joined && <HuddleTools key={session.id} state={state} session={session} audio={audio} controlsHost={sharing?sharingFooter:null} screenFocused={screenFocused} onScreenFocus={setScreenFocused}/>}
       </div>
       {joined && <HuddleMeetingLink channelId={panel.channelId} workspaceId={panel.workspaceId || state?.huddle?.workspaceId || channel?.workspaceId}/>}
       {joined && audio.invitation && <p className="huddle-connection-note" role="status">{audio.invitation.error || (audio.invitation.sent?`Invitation sent to ${audio.invitation.sent} online participant(s).`:'No available participants were notified. Share the meeting link to join.')}</p>}

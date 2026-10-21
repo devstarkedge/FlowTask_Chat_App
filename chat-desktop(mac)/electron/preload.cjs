@@ -3,6 +3,21 @@ const { contextBridge, ipcRenderer } = require('electron');
 const isMac = process.platform === 'darwin';
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  getHuddleShareSource: () => ipcRenderer.invoke('huddle-share:source'),
+  getHuddleCaptureResult: () => ipcRenderer.invoke('huddle-capture:result'),
+  screenCaptureAudioSupported: process.platform === 'win32',
+  updateHuddleShare: value => ipcRenderer.invoke('huddle-share:update',value),
+  updateHuddleAnnotations: value => ipcRenderer.send('huddle-share:annotations',value),
+  onHuddleShareAction: callback => {
+    const handler=(_event,value)=>callback(value);ipcRenderer.on('huddle-share:action',handler);
+    return()=>ipcRenderer.removeListener('huddle-share:action',handler);
+  },
+
+  controlHuddleWindow: action => ipcRenderer.invoke('huddle-popout:control', action),
+  setHuddleScreenSharing: active => ipcRenderer.send('huddle-screen-sharing', active === true),
+  showHuddleInvitation: invitation => ipcRenderer.send('huddle-invitation:show', invitation),
+  closeHuddleInvitation: id => ipcRenderer.send('huddle-invitation:close', id),
+  onHuddleInvitationAction: callback => {const handler=(_event,data)=>callback(data);ipcRenderer.on('huddle-invitation:action',handler);return()=>ipcRenderer.removeListener('huddle-invitation:action',handler);},
   platform: process.platform,
   isMac: isMac,
   hasNativeWindowControls: process.platform === 'win32' || process.platform === 'linux',

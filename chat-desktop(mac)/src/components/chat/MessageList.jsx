@@ -1,3 +1,4 @@
+import {getHuddleTimeline} from '../huddles/huddleTimeline';
 /* eslint-disable react/prop-types */
 import {
   useEffect,
@@ -244,7 +245,9 @@ export default function MessageList({
       !!msg.activityMeta
     );
 
+  const huddleTimeline = useMemo(() => getHuddleTimeline(messages, unreadBoundary), [messages, unreadBoundary]);
   const flattenedItems = useMemo(() => {
+    const {messages,unreadBoundary}=huddleTimeline;
     const flattened = [];
     let currentDate = null;
     let insertedUnreadMarker = false;
@@ -329,7 +332,7 @@ export default function MessageList({
     }
 
     return flattened;
-  }, [messages, unreadBoundary]);
+  }, [huddleTimeline]);
 
   const firstMessageId = messages[0]?._id ?? null;
   const virtuosoFirstItemIndex = useMemo(() => {

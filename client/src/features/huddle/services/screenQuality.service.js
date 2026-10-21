@@ -1,5 +1,4 @@
 // Favor readable text over frame rate. The network can still limit actual quality.
-export const SCREEN_CAPTURE_VIDEO = {width:{ideal:3840},height:{ideal:2160},frameRate:{ideal:15,max:30}};
 export const SCREEN_MAX_BITRATE = 8_000_000;
 export const SCREEN_ENCODING = {maxBitrate:SCREEN_MAX_BITRATE,maxFramerate:30,scaleResolutionDownBy:1};
 

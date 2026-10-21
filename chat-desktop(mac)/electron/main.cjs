@@ -1,4 +1,9 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification } = require('electron');
+const {installHuddleInvitations}=require('./huddleInvitations.cjs');
+const {createIncomingCallWindow}=require('./incomingCallWindow.cjs');
+const {installHuddlePopout}=require('./huddlePopout.cjs');
+const { installDisplayCapture } = require('./sourcePicker.cjs');
+const { installWindowSecurity } = require('./security.cjs');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification, desktopCapturer, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -114,6 +119,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
       nodeIntegration: false,
       backgroundThrottling: false,
     },
@@ -134,6 +141,9 @@ function createWindow() {
     console.log(`[Startup] renderer did-finish-load at ${(performance.now() - startTime).toFixed(2)}ms`);
   });
 
+  const capture=installDisplayCapture(mainWindow, {BrowserWindow,ipcMain,desktopCapturer,screen});
+  const security=installWindowSecurity(mainWindow, {isDev, indexPath:path.join(__dirname, '../dist/index.html')});
+
   // Notify renderer when window maximize state changes
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window-maximized-change', true);
@@ -142,13 +152,11 @@ function createWindow() {
     mainWindow.webContents.send('window-maximized-change', false);
   });
 
-  // Open external links in default browser instead of the Electron app
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      shell.openExternal(url);
-    }
-    return { action: 'deny' };
-  });
+  installHuddlePopout(mainWindow,{BrowserWindow,ipcMain,capture,security,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),openExternal:url=>shell.openExternal(url)});
+  const callWindow=mainWindow;
+  installHuddleInvitations(callWindow,{ipcMain,Notification,
+    createCallAlert:(invitation,onAction,onUnavailable)=>createIncomingCallWindow({BrowserWindow,ipcMain,screen,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png')},invitation,onAction,onUnavailable),
+    showWindow:()=>{if(callWindow.isDestroyed())return;if(callWindow.isMinimized())callWindow.restore();callWindow.show();if(isMac && app.dock)app.dock.show();callWindow.focus();}});
 
   // Prevent closing, hide to tray instead
   mainWindow.on('close', (event) => {

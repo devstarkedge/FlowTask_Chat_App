@@ -1,3 +1,4 @@
+import HuddleSummary from '../huddles/HuddleSummary';
 /* eslint-disable react/prop-types */
 import { ExternalLink, FileText } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -109,6 +110,7 @@ export default function AutoActivityMessage({ message }) {
   const navigate = useNavigate()
   const location = useLocation()
   message = useLiveProfileData(message)
+  if (message.huddleMeta) return <HuddleSummary message={message} />;
   const meta = { ...message.activityMeta }
   if (meta.actorId?.name) {
     meta.actorName = meta.actorId.name

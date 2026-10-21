@@ -25,16 +25,16 @@ function chooseDesktopSource(parent,sources,{BrowserWindow,ipcMain},{audioReques
 }
 
 function installDisplayCapture(window,deps){
-  let choosing=false,outcome=null;
+  let choosing=false,outcome=null,attemptedAt=0;
   const windows=new Set([window]);
   const trusted=event=>[...windows].some(item=>!item.isDestroyed() && event.sender===item.webContents && event.senderFrame===item.webContents.mainFrame);
-  deps.ipcMain.handle('huddle-capture:result',event=>trusted(event)?outcome:null);
+  deps.ipcMain.handle('huddle-capture:result',event=>trusted(event) && outcome?{...outcome,attemptedAt}:null);
   window.once('closed',()=>deps.ipcMain.removeHandler('huddle-capture:result'));
   const indicator=deps.screen?installSharingIndicator(window,deps):null;
   window.webContents.session.setDisplayMediaRequestHandler(async(request,callback)=>{
     const owner=[...windows].find(item=>!item.isDestroyed() && request.frame===item.webContents.mainFrame);
     if(choosing || !owner || !request.videoRequested){callback(null);return;}
-    choosing=true;outcome=null;
+    choosing=true;outcome=null;attemptedAt=Date.now();
     try {
       const sources=(await deps.desktopCapturer.getSources({types:['screen','window'],thumbnailSize:{width:420,height:236},fetchWindowIcons:true})).filter(source=>!indicator?.isOwnSource(source));
       if(!sources.length){outcome={status:'failed',code:'SCREEN_CAPTURE_NOT_FOUND',name:'NotFoundError',message:'No shareable screen or window was found.'};callback(null);return;}

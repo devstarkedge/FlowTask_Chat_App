@@ -1,5 +1,8 @@
 import { useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom'
+import HuddleAudioOutput from './components/huddles/HuddleAudioOutput';
+import HuddleWindow from './components/huddles/HuddleWindow';
+import HuddleInvitations from './components/huddles/HuddleInvitations';
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
@@ -215,6 +218,7 @@ function App() {
 
   return (
     <Suspense fallback={<PageFallback />}>
+      <HuddleAudioOutput /><HuddleWindow /><HuddleInvitations />
       <Routes>
         {/* Public routes */}
         <Route path="/" element={!user ? <LandingPage /> : <AuthenticatedDefaultRedirect />} />

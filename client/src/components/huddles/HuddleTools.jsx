@@ -1,3 +1,4 @@
+import {screenShareViews} from '../../features/huddle/utils/screenShareViews';
 import {createPortal} from 'react-dom';
 import {huddlePeople} from '../../features/huddle/utils/huddlePeople';
 import {useState} from 'react';
@@ -6,24 +7,27 @@ import {toggleHuddleScreen,updateHuddleFeature} from '../../services/huddleAudio
 import {useSharedHuddleNotes} from '../../features/huddle/hooks/useSharedHuddleNotes';
 import HuddleScreenStage from './HuddleScreenStage';
 
-export default function HuddleTools({state,session,audio,controlsHost}) {
+export default function HuddleTools({state,session,audio,controlsHost,screenFocused=true,onScreenFocus}) {
   const [notesOpen,setNotesOpen]=useState(false),[reactionsOpen,setReactionsOpen]=useState(false);
   const [saving,setSaving]=useState(false),[feedback,setFeedback]=useState('');
   const notes=useSharedHuddleNotes({enabled:notesOpen,state,session});
   const own=state?.participants.find(p=>p.id===session.id);
-  const presenter=state?.participants.find(p=>p.screenSharing);
-  const stream=audio.localScreenStream || (presenter?audio.remoteScreenStream:null);
+  const nativePresenter=Boolean(audio.localScreenShare && globalThis.electronAPI?.updateHuddleShare);
+  const shares=screenShareViews(state,audio,session.id),share=shares.find(value=>value.isLocal) || shares[0];
+  const presenter=state?.participants.find(p=>p.screenSharing && p.id!==session.id);
+  const stream=share?.stream;
   const perform=(action,payload)=>updateHuddleFeature(action,payload).catch(error=>setFeedback(error.message));
   const openNotes=()=>{setFeedback('');setNotesOpen(!notesOpen);};
   const save=async()=>{setSaving(true);setFeedback('');try {if(await notes.save())setFeedback('Notes saved');}catch(error){setFeedback(error.message);}finally{setSaving(false);}};
   const controls=(<div className="huddle-tools-bar">
-      <button onClick={toggleHuddleScreen} disabled={audio.screenBusy || (!audio.localScreenStream && Boolean(presenter))} aria-pressed={Boolean(audio.localScreenStream)}><MonitorUp size={19}/>{audio.screenBusy?'Opening…':audio.localScreenStream?'Stop sharing':'Share screen'}</button>
+      {!audio.localScreenShare && <button onClick={toggleHuddleScreen} disabled={audio.screenBusy || (!audio.localScreenStream && Boolean(presenter))} aria-pressed={Boolean(audio.localScreenStream)}><MonitorUp size={19}/>{audio.screenBusy?'Opening…':audio.localScreenStream?'Stop sharing':'Share screen'}</button>}
       <button onClick={()=>perform('hand',{raised:!own?.handRaised})} aria-pressed={Boolean(own?.handRaised)}><Hand size={19}/>{own?.handRaised?'Lower hand':'Raise hand'}</button>
       <button onClick={()=>setReactionsOpen(!reactionsOpen)} aria-expanded={reactionsOpen}><Smile size={19}/>React</button>
       <button onClick={openNotes} aria-expanded={notesOpen}><NotebookPen size={19}/>Notes</button>
     </div>);
   return <section className="huddle-tools">
-    {stream && <><p className="huddle-screen-label">{audio.localScreenStream?'You are':`${presenter?.name || 'Participant'} is`} sharing a screen</p><HuddleScreenStage stream={stream} local={Boolean(audio.localScreenStream)} controlsHost={controlsHost}/></>}
+    {nativePresenter && <p className="huddle-presenter-status" role="status">You’re sharing {audio.localScreenShare.sourceLabel}{audio.localScreenShare.state==='paused'?' · Paused':''}. Screen controls are in the floating source toolbar.</p>}
+    {share && <><button className="huddle-focus-share" onClick={()=>onScreenFocus?.(!screenFocused)}>{screenFocused?'Show participants':`View ${share.isLocal?'your':share.presenterName || 'shared'} screen`}</button><div className="huddle-share-focus-surface" hidden={!screenFocused}><p className="huddle-screen-label">{share.isLocal?'You are':`${share.presenterName || 'Participant'} is`} sharing · {share.sourceLabel}</p>{stream?<HuddleScreenStage stream={stream} local={share.isLocal} controlsHost={controlsHost} share={share} busy={audio.screenBusy} presenterName={share.presenterName}/>:<p role="status">Connecting shared screen…</p>}</div></>}
     {controlsHost?createPortal(controls,controlsHost):controls}
     {reactionsOpen && <div className="huddle-reactions" aria-label="Huddle reactions">{['👍','❤️','😂','🎉','👏','🙌'].map(emoji=><button key={emoji} aria-label={`React ${emoji}`} onClick={()=>{perform('reaction',{emoji});setReactionsOpen(false);}}>{emoji}</button>)}</div>}
     <div className="huddle-participant-signals" aria-live="polite">{huddlePeople(state?.participants,session?.id).map(p=><ParticipantSignal key={p.id} person={p}/>)}</div>

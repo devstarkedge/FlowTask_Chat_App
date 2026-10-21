@@ -12,14 +12,14 @@ export class ScreenShareSession {
   async start({switching=false}={}) {
     if(this.pending || (this.current && !switching))return;
     const context=this.context();if(!context)return;
-    const previous=this.current,generation=++this.generation;this.pending=true;this.notify();
+    const previous=this.current,generation=++this.generation;this.pending=true;this.update({screenError:null});this.notify();
     this.log(switching?'SCREEN_SWITCH_REQUESTED':'SCREEN_START_REQUESTED');
     let candidate,announced=false,next;
     const live=()=>generation===this.generation && this.context()?.id===context.id;
     try {
       const captured=await this.capture();candidate=captured.stream;
       if(!live()){this.release(candidate);return;}
-      const video=candidate.getVideoTracks()[0];if(!video || video.readyState==='ended')throw new Error('The selected capture source is unavailable.');
+      const video=candidate.getVideoTracks()[0];if(!video || video.readyState!=='live')throw new Error('The selected capture source is unavailable.');
       next={...captured.source,id:this.id(),context,stream:candidate,state:'active',startedAt:Date.now(),systemAudio:candidate.getAudioTracks().length>0};
       // Register the exact generation before sending media. Existing screen
       // senders replace their track; no new Huddle or peer is created.
@@ -37,8 +37,8 @@ export class ScreenShareSession {
       this.release(candidate);
       if(live()) {
         if(announced){await this.signal(previous?{sharing:true,screenShare:this.public(previous)}:{sharing:false}).catch(()=>{});}
-        if(error.name!=='NotAllowedError')this.update({error:error.message});
-        else if(!previous)this.update({error:'Screen sharing was cancelled or denied. You can try again.'});
+        this.log('SCREEN_SHARE_FAILED',{name:error.name,message:error.cause?.message || error.message,code:error.screenCaptureCode});
+        this.update({screenError:{code:error.screenCaptureCode || 'SCREEN_SHARE_FAILED',name:error.name,message:error.message}});
       }
     } finally {if(live()){this.pending=false;this.notify();}}
   }
@@ -58,7 +58,7 @@ export class ScreenShareSession {
     finally{if(this.current===current){this.pending=false;this.notify();}}
   }
   async stop(reason='user_stop',{transportGone=false}={}) {
-    ++this.generation;const current=this.current,needsDetach=Boolean(current || this.publishing);this.current=null;this.pending=false;
+    ++this.generation;const current=this.current,needsDetach=Boolean(current || this.publishing);this.current=null;this.pending=false;this.update({screenError:null});
     this.release(current?.stream);this.resetAnnotations(current?.id);this.notify();
     if(needsDetach)this.log('SCREEN_STOP',{shareId:current?.id,reason});
     if(!transportGone && needsDetach)await this.publishSerial(null).catch(error=>this.update({error:error.message}));

@@ -11,7 +11,7 @@ export function screenCaptureFailure(error,outcome){
 // Source selection belongs to Electron's request handler, never deviceId/SDP.
 export async function captureDisplaySource({devices,native,log=()=>{}}){
   const constraints={video:true,audio:native?native.screenCaptureAudioSupported===true:true};
-  let stream;
+  let stream;const attemptedAt=Date.now();
   log('SCREEN_CAPTURE_REQUEST',{strategy:'getDisplayMedia',constraints});
   try{
     if(!devices?.getDisplayMedia)throw Object.assign(new Error('Screen sharing requires HTTPS or a supported desktop build.'),{name:'NotSupportedError'});
@@ -26,7 +26,8 @@ export async function captureDisplaySource({devices,native,log=()=>{}}){
     return {stream,source:selected || {sourceType:surface==='window'?'window':surface==='monitor'?'screen':'browser',sourceLabel:'Shared screen',audioAvailable:Boolean(stream.getAudioTracks?.().length)}};
   }catch(error){
     stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});
-    const outcome=await native?.getHuddleCaptureResult?.().catch(()=>null);
+    const result=await native?.getHuddleCaptureResult?.().catch(()=>null);
+    const outcome=error.name==='AbortError' && result?.attemptedAt>=attemptedAt?result:null;
     log('SCREEN_CAPTURE_FAILED',{strategy:'getDisplayMedia',name:error.name,message:error.message,code:outcome?.code,nativeError:outcome?.message});
     const failure=screenCaptureFailure(error,outcome);
     throw Object.assign(new Error(failure.message,{cause:error}),{name:failure.name,screenCaptureCode:failure.code});

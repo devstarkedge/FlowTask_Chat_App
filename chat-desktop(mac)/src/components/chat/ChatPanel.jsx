@@ -1,3 +1,4 @@
+import HuddlePanel from '../huddles/HuddlePanel';
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
@@ -295,6 +296,7 @@ export default function ChatPanel({
         onRemoveCanvasTabById={handleRemoveCanvasTabById}
       />
 
+      <HuddlePanel channelId={channelId} />
       {/* Connection status banners — only shown after 1.5s debounce */}
       {showConnectionBanner && connectionStatus === "connecting" && (
         <div

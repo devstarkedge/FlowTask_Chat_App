@@ -49,6 +49,9 @@ export function registerScreenAnnotations(io,socket,service,journal=sharedJourna
       // MVP: presenter only. Permission is decided here, not by hidden buttons.
       if(input.type!=='snapshot' && participant!==presenter)throw new Error('Only the presenter can annotate');
       const event=annotationEvent(input,participant);
+      // Pointer presence is transient. Never journal it or replay stale cursor
+      // locations to someone who joins later.
+      if(['pointer','pointer-hide'].includes(event.type)){io.to(binding.room).emit('huddle:screen-annotation',event);ack({success:true,data:{}});return;}
       const document=await journal(`huddle-ink:${binding.workspaceId}:${binding.huddleId}:${input.shareId}`,input.type==='snapshot'?null:event);
       if(input.type!=='snapshot')io.to(binding.room).emit('huddle:screen-annotation',event);
       ack({success:true,data:input.type==='snapshot'?document:{}});

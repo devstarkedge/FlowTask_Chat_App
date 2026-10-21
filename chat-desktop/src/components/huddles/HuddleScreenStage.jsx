@@ -37,8 +37,8 @@ export default function HuddleScreenStage({stream,local=false,controlsHost,share
     <div ref={viewport} className="huddle-screen-viewport" tabIndex={0} aria-label="Shared screen. Zoom in to read smaller text.">
       <div className={`huddle-screen-surface${local && tool!=='pointer'?' is-drawing':''}`} style={{width:`${zoom*100}%`,height:`${zoom*100}%`}}>
         <video ref={video} autoPlay muted playsInline aria-label={local?'Your shared screen':'Participant shared screen'} onPlaying={()=>setBlocked(false)}/>
-        <ScreenAnnotationLayer video={video} share={share} tool={tool} color={color} allowed={local && !globalThis.electronAPI?.updateHuddleShare} onError={setError}/>
-        {share?.state==='paused' && <div className="huddle-share-paused" role="status">{local?'Your share':presenterName || 'Screen share'} is paused</div>}
+        <ScreenAnnotationLayer video={video} share={share} tool={tool} color={color} allowed={local && share?.state!=='paused' && !globalThis.electronAPI?.updateHuddleShare} onError={setError}/>
+        {share?.state==='paused' && <div className="huddle-share-paused" role="status">Screen sharing paused</div>}
       </div>
     </div>
     {local && share && !globalThis.electronAPI?.updateHuddleShare && <ScreenSharePresenterControls share={share} busy={busy} tool={tool} setTool={setTool} color={color} setColor={setColor}/>}

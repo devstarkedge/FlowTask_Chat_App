@@ -8,7 +8,7 @@ import {HuddleAudioController} from './HuddleAudioController';
 import {HuddleSfuController} from './HuddleSfuController';
 import {ScreenShareSession} from '../features/huddle/services/screenShareSession.service';
 import {screenAnnotations} from '../features/huddle/services/screenAnnotations.service';
-import {SCREEN_CAPTURE_VIDEO,prepareScreenTrack} from '../features/huddle/services/screenQuality.service';
+import {captureDisplaySource} from '../features/huddle/services/screenCapture.service';
 import {huddleCaptureDevices} from '../features/huddle/services/huddlePopout.service';
 
 const microphone=new HuddleMediaManager();
@@ -192,16 +192,7 @@ export async function toggleHuddleCamera() {
 screenSharing=new ScreenShareSession({
   log:(event,details)=>huddleLogger.debug(event,details),
   context:()=>{const session=useHuddleStore.getState().session;return session?{...session,huddleId:useHuddleStore.getState().byChannel?.[session.channelId]?.huddle?._id}:null;},
-  capture:async()=>{
-    const devices=huddleCaptureDevices();if(!devices?.getDisplayMedia)throw new Error('Screen sharing requires HTTPS or a supported desktop build.');
-    const stream=await devices.getDisplayMedia({video:SCREEN_CAPTURE_VIDEO,audio:{restrictOwnAudio:true},systemAudio:'include'});
-    try{prepareScreenTrack(stream.getVideoTracks()[0]);
-    let selected;
-    selected=await globalThis.electronAPI?.getHuddleShareSource?.();
-    const track=stream.getVideoTracks()[0],surface=track.getSettings?.()?.displaySurface;
-    return {stream,source:selected || {sourceType:surface==='window'?'window':surface==='monitor'?'screen':'browser',sourceLabel:'Shared screen',audioAvailable:(stream.getAudioTracks?.() || []).length>0}};
-    }catch(error){stream.getTracks().forEach(track=>{track.onended=null;track.stop();});throw error;}
-  },
+  capture:()=>captureDisplaySource({devices:huddleCaptureDevices(),native:globalThis.electronAPI,log:(event,details)=>huddleLogger.debug(event,details)}),
   publish:async stream=>{
     if(controller.mediaMode==='sfu' && stream){const session=useHuddleStore.getState().session;const config=await audioRequest('audio-config',{channelId:session.channelId});await controller.updateConfiguration(config);}
     await controller.setScreen(stream);
@@ -233,7 +224,7 @@ function presenterAction(event){
     if(type==='start')nativeStroke=crypto.randomUUID();
     if(['move','end'].includes(type) && !nativeStroke)return;
     const message={id:crypto.randomUUID(),shareId:share.id,creatorSessionId:share.context.id,type,strokeId:nativeStroke,points:event.points || [],tool:event.tool,color:event.color};
-    screenAnnotations.receive(message);void sendScreenAnnotation(message).catch(error=>update({error:error.message}));
+    screenAnnotations.receive(message,{optimistic:true});void sendScreenAnnotation(message).catch(error=>update({error:error.message}));
     if(type==='end')nativeStroke=null;
   }
 }
@@ -250,7 +241,7 @@ export function bindHuddleAudio(socket) {
   const signal=message=>controller.receive(message),disconnected=()=>{clearTimeout(renewTimer);void screenSharing.stop('connection_lost',{transportGone:true});controller.pause();};
   const ink=event=>screenAnnotations.receive(event);socket.on('huddle:screen-annotation',ink);
   const disposePresenter=globalThis.electronAPI?.onHuddleShareAction?.(presenterAction);
-  const disposeInk=screenAnnotations.subscribe(()=>{const share=screenSharing.current;if(share)globalThis.electronAPI?.updateHuddleAnnotations?.({sessionId:share.id,strokes:screenAnnotations.get(share.id)});});
+  const disposeInk=screenAnnotations.subscribe(()=>{const share=screenSharing.current;if(share)globalThis.electronAPI?.updateHuddleAnnotations?.({sessionId:share.id,strokes:screenAnnotations.get(share.id),pointer:screenAnnotations.pointer(share.id) || null});});
   socket.on('huddle:signal',signal);socket.on('disconnect',disconnected);
   window.addEventListener('offline',disconnected);
   const unsubscribe=useHuddleStore.subscribe(state=>{

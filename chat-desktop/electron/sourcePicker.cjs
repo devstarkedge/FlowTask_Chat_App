@@ -2,7 +2,7 @@ const path=require('node:path');
 const {randomUUID}=require('node:crypto');
 const {installSharingIndicator}=require('./sharingIndicator.cjs');
 
-function chooseDesktopSource(parent,sources,{BrowserWindow,ipcMain},{audioRequested=false,platform=process.platform}={}) {
+function chooseDesktopSource(parent,sources,{BrowserWindow,ipcMain},{audioRequested=false,platform=process.platform,onError=()=>{}}={}) {
   return new Promise(resolve=>{
     const requestId=randomUUID();
     const picker=new BrowserWindow({parent,modal:true,title:'Share your screen',width:860,height:620,minWidth:540,minHeight:420,show:false,autoHideMenuBar:true,backgroundColor:'#f7f5fa',webPreferences:{preload:path.join(__dirname,'source-picker-preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,partition:`huddle-picker-${requestId}`}});
@@ -20,25 +20,32 @@ function chooseDesktopSource(parent,sources,{BrowserWindow,ipcMain},{audioReques
       picker.webContents.send('huddle-source-list',{requestId,audioAvailable:audioRequested && platform==='win32',sources:sources.map(source=>({id:source.id,name:source.name,kind:source.id.startsWith('screen:')?'screen':'window',thumbnail:source.thumbnail?.toDataURL() || '',icon:source.appIcon?.toDataURL() || ''}))});
       picker.show();
     });
-    picker.loadFile(path.join(__dirname,'source-picker.html')).catch(cancel);
+    picker.loadFile(path.join(__dirname,'source-picker.html')).catch(error=>{onError(error);cancel();});
   });
 }
 
 function installDisplayCapture(window,deps){
-  let choosing=false;
+  let choosing=false,outcome=null;
   const windows=new Set([window]);
+  const trusted=event=>[...windows].some(item=>!item.isDestroyed() && event.sender===item.webContents && event.senderFrame===item.webContents.mainFrame);
+  deps.ipcMain.handle('huddle-capture:result',event=>trusted(event)?outcome:null);
+  window.once('closed',()=>deps.ipcMain.removeHandler('huddle-capture:result'));
   const indicator=deps.screen?installSharingIndicator(window,deps):null;
   window.webContents.session.setDisplayMediaRequestHandler(async(request,callback)=>{
     const owner=[...windows].find(item=>!item.isDestroyed() && request.frame===item.webContents.mainFrame);
-    if(choosing || !owner || !request.videoRequested){callback({});return;}
-    choosing=true;
+    if(choosing || !owner || !request.videoRequested){callback(null);return;}
+    choosing=true;outcome=null;
     try {
       const sources=(await deps.desktopCapturer.getSources({types:['screen','window'],thumbnailSize:{width:420,height:236},fetchWindowIcons:true})).filter(source=>!indicator?.isOwnSource(source));
-      const selection=sources.length?await chooseDesktopSource(owner,sources,deps,{audioRequested:request.audioRequested,platform:deps.platform || process.platform}):null;
+      if(!sources.length){outcome={status:'failed',code:'SCREEN_CAPTURE_NOT_FOUND',name:'NotFoundError',message:'No shareable screen or window was found.'};callback(null);return;}
+      let pickerError;
+      const selection=await chooseDesktopSource(owner,sources,deps,{audioRequested:request.audioRequested,platform:deps.platform || process.platform,onError:error=>{pickerError=error;}});
       const source=request.audioRequested?selection?.source:selection;
+      if(!source || owner.isDestroyed()){outcome=pickerError?{status:'failed',code:'SCREEN_CAPTURE_UNAVAILABLE',name:pickerError.name,message:pickerError.message}:{status:'cancelled',code:'SCREEN_CAPTURE_CANCELLED'};callback(null);return;}
+      outcome={status:'selected'};
       if(source)indicator?.select(source,{audioAvailable:request.audioRequested && (deps.platform || process.platform)==='win32'});
-      callback(source && !owner.isDestroyed()?{video:source,...(request.audioRequested && selection.shareAudio?{audio:'loopback'}:{})}:{});
-    } catch {callback({});}
+      callback({video:source,...(request.audioRequested && selection.shareAudio?{audio:'loopback'}:{})});
+    } catch(error){outcome={status:'failed',code:'SCREEN_CAPTURE_UNAVAILABLE',name:error.name,message:error.message};callback(null);}
     finally {choosing=false;}
   });
   return {allowWindow(child){windows.add(child);child.once('closed',()=>windows.delete(child));}};

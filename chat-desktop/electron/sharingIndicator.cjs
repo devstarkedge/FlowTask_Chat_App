@@ -57,7 +57,7 @@ function installSharingIndicator(parent,{BrowserWindow,ipcMain,screen,platform=p
   if(!trusted(event))return {ok:false};
   if(value===null){stop();return {ok:true};}
   if(!value || !/^[a-zA-Z0-9-]{1,80}$/.test(value.id || '') || !['active','paused'].includes(value.state))return {ok:false};
-  if(current?.id===value.id && current.sourceToken===value.sourceToken){current.state=value.state;current.systemAudio=value.systemAudio===true;sendState();return {ok:true};}
+  if(current?.id===value.id && current.sourceToken===value.sourceToken){if(value.state==='paused' && current.state!=='paused'){current.pointer=null;contents.send('huddle-share:action',{sessionId:current.id,action:'annotation',type:'pointer-hide',points:[]});}current.state=value.state;current.systemAudio=value.systemAudio===true;sendState();return {ok:true};}
   if(!candidate || value.sourceToken!==candidate.token)return {ok:false};
   begin(value);return {ok:true};
  };
@@ -65,14 +65,16 @@ function installSharingIndicator(parent,{BrowserWindow,ipcMain,screen,platform=p
   if(!trusted(event) || !current || value?.sessionId!==current.id || !Array.isArray(value.strokes) || value.strokes.length>128)return;
   let total=0;
   if(value.strokes.some(s=>!s || !['pen','eraser'].includes(s.tool) || !/^#[0-9a-f]{6}$/i.test(s.color || '') || !Array.isArray(s.points) || (total+=s.points.length)>32768 || s.points.some(p=>!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x<0 || p.x>1 || p.y<0 || p.y>1)))return;
-  current.strokes=value.strokes;sendState();
+  if(value.pointer!=null && (!Number.isFinite(value.pointer.x) || !Number.isFinite(value.pointer.y) || value.pointer.x<0 || value.pointer.x>1 || value.pointer.y<0 || value.pointer.y>1))return;
+  current.strokes=value.strokes;current.pointer=value.pointer || null;sendState();
  };
  const command=(event,value)=>{
   if(!alive() || !current || ![toolbar?.webContents,ink?.webContents].includes(event.sender) || event.senderFrame!==event.sender.mainFrame || value?.sessionId!==current.id)return;
-  if(!['stop','pause','switch','pointer','pen','eraser','clear','undo','annotation'].includes(value.action))return;
-  if(['pointer','pen','eraser'].includes(value.action)){if(value.action!=='pointer' && !bounds)return;current.tool=value.action;current.color=/^#[0-9a-f]{6}$/i.test(value.color || '')?value.color:'#facc15';annotationWindow();sendState();return;}
+  if(!['stop','pause','switch','pointer','laser','pen','eraser','clear','undo','annotation'].includes(value.action))return;
+  if(['pointer','laser','pen','eraser'].includes(value.action)){if(value.action!=='pointer' && !bounds)return;if(current.tool==='laser' && value.action!=='laser'){current.pointer=null;contents.send('huddle-share:action',{sessionId:current.id,action:'annotation',type:'pointer-hide',points:[]});}current.tool=value.action;current.color=/^#[0-9a-f]{6}$/i.test(value.color || '')?value.color:'#facc15';annotationWindow();sendState();return;}
   if(value.action==='annotation'){
-   if(event.sender!==ink?.webContents || !['start','move','end'].includes(value.type) || !Array.isArray(value.points) || value.points.length>32 || value.points.some(p=>!p || !Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return;
+   if(current.state==='paused' && value.type!=='pointer-hide')return;
+   if(event.sender!==ink?.webContents || !['start','move','end','pointer','pointer-hide'].includes(value.type) || !Array.isArray(value.points) || value.points.length>32 || (value.type==='pointer' && value.points.length!==1) || value.points.some(p=>!p || !Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return;
   }
   if(value.action==='stop')hide();
   contents.send('huddle-share:action',{...value,sessionId:current.id,tool:current.tool,color:current.color});

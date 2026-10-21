@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getHuddleShareSource: () => ipcRenderer.invoke('huddle-share:source'),
+  getHuddleCaptureResult: () => ipcRenderer.invoke('huddle-capture:result'),
+  screenCaptureAudioSupported: process.platform === 'win32',
   updateHuddleShare: value => ipcRenderer.invoke('huddle-share:update',value),
   updateHuddleAnnotations: value => ipcRenderer.send('huddle-share:annotations',value),
   onHuddleShareAction: callback => {

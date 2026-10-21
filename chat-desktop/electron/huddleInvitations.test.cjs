@@ -2,16 +2,17 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {EventEmitter}=require('node:events');
 const {installHuddleInvitations}=require('./huddleInvitations.cjs');
-function fixture(){
+function fixture(options={}){
   let clock=1000,visible=true,focused=true;
   const timers=new Map(),ipcMain=new EventEmitter(),window=new EventEmitter(),toasts=[],sent=[];
   window.webContents=new EventEmitter();window.webContents.mainFrame={};window.webContents.send=(...args)=>sent.push(args);
+  window.webContents.isDestroyed=()=>false;
   window.isDestroyed=()=>false;window.isVisible=()=>visible;window.isFocused=()=>focused;window.isMinimized=()=>!visible;window.flashFrame=()=>{};
   class Notification extends EventEmitter{static isSupported(){return true;}constructor(options){super();this.options=options;toasts.push(this);}show(){this.shown=true;}close(){this.closed=true;this.emit('close',{reason:'applicationHidden'});}}
   const item={id:'invite',channelId:'channel',workspaceId:'workspace',huddleId:'meeting',callerName:'Alex',label:'Design',expiresAt:61000};
   let opened=0;
   const dispose=installHuddleInvitations(window,{ipcMain,Notification,icon:'icon.png',showWindow:()=>{opened++;visible=focused=true;window.emit('focus');},now:()=>clock,
-    setTimer:callback=>{const id=Symbol();timers.set(id,callback);return id;},clearTimer:id=>timers.delete(id)});
+    setTimer:callback=>{const id=Symbol();timers.set(id,callback);return id;},clearTimer:id=>timers.delete(id),...options});
   const event={sender:window.webContents,senderFrame:window.webContents.mainFrame};
   return {window,ipcMain,toasts,sent,timers,item,event,dispose,opened:()=>opened,
     show:(override={},sender=event)=>ipcMain.emit('huddle-invitation:show',sender,{...item,...override}),
@@ -44,4 +45,27 @@ test('SPA navigation keeps the alert; a main-frame reload clears it',()=>{
  f.window.webContents.emit('did-start-navigation',{isMainFrame:true,isSameDocument:true});assert.equal(f.toasts[0].closed,undefined);
  f.window.webContents.emit('did-start-navigation',{isMainFrame:true,isSameDocument:false});assert.equal(f.toasts[0].closed,true);assert.equal(f.timers.size,0);
  f.dispose();assert.equal(f.window.listenerCount('closed'),0);
+});
+test('background call popup suppresses the toast and Join runs once',()=>{
+ const alerts=[];
+ const f=fixture({createCallAlert:(invitation,action,unavailable)=>{
+  const alert={close(){this.closed=true;},action,unavailable};alerts.push(alert);return alert;
+ }});
+ f.background();f.show();f.window.emit('blur');f.show();
+ assert.equal(alerts.length,1);assert.equal(f.toasts.length,0);
+ alerts[0].action('join');alerts[0].action('join');
+ assert.equal(f.opened(),1);assert.equal(f.sent.length,1);assert.equal(alerts[0].closed,true);f.dispose();
+});
+test('failed background popup falls back to exactly one toast',()=>{
+ let failed;
+ const f=fixture({createCallAlert:(_invitation,_action,unavailable)=>{failed=unavailable;return {close(){}};}});
+ f.background();f.show();failed();failed();f.window.emit('blur');
+ assert.equal(f.toasts.length,1);f.dispose();
+});
+test('destroyed contents can be disposed twice without accessing destroyed BrowserWindow.webContents',()=>{
+ const f=fixture();f.background();f.show();
+ f.window.webContents.isDestroyed=()=>true;
+ Object.defineProperty(f.window,'webContents',{get(){throw new Error('Object has been destroyed');}});
+ assert.doesNotThrow(()=>f.dispose());assert.doesNotThrow(()=>f.dispose());
+ assert.equal(f.timers.size,0);assert.equal(f.ipcMain.listenerCount('huddle-invitation:show'),0);
 });

@@ -53,7 +53,8 @@
 @media(prefers-reduced-motion:reduce){.huddle-tools button{transition:none}}
 
 .huddle-window.is-maximized{inset:8px;width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:none;transform:none;border-radius:12px}
-/* Reserve native caption space only when hosted in the Desktop shell. */
+/* Electron's native caption buttons live above the web content, regardless of
+   z-index. Keep the Huddle chrome below their reserved title-bar rectangle. */
 .has-native-window-controls .huddle-window{top:max(24px,calc(env(titlebar-area-height,48px) + 8px))}
 .has-native-window-controls .huddle-window.is-maximized{top:calc(env(titlebar-area-height,48px) + 8px);height:calc(100dvh - env(titlebar-area-height,48px) - 16px)}
 .huddle-window-chrome>button{-webkit-app-region:no-drag;flex-shrink:0}
@@ -61,3 +62,89 @@
 .huddle-camera-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}.huddle-participant-tile.has-camera .huddle-participant-name,.huddle-participant-tile.has-camera .huddle-preview-icons{z-index:1}
 @media(prefers-reduced-motion:reduce){.huddle-reconnect-spinner{animation:none}}
 @media(max-width:520px){.huddle-camera-control{display:inline-flex;grid-column:1/-1}}
+
+/* A level-driven local indicator; mute state alone never marks a speaker. */
+.huddle-participant-tile.is-speaking { outline: 3px solid #43b581; outline-offset: -3px; }
+.huddle-participant-hand{position:absolute;top:8px;right:8px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#372a45;color:#f8d477;border:1px solid #f8d47740;pointer-events:none}
+
+/* Keep the same media and participant elements mounted when the layout changes. */
+.huddle-call-layout{display:contents}
+.huddle-window.is-sharing .huddle-window-content{display:flex;flex-direction:column;overflow:auto;padding:10px 20px;min-height:0}
+.huddle-window.is-sharing .huddle-window-content> *{flex-shrink:0}
+.huddle-window.is-sharing .huddle-heading{padding:0 0 8px}
+.huddle-window.is-sharing .huddle-eyebrow{display:none}
+.huddle-window.is-sharing .huddle-heading h2{font-size:18px;padding:0}
+.huddle-window.is-sharing .huddle-heading>p{margin-top:3px}
+.huddle-window.is-sharing .huddle-listener-note{margin-bottom:8px}
+/* The screen owns the flexible column; the participant rail scrolls independently. */
+.huddle-window.is-sharing .huddle-call-layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(130px,15vw,210px);grid-template-rows:auto minmax(180px,1fr) auto;gap:8px 14px;flex:1 0 300px;min-height:0;min-width:0}
+.huddle-window.is-sharing .huddle-preview-card{display:contents}
+.huddle-window.is-sharing .huddle-participant-grid{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;flex-wrap:nowrap;justify-content:flex-start;gap:10px;overflow:auto;min-height:0;padding:3px}
+.huddle-window.is-sharing .huddle-participant-tile{width:100%;height:auto;min-height:100px;aspect-ratio:16/10;flex:0 0 auto;box-sizing:border-box}
+.huddle-window.is-sharing .huddle-device-row{grid-column:1;grid-row:3;min-width:0}
+.huddle-window.is-sharing .huddle-device-control,.huddle-window.is-sharing .huddle-camera-control{height:34px;min-width:0}
+.huddle-window.is-sharing .huddle-device-control select{min-width:0}
+.huddle-window.is-sharing .huddle-call-status{grid-column:1;grid-row:1;padding:0 2px;min-width:0}
+.huddle-window.is-sharing .huddle-tools{grid-column:1;grid-row:2;display:flex;flex-direction:column;min-height:0;min-width:0;padding:0;overflow:auto}
+.huddle-window.is-sharing .huddle-screen-stage{flex:1 0 140px;min-height:0;margin-bottom:8px}
+.huddle-window.is-sharing .huddle-screen-stage video{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain}
+.huddle-window.is-sharing .huddle-tools-bar,.huddle-window.is-sharing .huddle-screen-label,.huddle-window.is-sharing .huddle-reactions,.huddle-window.is-sharing .huddle-participant-signals{flex-shrink:0}
+.huddle-window.is-sharing .huddle-tools-bar button{padding:8px 12px}
+.huddle-window.is-sharing .huddle-screen-label{margin:0 0 6px}
+.huddle-window.is-sharing .huddle-meeting-link{padding-top:4px}
+.huddle-window.is-sharing .huddle-meeting-link button{margin-bottom:0;padding:5px 8px}
+.huddle-window.is-sharing .huddle-window-footer{flex-shrink:0;min-height:62px;padding:10px 16px}
+/* Notes retain their existing panel, beside the call on roomy windows. */
+.huddle-window.is-sharing .huddle-window-content:has(.huddle-notes){padding-right:340px}
+@media(max-width:850px){
+ .huddle-window.is-sharing .huddle-window-content:has(.huddle-notes){padding-right:20px}
+ .huddle-window.is-sharing .huddle-notes{flex-shrink:0;box-sizing:border-box}
+}
+/* On phones the rail becomes a filmstrip, leaving the screen full width. */
+@media(max-width:600px){
+ .huddle-window.is-sharing .huddle-window-content{padding:10px 12px}
+ .huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(230px,1fr) auto auto;flex-basis:440px;gap:8px}
+ .huddle-window.is-sharing .huddle-participant-grid{grid-column:1;grid-row:3;flex-direction:row;overflow:auto;padding:3px;min-height:0}
+ .huddle-window.is-sharing .huddle-participant-tile{width:120px;min-height:76px}
+ .huddle-window.is-sharing .huddle-device-row{grid-row:4}
+ .huddle-window.is-sharing .huddle-tools-bar{display:flex;flex-wrap:wrap}
+ .huddle-window.is-sharing .huddle-tools-bar button{padding:7px 9px}
+}
+
+/* Transient reactions float over the call without intercepting its controls. */
+.huddle-floating-reactions{position:absolute;inset:48px 8px 76px;overflow:hidden;pointer-events:none;z-index:5}
+.huddle-floating-reaction{position:absolute;bottom:14%;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:170px;animation:huddle-reaction-float 5s ease-out both;will-change:transform,opacity}
+.huddle-floating-emoji{font-size:52px;line-height:1.2;filter:drop-shadow(0 4px 10px #0005)}
+.huddle-floating-name{max-width:170px;padding:6px 10px;border-radius:20px;background:#252331ed;border:1px solid #ffffff25;color:#f5f0fb;font-size:12px;line-height:1.4;text-align:center;overflow-wrap:anywhere;box-shadow:0 4px 12px #0003}
+@keyframes huddle-reaction-float{0%{opacity:0;transform:translate(-50%,30px) scale(.65)}12%{opacity:1;transform:translate(-50%,0) scale(1.08)}25%{transform:translate(-45%,-35px) scale(1)}75%{opacity:1;transform:translate(-60%,-180px) scale(1)}100%{opacity:0;transform:translate(-40%,-260px) scale(.95)}}
+@media(prefers-reduced-motion:reduce){.huddle-floating-reaction{animation-name:huddle-reaction-fade;will-change:opacity;transform:translateX(-50%)}@keyframes huddle-reaction-fade{0%,100%{opacity:0}15%,80%{opacity:1}}}
+
+/* Presentation gets the available window; Fit preserves the complete source.
+   Zoom/100% provide readable pixels without stretching or cropping by default. */
+.huddle-window.is-sharing.is-maximized{inset:8px;width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:none;transform:none}
+.has-native-window-controls .huddle-window.is-sharing.is-maximized{top:calc(env(titlebar-area-height,48px) + 8px);height:calc(100dvh - env(titlebar-area-height,48px) - 16px)}
+.huddle-window.is-sharing .huddle-window-content{padding:8px 12px;overflow:auto}
+.huddle-window.is-sharing .huddle-heading{display:flex;align-items:baseline;justify-content:center;gap:12px;padding:0 0 6px}
+.huddle-window.is-sharing .huddle-heading h2{font-size:16px}.huddle-window.is-sharing .huddle-heading>p{margin:0;font-size:11px}
+.huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr) clamp(120px,12vw,190px);gap:6px 10px;flex:1 0 300px}
+.huddle-window.is-sharing .huddle-participant-tile{min-height:82px}
+.huddle-window.is-sharing .huddle-tools{overflow:visible}
+.huddle-window.is-sharing .huddle-screen-stage{display:flex;flex-direction:column;flex:1 1 180px;min-height:180px;margin:0 0 6px;isolation:isolate;border:0;background:transparent;box-shadow:none}
+.huddle-window .huddle-screen-stage.is-local-share .huddle-screen-viewport{border:2px solid #36d17d;box-shadow:0 0 0 1px #36d17d44}
+.huddle-screen-controls-footer{display:flex;justify-content:center;flex-shrink:0;padding:8px 0 2px}
+.huddle-screen-toolbar{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;max-width:100%;padding:4px 8px;background:#181e28;border:1px solid #ffffff20;border-radius:12px;box-shadow:0 4px 14px #0003;flex-wrap:wrap;z-index:2}
+.huddle-window .huddle-screen-stage .huddle-screen-toolbar button{position:static;inset:auto;display:inline-flex;align-items:center;justify-content:center;padding:4px 7px;min-width:28px;height:28px;font-size:11px;border-radius:6px;flex-shrink:0}
+.huddle-screen-toolbar-divider{width:1px;height:18px;background:#ffffff25;margin:0 4px}
+.huddle-sharing-indicator{margin-right:auto;color:#70e7a5;font-size:11px;white-space:nowrap}
+.huddle-screen-viewport{position:relative;flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;background:#080c12;border:1px solid #ffffff15;border-radius:10px;scrollbar-width:thin}
+.huddle-screen-surface{position:relative;min-width:100%;min-height:100%}
+.huddle-window.is-sharing .huddle-screen-stage video{position:absolute;inset:0;display:block;width:100%;height:100%;max-height:none;object-fit:contain}
+.huddle-screen-ink-input{position:absolute;inset:0;touch-action:none;cursor:crosshair}
+.huddle-screen-ink-input.is-eraser{cursor:cell}
+.huddle-window .huddle-screen-stage .huddle-screen-play{position:absolute;inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);height:auto;z-index:3}
+.huddle-screen-error{margin:0;padding:5px 10px;color:#ffd496;font-size:11px;background:#181e28}
+.huddle-screen-stage:fullscreen{display:flex;flex-direction:column;width:100vw;height:100dvh;border:0;border-radius:0;background:#080c12;margin:0}
+.huddle-screen-stage:fullscreen .huddle-screen-controls-footer{padding:8px 12px}
+.huddle-screen-stage:fullscreen .huddle-screen-toolbar button{position:static;inset:auto;height:30px;padding:4px 8px}
+.huddle-screen-stage:fullscreen video{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain}
+@media(max-width:600px){.huddle-window.is-sharing .huddle-heading{display:block}.huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr)}.huddle-sharing-indicator{display:none}.huddle-window .huddle-screen-stage .huddle-screen-toolbar button{padding:4px;min-width:26px}}

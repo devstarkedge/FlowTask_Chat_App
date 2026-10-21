@@ -39,6 +39,18 @@ self.addEventListener('push', (event) => {
     return;
   }
 
+  if(payload.data?.type==='huddle_invitation'){
+    const data=payload.data;
+    if(!Number.isFinite(data.expiresAt) || data.expiresAt<=Date.now())return;
+    event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(clients=>{
+      for(const client of clients)client.postMessage({type:'huddle:invitation',invitation:data});
+      if(clients.some(client=>client.visibilityState==='visible'))return;
+      return self.registration.showNotification(payload.title || 'Incoming Huddle',{
+        body:payload.body || 'Join the conversation',icon:payload.icon || DEFAULT_ICON,
+        tag:'huddle:'+data.id,requireInteraction:true,data,actions:[{action:'join',title:'Join'},{action:'dismiss',title:'Dismiss'}],
+      });
+    }));return;
+  }
   const title = payload.title || APP_NAME;
   const options = {
     body: payload.body || '',
@@ -69,6 +81,16 @@ self.addEventListener('notificationclick', (event) => {
 
   notification.close();
 
+  if(data.type==='huddle_invitation'){
+    if(action==='dismiss' || data.expiresAt<=Date.now())return;
+    const destination=new URL(data.deepLink || '/',self.location.origin);
+    if(destination.origin!==self.location.origin)return;
+    event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async clients=>{
+      const client=clients.find(client=>client.url.startsWith(self.location.origin));
+      if(client){await client.navigate(destination.href);return client.focus();}
+      return self.clients.openWindow(destination.href);
+    }));return;
+  }
   if (action === 'dismiss') {
     // Report dismissal to server for multi-device sync
     if (data.notificationId) {

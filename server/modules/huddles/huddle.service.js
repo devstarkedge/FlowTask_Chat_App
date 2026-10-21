@@ -21,8 +21,10 @@ import {ValidationError} from '../../middleware/errorHandler.js';
 import ChannelMember from '../channels/ChannelMember.model.js';
 import {shouldDeliverNotification} from '../notifications/dnd.gateway.js';
 import {deliverHuddleInvitations} from './huddleInvitations.js';
-import {getHuddleRecipientSockets,emitHuddleInvitation} from './huddleRecipients.js';
+import {emitHuddleInvitation} from './huddleRecipients.js';
 import {mediaSettings} from './huddleMediaConfig.js';
+import {sendViaExpo,sendToUser} from '../../services/push.service.js';
+import NotificationPreference from '../notifications/NotificationPreference.model.js';
 
 const publishHuddleState=createHuddlePublisher({emitToChannel,getIO});
 const engine=createHuddleEngine({
@@ -33,9 +35,8 @@ const engine=createHuddleEngine({
   notify:async(context,channelId,state)=>{
     try {
       const result=await deliverHuddleInvitations(context,channelId,state,{
-        getSockets:()=>getHuddleRecipientSockets(getIO(),context.workspaceId,{onDegraded:details=>logger.warn('Huddle invitation discovery degraded',{workspaceId:String(context.workspaceId),channelId,...details})}),
         getChannel:(id,workspaceId)=>Channel.findOne({_id:id,workspaceId}).select('name type isArchived dmParticipants').lean(),
-        getMembers:(id,workspaceId,users)=>ChannelMember.find({channelId:id,workspaceId,userId:{$in:users}}).select('userId isActive notificationsEnabled').lean(),
+        getMembers:(id,workspaceId)=>ChannelMember.find({channelId:id,workspaceId}).select('userId isActive notificationsEnabled').lean(),
         authorize:async(userId,id,workspaceId)=>{
           const membership=await WorkspaceMembership.findOne({userId,workspaceId,isActive:true}).lean();
           if(!membership)throw new ForbiddenError('Workspace membership required');
@@ -49,6 +50,21 @@ const engine=createHuddleEngine({
           return recipient?.isActive && !(mute?.muted && (!mute.muteUntil || new Date(mute.muteUntil)>new Date()));
         },
         emit:(userId,payload)=>emitHuddleInvitation(getIO(),context.workspaceId,userId,payload),
+        push:(userId,invitation)=>{
+          // Push provider latency must not block call admission/heartbeats.
+          const payload={title:`${invitation.callerName} is calling`,body:invitation.label || 'Incoming Huddle',tag:`huddle:${invitation.id}`,
+            channelId:'huddle_calls',categoryIdentifier:'HUDDLE_CALL',ttl:60,sound:'huddle_incoming.wav',
+            data:{...invitation,type:'huddle_invitation',notificationId:invitation.id,priority:'high',deepLink:`/workspace/${invitation.workspaceId}/channel/${invitation.channelId}?huddle=1`}};
+          void Promise.resolve().then(async()=>{
+            const preferences=await NotificationPreference.findOne({userId,workspaceId:context.workspaceId}).select('global').lean();
+            if(preferences?.global?.enabled===false)return;
+            await Promise.all([
+              preferences?.global?.mobilePush===false?null:sendViaExpo(userId,payload),
+              preferences?.global?.desktopPush===false?null:sendToUser(userId,payload),
+            ]);
+          })
+            .catch(()=>logger.warn('Huddle call push failed',{userId,huddleId:invitation.huddleId}));
+        },
       });
       logger.info('Huddle invitations processed',{workspaceId:String(context.workspaceId),channelId,huddleId:String(state.huddle._id),sent:result.sent});
       return result;

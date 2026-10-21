@@ -4,6 +4,9 @@ import {useHuddleUiStore} from '../../stores/huddleUiStore';
 import {useHuddleStore} from '../../stores/huddleStore';
 import {sendHuddleRequest} from '../../services/huddleRequest';
 import {HuddleRingtone} from '../../services/huddleRingtone';
+import {getSocket} from '../../services/socket';
+import {useAuthStore} from '../../stores/authStore';
+import {useWorkspaceStore} from '../../stores/workspaceStore';
 import './huddle.css';
 
 export default function HuddleInvitations() {
@@ -16,9 +19,22 @@ export default function HuddleInvitations() {
   const join=useCallback(async id=>{
     const invitation=useHuddleUiStore.getState().invitations.find(item=>item.id===id && item.expiresAt>Date.now());
     if(!invitation || pendingJoin.current)return;
+    const owner=useAuthStore.getState().user?._id;
+    const changedUser=()=>owner && useAuthStore.getState().user?._id!==owner;
     pendingJoin.current=id;setJoining(id);setError('');ringtone.current.stop();
     try {
+      if(useHuddleStore.getState().session && useHuddleStore.getState().session.channelId!==invitation.channelId)throw new Error('Leave your current Huddle before joining another call.');
+      if(useWorkspaceStore.getState().activeWorkspaceId!==invitation.workspaceId){
+        await useWorkspaceStore.getState().switchWorkspace(invitation.workspaceId);
+        const deadline=Date.now()+15000;
+        while((!getSocket()?.connected || getSocket()?.huddleWorkspaceId!==invitation.workspaceId) && Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,150));
+        if(useWorkspaceStore.getState().activeWorkspaceId!==invitation.workspaceId || !getSocket()?.connected || getSocket()?.huddleWorkspaceId!==invitation.workspaceId)throw new Error('Could not connect to this workspace. Try again.');
+        if(changedUser())throw new Error('Your account changed. Open Huddle from your conversation.');
+        if(invitation.expiresAt<=Date.now())throw new Error('This invitation has expired.');
+        useHuddleUiStore.getState().receiveInvitation(invitation);
+      }
       const state=await sendHuddleRequest('get',{channelId:invitation.channelId});
+      if(changedUser())return;
       if(!useHuddleUiStore.getState().invitations.some(item=>item.id===id && item.expiresAt>Date.now()))return;
       if(String(state.huddle?._id)!==invitation.huddleId)throw new Error('This Huddle has ended.');
       if(!state.participants?.some(person=>person.audioReady && person.connection==='connected'))throw new Error('The caller has left this Huddle.');
@@ -36,7 +52,7 @@ export default function HuddleInvitations() {
     window.electronAPI?.showHuddleInvitation?.(active);
     // Recipients may be viewing another channel and miss its lifecycle broadcast.
     const check=setInterval(async()=>{
-      if(checking || pendingJoin.current)return;
+      if(checking || pendingJoin.current || useWorkspaceStore.getState().activeWorkspaceId!==active.workspaceId)return;
       checking=true;
       try {
         const snapshot=await sendHuddleRequest('get',{channelId:active.channelId});
@@ -49,6 +65,12 @@ export default function HuddleInvitations() {
   useEffect(()=>window.electronAPI?.onHuddleInvitationAction?.(({id,action})=>{
     if(action==='join')join(id);else if(action==='dismiss')dismiss(id);
   }),[join,dismiss]);
+  useEffect(()=>{
+    if(!navigator.serviceWorker)return;
+    const received=event=>{if(event.data?.type==='huddle:invitation' && !useHuddleStore.getState().session)useHuddleUiStore.getState().receiveInvitation(event.data.invitation);};
+    navigator.serviceWorker.addEventListener('message',received);
+    return()=>navigator.serviceWorker.removeEventListener('message',received);
+  },[]);
   if(!active)return null;
   return <aside className="huddle-invitation" role="dialog" aria-label="Incoming Huddle call" aria-live="polite"><Headphones size={24}/><div><strong>{active.callerName} invited you to a Huddle</strong><p>{active.label || 'Join the conversation'}</p>{error && <p role="alert">{error}</p>}{soundBlocked && <p role="status"><button onClick={()=>ringtone.current.start(active.id).then(()=>setSoundBlocked(false)).catch(()=>{})}>Enable call sound</button></p>}<button onClick={()=>join(active.id)} disabled={Boolean(joining)}>{joining?'Opening…':'Join Huddle'}</button><button onClick={()=>dismiss(active.id)}>Dismiss</button></div><button onClick={()=>dismiss(active.id)} aria-label="Dismiss invitation"><X size={17}/></button></aside>;
 }

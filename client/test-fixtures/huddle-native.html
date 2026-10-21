@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset="utf-8"><title>TaskChat native transport regression</title><style>body{font:16px system-ui;background:#171b25;color:#eee;max-width:960px;margin:60px auto}button{padding:12px 20px}pre{white-space:pre-wrap;line-height:1.7}</style></head><body><h1>Native Huddle transport verification</h1><p>Three synthetic participants. No account, microphone, camera or external ICE service is used. This is a transport regression fixture, not the application.</p><button id="start">Run native WebRTC checks</button><pre id="result">Ready</pre><script type="module">
+import {HuddleAudioController} from '/src/services/HuddleAudioController.js';
+const output=document.querySelector('#result');let controllers=[],context;let draw;
+const log=text=>{output.textContent+='\n'+text;};
+const wait=async(check,label)=>{const deadline=Date.now()+20000;while(Date.now()<deadline){if(await check())return;await new Promise(resolve=>setTimeout(resolve,100));}throw new Error(label);};
+const assert=(condition,label)=>{if(!condition)throw new Error(label);log('PASS '+label);};
+const capture=(frequency)=>{const oscillator=context.createOscillator(),gain=context.createGain(),destination=context.createMediaStreamDestination();oscillator.frequency.value=frequency;gain.gain.value=0.2;oscillator.connect(gain).connect(destination);oscillator.start();return destination.stream;};
+const level=async(stream)=>{const source=context.createMediaStreamSource(stream),analyser=context.createAnalyser();source.connect(analyser);const samples=new Float32Array(512);analyser.fftSize=512;await new Promise(resolve=>setTimeout(resolve,200));analyser.getFloatTimeDomainData(samples);source.disconnect();return Math.sqrt(samples.reduce((sum,x)=>sum+x*x,0)/samples.length);};
+const statsVideo=async controller=>{let frames=0;for(const peer of controller.peers.values())for(const report of (await peer.pc.getStats()).values())if(report.type==='inbound-rtp' && report.kind==='video')frames+=report.framesDecoded || 0;return frames;};
+document.querySelector('#start').onclick=async()=>{
+ document.querySelector('#start').disabled=true;output.textContent='Running...';
+ try {
+  context=new AudioContext();await context.resume();
+  const state={huddle:{_id:'native-test'},participants:['A','B','C'].map(id=>({id,mediaId:'media-'+id,connection:'connected',audioReady:true}))};
+  const errors=[];
+  controllers=state.participants.map(person=>new HuddleAudioController({onUpdate:update=>{if(update.error)errors.push(update.error);},send:async(action,payload)=>{const target=controllers.find(c=>c.context?.sessionId===payload.targetSessionId);if(target)target.receive({...payload,toSessionId:payload.targetSessionId,fromSessionId:person.id});}}));
+  for(let i=0;i<3;i++)controllers[i].begin({stream:capture(330+i*110),channelId:'test-channel',sessionId:state.participants[i].id});
+  for(const controller of controllers)controller.configure({state,rtcConfiguration:{iceServers:[]}});
+  await wait(()=>controllers.every(c=>c.peers.size===2 && [...c.peers.values()].every(p=>p.pc.connectionState==='connected')),'six peer connections connected');
+  assert(true,'3 participants / 6 connected peer connections');
+  await wait(()=>controllers.every(c=>c.remoteAudio.size===2),'all remote audio tracks delivered');
+  assert(true,'every participant receives both remote microphone streams');log('AudioContext '+context.state+' / time '+context.currentTime);for(const controller of controllers)for(const stream of controller.remoteAudio.values()){const audio=document.createElement('audio');audio.srcObject=stream;audio.autoplay=true;document.body.append(audio);await audio.play();}
+  const remoteA=controllers[1].remoteAudio.get('A');log('Remote track '+remoteA.getAudioTracks()[0].readyState+' muted='+remoteA.getAudioTracks()[0].muted);await wait(async()=>await level(remoteA)>0.02,'synthetic audio audible');
+  controllers[0].setMuted(true);await wait(async()=>await level(remoteA)<0.005,'mute silences remote audio');assert(true,'mute silences A without reconnecting');
+  controllers[0].setMuted(false);await wait(async()=>await level(remoteA)>0.02,'unmute restores remote audio');assert(true,'unmute restores received audio');
+  const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const pen=canvas.getContext('2d');let frame=0;
+  draw=setInterval(()=>{pen.fillStyle=frame++%2?'#6354b8':'#43b581';pen.fillRect(0,0,320,180);},50);
+  const camera=canvas.captureStream(10),screen=canvas.captureStream(10);
+  await controllers[0].setCamera(camera);await controllers[0].setScreen(screen);
+  await wait(async()=>await statsVideo(controllers[1])>5 && await statsVideo(controllers[2])>5,'video frames decoded by both peers');
+  assert(true,'camera and screen frames reach both peers');
+  await controllers[0].setCamera(null);assert(controllers[0].stream.getAudioTracks()[0].enabled && screen.getVideoTracks()[0].readyState==='live','camera off preserves microphone and screen');
+  await controllers[0].setScreen(null);clearInterval(draw);
+  const unchanged=controllers[1].peers.get('C');controllers[0].stop();
+  const remaining={...state,participants:state.participants.slice(1)};controllers[1].sync(remaining);controllers[2].sync(remaining);
+  assert(controllers[1].peers.size===1 && controllers[1].peers.get('C')===unchanged && unchanged.pc.connectionState==='connected','A leaving preserves the B-C connection');
+  controllers[0].begin({stream:capture(330),channelId:'test-channel',sessionId:'A'});state.participants[0].mediaId='fresh-A';
+  controllers[0].configure({state,rtcConfiguration:{iceServers:[]}});controllers[1].sync(state);controllers[2].sync(state);
+  await wait(()=>controllers.every(c=>c.peers.size===2 && [...c.peers.values()].every(p=>p.pc.connectionState==='connected')),'rapid rejoin connected');
+  assert(controllers[1].peers.get('C')===unchanged,'rapid rejoin creates no duplicate peers and preserves B-C');
+  assert(errors.length===0,'no controller errors');
+  for(const controller of controllers){const tracks=controller.stream.getTracks(),peers=[...controller.peers.values()];controller.stop();assert(tracks.every(t=>t.readyState==='ended') && peers.every(p=>p.pc.connectionState==='closed'),'leave releases tracks and peer connections');}
+  log('ALL NATIVE CHECKS PASSED');
+ } catch(error){log('FAIL '+error.message+' / audio state '+context?.state+' / time '+context?.currentTime);}
+ finally{clearInterval(draw);for(const c of controllers)c.stop();for(const audio of document.querySelectorAll('audio')){audio.pause();audio.srcObject=null;audio.remove();}await context?.close();}
+};
+</script></body></html>

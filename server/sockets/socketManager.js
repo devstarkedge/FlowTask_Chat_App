@@ -291,6 +291,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     // Personal room (workspace-scoped)
     const userRoom = buildRoomName(wsId, 'user', userId);
     socket.join(userRoom);
+    socket.join(`huddle:user:${userId}`);
     
     // Workspace-scoped room for workspace-wide broadcasts
     const workspaceRoom = `ws:${wsId}:workspace`;
@@ -635,7 +636,7 @@ export async function initializeSocket(httpServer, corsOptions) {
         // Leave all current rooms (except personal socket room)
         const currentRooms = Array.from(socket.rooms);
         for (const room of currentRooms) {
-          if (room !== socket.id) {
+          if (room !== socket.id && room !== `huddle:user:${userId}`) {
             socket.leave(room);
           }
         }

@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {ForbiddenError, NotFoundError, ValidationError} from '../../middleware/errorHandler.js';
 import {verifiesSessionProof} from './huddleSessionProof.js';
 import {updateSharedNotes} from './huddleNotesCollaboration.js';
+import {MAX_ACTIVE_SCREEN_SHARES,screenShareMetadata} from './huddleScreenPolicy.js';
 const GRACE=30000, RECONNECT_GRACE=300000, LEASE=60000;
 const publicState = state => ({huddle:state.huddle, revision:state.revision,
   ...(state.notesDocument?{notesDocument:state.notesDocument}:{}),
@@ -95,7 +96,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         // transport disconnect. Anchor expiry to the missed lease, not sweeps.
         if(p.connection==='connected' && p.expiresAt+RECONNECT_GRACE>now()) {
           p.expiresAt+=RECONNECT_GRACE;p.connection='reconnecting';
-          p.audioReady=false;p.mediaId=null;p.screenSharing=false;p.cameraOn=false;p.handRaised=false;
+          p.audioReady=false;p.mediaId=null;p.screenSharing=false;delete p.screenShare;p.cameraOn=false;p.handRaised=false;
           changed=true;return true;
         }
         return false;
@@ -134,6 +135,12 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         if(action==='resume' && (!existing || existing.userId!==String(context.user._id) || existing.secret!==input.secret)) throw membershipError(new ForbiddenError('Huddle session cannot be resumed'),state,context,cached,existing?'RESUME_REJECTED':'SESSION_MISSING');
         let participant=existing;
         if(action!=='resume') participant=state.participants.find(p=>p.socketId===context.socketId);
+        // Explicit rejoin supersedes this user's disconnected device entries.
+        // Keep live devices and secret-bound resume recovery independent.
+        if(action!=='resume') {
+          const retained=state.participants.filter(p=>p===participant || p.userId!==String(context.user._id) || p.connection==='connected');
+          if(retained.length!==state.participants.length){state.participants=retained;changed=true;}
+        }
         if(!participant) {
           if(state.participants.length>=mediaCapacity()) throw new ValidationError('Huddle participant limit reached');
           participant={id:randomUUID(),secret:randomUUID(),userId:String(context.user._id),name:context.user.name,avatar:context.user.avatar || null};
@@ -174,7 +181,11 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
           state.huddle=await repository.notes(state.huddle._id,input.text,input.version);changed=true;
         } else if(action==='screen-state') {
           if(!sender.audioReady || typeof input.sharing!=='boolean')throw new ValidationError('Invalid screen sharing state');
-          if(input.sharing && state.participants.some(p=>p!==sender && p.screenSharing))throw new ValidationError('Someone is already sharing a screen');
+          if(!input.sharing && input.shareId && sender.screenShare?.id!==input.shareId)return publicState(state);
+          if(input.previousShareId && sender.screenShare?.id!==input.previousShareId)throw new ValidationError('Screen-share session changed');
+          if(input.sharing && state.participants.filter(p=>p!==sender && p.screenSharing).length>=MAX_ACTIVE_SCREEN_SHARES)throw new ValidationError('Someone is already sharing a screen');
+          if(input.sharing && input.screenShare)sender.screenShare=screenShareMetadata(input.screenShare);
+          if(!input.sharing)delete sender.screenShare;
           sender.screenSharing=input.sharing;changed=true;
         } else if(action==='camera-state') {
           if(!sender.audioReady || typeof input.enabled!=='boolean')throw new ValidationError('Invalid camera state');
@@ -182,7 +193,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
         } else if(action==='audio-ready') {
           const capacity=mediaCapacity();
           if(!sender.audioReady && state.participants.filter(p=>p.audioReady).length>=capacity) throw new ValidationError(`This Huddle is full. It currently supports ${capacity===2?'two':capacity} devices.`);
-          sender.audioReady=true; sender.screenSharing=false;sender.cameraOn=false; sender.mediaId=randomUUID(); sender.muted=input.muted!==false;
+          sender.audioReady=true; sender.screenSharing=false;delete sender.screenShare;sender.cameraOn=false; sender.mediaId=randomUUID(); sender.muted=input.muted!==false;
           if(!state.announced && String(state.huddle.startedBy)===sender.userId){state.announced=true;state.lastInviteAt=now();invite=true;}
           changed=true;
         } else if(action==='audio-state') {
@@ -207,7 +218,7 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
           if(action==='leave') {state.participants=state.participants.filter(p=>p!==participant); changed=true;}
           else {
             if(action==='disconnect' || participant.connection==='connected')participant.expiresAt=now()+(action==='disconnect'?RECONNECT_GRACE:LEASE);
-            if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;participant.cameraOn=false;participant.handRaised=false;participant.notesTypingAt=null;participant.mediaId=null;changed=true;}
+            if(action==='disconnect') {participant.connection='reconnecting';participant.audioReady=false;participant.screenSharing=false;delete participant.screenShare;participant.cameraOn=false;participant.handRaised=false;participant.notesTypingAt=null;participant.mediaId=null;changed=true;}
           }
         } else if(action==='heartbeat') throw membershipError(new NotFoundError('Huddle participant'),state,context,cached);
       } else if(action==='end') {
@@ -227,5 +238,8 @@ export function createHuddleEngine({authorize,repository,presence,publish,notify
     const invitation=inviteRequested?await notify(context,channelId,result):undefined;
     return {...result,...(invitation?{invitation}:{})};
   }
-  return {run};
+  return {run,screenSnapshot:(context,channelId)=>{
+    if(!/^[a-f\d]{24}$/i.test(channelId || ''))throw new ValidationError('Invalid channel ID');
+    return presence.read(`${context.workspaceId}:${channelId}`);
+  }};
 }

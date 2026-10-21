@@ -1,5 +1,6 @@
 import {huddleLogger} from '../features/huddle/utils/huddle.logger';
 import {HuddleAudioMixer} from '../features/huddle/services/audioMixer.service';
+import {configureScreenSender} from '../features/huddle/services/screenQuality.service';
 // Native small-group transport. Session IDs own independent peer connections; React never captures media.
 export class HuddleAudioController {
   constructor({send,onUpdate,onLocalEnded=()=>{},onScreenStopped=()=>{},PeerConnection=globalThis.RTCPeerConnection,makeStream=tracks=>new MediaStream(tracks),AudioMixer=HuddleAudioMixer}) {
@@ -88,7 +89,7 @@ export class HuddleAudioController {
       const connection=pc.connectionState;
       huddleLogger.debug('ICE',{participantId:peer.id,state:connection});
       this.publishConnection();
-      if(connection==='connected'){peer.restarts=0;this.update({error:null});}
+      if(connection==='connected'){peer.restarts=0;this.update({error:null});configureScreenSender(peer.screenSender).catch(error=>huddleLogger.debug('SCREEN_QUALITY_UNAVAILABLE',{message:error.message}));}
       if(connection==='failed') {
         // One ICE restart per failure episode; explicit Retry remains available.
         if(peer.restarts++===0){if(peer.polite)this.transmit(peer,{restart:true});else pc.restartIce();this.publishConnection();}
@@ -104,7 +105,7 @@ export class HuddleAudioController {
       peer.cameraTransceiver=pc.addTransceiver('video',{direction:'sendrecv'});
       if(this.cameraStream)peer.cameraTransceiver.sender.replaceTrack(this.cameraStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
       peer.screenSender=pc.addTransceiver('video',{direction:'sendrecv'}).sender;
-      if(this.screenStream)peer.screenSender.replaceTrack(this.screenStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
+      if(this.screenStream)peer.screenSender.replaceTrack(this.screenStream.getVideoTracks()[0]).then(()=>configureScreenSender(peer.screenSender)).catch(error=>this.fail(peer,error));
     }
   }
 
@@ -121,6 +122,7 @@ export class HuddleAudioController {
     peer.audioSender=audio?.sender;peer.cameraTransceiver=camera;peer.screenSender=screen?.sender;
     const replacements=[[audio,this.audioMixer.track || this.stream?.getAudioTracks()[0]],[camera,this.cameraStream?.getVideoTracks()[0]],[screen,this.screenStream?.getVideoTracks()[0]]];
     await Promise.all(replacements.filter(([slot])=>slot).map(([slot,track])=>{slot.direction='sendrecv';return slot.sender.replaceTrack(track || null);}));
+    configureScreenSender(peer.screenSender).catch(error=>huddleLogger.debug('SCREEN_QUALITY_UNAVAILABLE',{message:error.message}));
   }
 
   transmit(peer,signal) {
@@ -223,8 +225,9 @@ export class HuddleAudioController {
       if(this.context!==context || !context)throw new Error('Media session changed');
       await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).flatMap(peer=>[
         peer.screenSender?.replaceTrack(stream?.getVideoTracks()[0] || null),peer.audioSender?.replaceTrack(outgoing)]));
+      if(stream)await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>configureScreenSender(peer.screenSender).catch(error=>huddleLogger.debug('SCREEN_QUALITY_UNAVAILABLE',{message:error.message}))));
     } catch(error) {
-      if(this.context===context){this.audioMixer.stop();await Promise.allSettled([...this.peers.values()].flatMap(peer=>[peer.audioSender?.replaceTrack(this.stream?.getAudioTracks()[0] || null),peer.screenSender?.replaceTrack(old?.getVideoTracks()[0] || null)]));}
+      if(this.context===context){const restored=await this.audioMixer.setSources(this.stream,old).catch(()=>this.stream?.getAudioTracks()[0] || null);await Promise.allSettled([...this.peers.values()].flatMap(peer=>[peer.audioSender?.replaceTrack(restored),peer.screenSender?.replaceTrack(old?.getVideoTracks()[0] || null)]));}
       throw error;
     }
     if(this.context!==context || !context)throw new Error('Media session changed');
@@ -237,7 +240,7 @@ export class HuddleAudioController {
     this.audioMixer.stop();
     this.cameraStream?.getTracks().forEach(track=>{track.enabled=false;});
     this.screenStream?.getTracks().forEach(track=>{track.onended=null;track.stop();});this.screenStream=null;
-    this.update({localScreenStream:null,remoteScreenStream:null});
+    this.update({localScreenStream:null,remoteScreenStream:null,remoteScreenStreams:{}});
     this.initialized=false;this.pending=[];this.closePeer();
     this.stream?.getAudioTracks().forEach(track=>{track.enabled=false;});
     if(this.context)this.update({connection:'reconnecting'});
@@ -272,7 +275,7 @@ export class HuddleAudioController {
       }
       this.update({remoteStream:tracks.length?this.remoteStream:null,remoteAudioStreams:Object.fromEntries(collection)});
     } else if(collection===this.remoteCameras)this.update({remoteCameraStreams:Object.fromEntries(collection)});
-    else this.update({remoteScreenStream:collection.get(this.remoteScreenPresenter) || null});
+    else this.update({remoteScreenStream:collection.get(this.remoteScreenPresenter) || null,remoteScreenStreams:Object.fromEntries(collection)});
   }
 
   fail(peer,error) {

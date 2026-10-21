@@ -21,5 +21,7 @@ export function emitHuddleInvitation(io,workspaceId,userId,payload) {
   if(!io)throw new Error('Calling signaling is unavailable');
   // One scoped room reaches every authenticated device on every replica. No
   // second global socket scan is needed for each recipient.
-  io.to(buildRoomName(workspaceId,'user',userId)).emit('huddle:invitation',payload);
+  // Authenticated user room survives workspace switches. Socket.IO unions
+  // these rooms, so existing same-workspace clients receive exactly one event.
+  io.to(`huddle:user:${userId}`).to(buildRoomName(workspaceId,'user',userId)).emit('huddle:invitation',payload);
 }

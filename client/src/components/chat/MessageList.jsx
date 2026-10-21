@@ -11,6 +11,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useChannelStore } from "../../stores/channelStore";
 import MessageItem from "./MessageItem";
 import AutoActivityMessage from "./AutoActivityMessage";
+import {getHuddleTimeline} from "../huddles/huddleTimeline";
 import ForwardMessageModal from "./ForwardMessageModal";
 import { MessageCircle, ChevronDown, Forward } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
@@ -244,7 +245,9 @@ export default function MessageList({
       !!msg.activityMeta
     );
 
+  const huddleTimeline = useMemo(() => getHuddleTimeline(messages, unreadBoundary), [messages, unreadBoundary]);
   const flattenedItems = useMemo(() => {
+    const {messages, unreadBoundary} = huddleTimeline;
     const flattened = [];
     let currentDate = null;
     let insertedUnreadMarker = false;
@@ -329,7 +332,7 @@ export default function MessageList({
     }
 
     return flattened;
-  }, [messages, unreadBoundary]);
+  }, [huddleTimeline]);
 
   const firstMessageId = messages[0]?._id ?? null;
   const virtuosoFirstItemIndex = useMemo(() => {

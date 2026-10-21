@@ -4,6 +4,7 @@ import {runSocketHuddle} from './huddleSession.js';
 import {createRtcConfiguration} from './huddleRtcConfig.js';
 import {validateAudioSignal} from './huddleSignaling.js';
 import {mediaSettings,createSfuConfiguration} from './huddleMediaConfig.js';
+import {registerScreenAnnotations} from './huddleScreenAnnotations.js';
 
 function failureDetails(error){
   const details=error.huddleDiagnostic;
@@ -14,6 +15,7 @@ function failureDetails(error){
 }
 
 export default function registerHuddleSocket(io,socket,huddleService=service) {
+  registerScreenAnnotations(io,socket,huddleService);
   let operations=0, windowStart=Date.now();
   let signals=0, signalWindow=Date.now();
   let notesOperations=0,notesWindow=Date.now();
@@ -55,9 +57,12 @@ export default function registerHuddleSocket(io,socket,huddleService=service) {
           const config=createRtcConfiguration(socket.data.huddle.sessionId);
           const state=await huddleService.run(context(),payload.channelId,action,{muted:payload.muted});
           const media=await createSfuConfiguration(context(),state,socket.data.huddle.sessionId);
+          if(action==='audio-ready')io.to(`huddle:user:${socket.chatUser._id}`).emit('huddle:invitation-answered',{
+            channelId:payload.channelId,huddleId:String(state.huddle._id),workspaceId:String(socket.workspaceId),
+          });
           ack({success:true,data:{state,...config,...media}});
         } else if(['invite','hand','reaction','notes','notes-sync','notes-edit','notes-typing','notes-save','screen-state','camera-state'].includes(action)) {
-          const state=await huddleService.run(context(),payload.channelId,action,{raised:payload.raised,emoji:payload.emoji,text:payload.text,version:payload.version,sharing:payload.sharing,enabled:payload.enabled,update:payload.update,typing:payload.typing});
+          const state=await huddleService.run(context(),payload.channelId,action,{raised:payload.raised,emoji:payload.emoji,text:payload.text,version:payload.version,sharing:payload.sharing,enabled:payload.enabled,update:payload.update,typing:payload.typing,screenShare:payload.screenShare,previousShareId:payload.previousShareId,shareId:payload.shareId});
           const {invitation,...snapshot}=state;
           ack({success:true,data:{state:snapshot,...(invitation?{invitation}:{})}});
         } else if(action==='audio-state') {

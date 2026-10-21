@@ -1,5 +1,6 @@
 const path=require('node:path');
 const {randomUUID}=require('node:crypto');
+const {installSharingIndicator}=require('./sharingIndicator.cjs');
 
 function chooseDesktopSource(parent,sources,{BrowserWindow,ipcMain},{audioRequested=false,platform=process.platform}={}) {
   return new Promise(resolve=>{
@@ -25,16 +26,21 @@ function chooseDesktopSource(parent,sources,{BrowserWindow,ipcMain},{audioReques
 
 function installDisplayCapture(window,deps){
   let choosing=false;
+  const windows=new Set([window]);
+  const indicator=deps.screen?installSharingIndicator(window,deps):null;
   window.webContents.session.setDisplayMediaRequestHandler(async(request,callback)=>{
-    if(choosing || request.frame!==window.webContents.mainFrame || !request.videoRequested){callback({});return;}
+    const owner=[...windows].find(item=>!item.isDestroyed() && request.frame===item.webContents.mainFrame);
+    if(choosing || !owner || !request.videoRequested){callback({});return;}
     choosing=true;
     try {
-      const sources=await deps.desktopCapturer.getSources({types:['screen','window'],thumbnailSize:{width:420,height:236},fetchWindowIcons:true});
-      const selection=sources.length?await chooseDesktopSource(window,sources,deps,{audioRequested:request.audioRequested,platform:deps.platform || process.platform}):null;
+      const sources=(await deps.desktopCapturer.getSources({types:['screen','window'],thumbnailSize:{width:420,height:236},fetchWindowIcons:true})).filter(source=>!indicator?.isOwnSource(source));
+      const selection=sources.length?await chooseDesktopSource(owner,sources,deps,{audioRequested:request.audioRequested,platform:deps.platform || process.platform}):null;
       const source=request.audioRequested?selection?.source:selection;
-      callback(source && !window.isDestroyed()?{video:source,...(request.audioRequested && selection.shareAudio?{audio:'loopback'}:{})}:{});
+      if(source)indicator?.select(source,{audioAvailable:request.audioRequested && (deps.platform || process.platform)==='win32'});
+      callback(source && !owner.isDestroyed()?{video:source,...(request.audioRequested && selection.shareAudio?{audio:'loopback'}:{})}:{});
     } catch {callback({});}
     finally {choosing=false;}
   });
+  return {allowWindow(child){windows.add(child);child.once('closed',()=>windows.delete(child));}};
 }
 module.exports={chooseDesktopSource,installDisplayCapture};

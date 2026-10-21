@@ -56,7 +56,7 @@ async function sendToSubscription(subscription, payload) {
     if (typeof wp.sendNotification !== 'function') {
       throw new Error('web-push sendNotification is not available')
     }
-    await wp.sendNotification(subscription, strPayload)
+    await wp.sendNotification(subscription, strPayload, Number.isFinite(payload.ttl)?{TTL:payload.ttl}:undefined)
     logger.info('web-push sent', { endpoint: subscription?.endpoint })
     return { success: true }
   } catch (err) {
@@ -309,12 +309,14 @@ export async function sendViaExpo(userId, payload) {
       }
       messages.push({
         to: token,
-        sound: IOS_NOTIFICATION_SOUND,
+        sound: payload.sound || IOS_NOTIFICATION_SOUND,
         title: payload.title,
         body: payload.body,
         data: payload.data || {},
         badge: payload.badge ? 1 : undefined,
-        channelId: 'default',
+        channelId: payload.channelId || 'default',
+        ...(payload.categoryIdentifier ? {categoryId:payload.categoryIdentifier} : {}),
+        ...(Number.isFinite(payload.ttl) ? {ttl:payload.ttl} : {}),
         priority: payload.data?.priority === 'high' ? 'high' : 'default',
       });
     }

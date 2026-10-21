@@ -1,3 +1,4 @@
+import {huddlePeople} from '../../features/huddle/utils/huddlePeople';
 import {useEffect} from 'react';
 import {Headphones} from 'lucide-react';
 import {useHuddleStore} from '../../stores/huddleStore';
@@ -14,7 +15,7 @@ export default function HuddlePanel({channelId}) {
   const openPanel=useHuddleUiStore(s=>s.openPanel);
   useEffect(()=>{if(status==='connected' && channelId)load(channelId);},[status,channelId,load]);
   if(!current?.huddle)return null;
-  return <section className="huddle-active-strip" aria-label="Active channel Huddle"><Headphones size={17}/><span>Huddle active <small>{current.participants.map(p=>p.name).join(', ')}</small></span>
+  return <section className="huddle-active-strip" aria-label="Active channel Huddle"><Headphones size={17}/><span>Huddle active <small>{huddlePeople(current.participants,session?.id).map(p=>p.name).join(', ')}</small></span>
     <button onClick={event=>openPanel({channelId,label:channel?.name || 'Channel',workspaceId:channel?.workspaceId,returnFocus:event.currentTarget})}>{session?.channelId===channelId?'Open Huddle':'Join Huddle'}</button>
   </section>;
 }

@@ -2,9 +2,16 @@ const { installHuddleInvitations } = require('./huddleInvitations.cjs');
 const { createIncomingCallWindow } = require('./incomingCallWindow.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
+const { installHuddlePopout } = require('./huddlePopout.cjs');
 const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
+// Explicit isolated profile for two-client calling checks. Normal launches
+// keep their existing profile, single-instance lock and notification identity.
+const callingTestProfile = process.argv.find(value=>value.startsWith('--calling-test-profile='))?.split('=')[1];
+if(callingTestProfile && !/^[a-z0-9-]{1,40}$/.test(callingTestProfile)) {
+  throw new Error('Invalid calling test profile');
+}
 
 if (isDev) {
   // Vite requires unsafe-eval for HMR. We disable the warning in dev mode.
@@ -12,9 +19,10 @@ if (isDev) {
   // Use a separate user data path for development so it doesn't mix with production builds
   app.setPath('userData', path.join(app.getPath('appData'), `${app.name}-dev`));
 }
+if(callingTestProfile)app.setPath('userData',path.join(app.getPath('temp'),`TaskChat-calling-${callingTestProfile}`));
 
 // Set the App ID for all platforms (Windows, Mac, Linux) to ensure OS-level integrations work
-app.setAppUserModelId(isDev ? 'com.taskchat.dev' : 'com.flowtask.chat');
+app.setAppUserModelId(callingTestProfile ? `com.taskchat.callingtest.${callingTestProfile}` : isDev ? 'com.taskchat.dev' : 'com.flowtask.chat');
 
 let mainWindow;
 let tray = null;
@@ -66,7 +74,7 @@ function createWindow() {
     },
   });
 
-  installDisplayCapture(mainWindow, {BrowserWindow,ipcMain,desktopCapturer});
+  const capture=installDisplayCapture(mainWindow, {BrowserWindow,ipcMain,desktopCapturer,screen});
   const callWindow=mainWindow;
   installHuddleInvitations(callWindow,{ipcMain,Notification,
     createCallAlert:(invitation,onAction,onUnavailable)=>createIncomingCallWindow({BrowserWindow,ipcMain,screen,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png')},invitation,onAction,onUnavailable),
@@ -89,7 +97,8 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  installWindowSecurity(mainWindow, {isDev, indexPath:path.join(__dirname, '../dist/index.html')});
+  const security=installWindowSecurity(mainWindow, {isDev, indexPath:path.join(__dirname, '../dist/index.html')});
+  installHuddlePopout(mainWindow,{BrowserWindow,ipcMain,capture,security,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),openExternal:url=>shell.openExternal(url)});
 
   // Notify renderer when window maximize state changes
   mainWindow.on('maximize', () => {
@@ -100,12 +109,6 @@ function createWindow() {
   });
 
   // Open external links in default browser instead of the Electron app
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      shell.openExternal(url);
-    }
-    return { action: 'deny' };
-  });
 
   // Prevent closing, hide to tray instead
   mainWindow.on('close', (event) => {

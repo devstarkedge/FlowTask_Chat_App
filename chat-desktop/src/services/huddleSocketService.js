@@ -26,12 +26,17 @@ export function bindHuddleSocket(socket,getWorkspaceId) {
     useHuddleUiStore.getState().reconcileInvitations?.(payload.channelId,snapshot);
   };
   const disposeAudio=bindHuddleAudio(socket);
+  const answered=payload=>{if(payload?.huddleId)useHuddleUiStore.getState().silenceHuddle(payload);};
+  socket.on('huddle:invitation-answered',answered);
   const invitation=payload=>{
-    if(payload?.workspaceId!==getWorkspaceId() || useHuddleStore.getState().session?.channelId===payload.channelId)return;
+    if(!payload?.workspaceId || useHuddleStore.getState().session?.channelId===payload.channelId)return;
     useHuddleUiStore.getState().receiveInvitation(payload);
   };
   socket.on('huddle:invitation',invitation);
-  const connected=()=>recovery.reconnect();
+  const workspaceSwitched=payload=>{socket.huddleWorkspaceId=payload.workspaceId;};
+  if(socket.connected)socket.huddleWorkspaceId=getWorkspaceId();
+  socket.on('workspace:switched',workspaceSwitched);
+  const connected=()=>{socket.huddleWorkspaceId=getWorkspaceId();return recovery.reconnect();};
   const disconnected=()=>{useHuddleUiStore.getState().clearInvitations();recovery.begin();};
   const heartbeat=async()=>{
     if(disposed || heartbeatPending || !useHuddleStore.getState().session)return;
@@ -65,7 +70,7 @@ export function bindHuddleSocket(socket,getWorkspaceId) {
     // deadline. Retry its transport, preserving the same authenticated socket.
     if(recovery.active && navigator.onLine!==false && !socket.connected && !socket.active)socket.connect?.();
   },20000);
-  const dispose=()=>{if(disposed)return;disposed=true;disposeSharedNotesSession(useHuddleStore.getState().session?.id);recovery.dispose();unsubscribeAudio();unsubscribeSession?.();window.removeEventListener('offline',disconnected);window.removeEventListener('online',online);window.removeEventListener('focus',online);document.removeEventListener('visibilitychange',visible);clearInterval(timer);socket.off('disconnect',disconnected);socket.off('huddle:state',state);socket.off('huddle:invitation',invitation);socket.off('connect',connected);useHuddleUiStore.getState().clearInvitations();disposeAudio();bindings.delete(socket);};
+  const dispose=()=>{if(disposed)return;disposed=true;disposeSharedNotesSession(useHuddleStore.getState().session?.id);recovery.dispose();unsubscribeAudio();unsubscribeSession?.();window.removeEventListener('offline',disconnected);window.removeEventListener('online',online);window.removeEventListener('focus',online);document.removeEventListener('visibilitychange',visible);clearInterval(timer);socket.off('disconnect',disconnected);socket.off('huddle:state',state);socket.off('huddle:invitation',invitation);socket.off('huddle:invitation-answered',answered);socket.off('connect',connected);socket.off('workspace:switched',workspaceSwitched);useHuddleUiStore.getState().clearInvitations();disposeAudio();bindings.delete(socket);};
   const acquire=()=>{
     owners++;let released=false;
     return ()=>{if(released)return;released=true;if(--owners===0)dispose();};

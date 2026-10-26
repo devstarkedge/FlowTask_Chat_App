@@ -28,11 +28,9 @@ const scheduledMessageSchema = new Schema({
   content: {
     type: String,
     required: true,
-    maxlength: 10000,
   },
   htmlContent: {
     type: String,
-    maxlength: 50000,
     default: '',
   },
   threadId: {

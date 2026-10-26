@@ -14,8 +14,8 @@ const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid ObjectId");
 
 export const sendMessageSchema = z
   .object({
-    content: z.string().max(10000).optional().default(""),
-    htmlContent: z.string().max(50000).optional(),
+    content: z.string().optional().default(""),
+    htmlContent: z.string().optional(),
     contentType: z
       .enum(["text", "system", "bot", "file", "gif", "task_update", "activity", "audio", "video", "canvas_share"])
       .optional(),
@@ -104,8 +104,8 @@ export const sendMessageSchema = z
   );
 
 export const editMessageSchema = z.object({
-  content: z.string().max(10000).optional().default(""),
-  htmlContent: z.string().max(50000).optional().default(""),
+  content: z.string().optional().default(""),
+  htmlContent: z.string().optional().default(""),
   fileReferences: z.array(objectId).max(10).optional(),
 }).refine(
   (data) => (data.content && data.content.trim()) || (data.fileReferences && data.fileReferences.length > 0),
@@ -157,8 +157,8 @@ export const createThreadSchema = z.object({
 });
 
 export const threadReplySchema = z.object({
-  content: z.string().min(1).max(10000),
-  htmlContent: z.string().max(50000).optional(),
+  content: z.string().min(1),
+  htmlContent: z.string().optional(),
 });
 
 export const updateThreadTitleSchema = z.object({
@@ -240,8 +240,8 @@ export const updatePreferencesSchema = z.object({
 
 export const scheduleMessageSchema = z
   .object({
-    content: z.string().max(10000).optional().default(""),
-    htmlContent: z.string().max(50000).optional().default(""),
+    content: z.string().optional().default(""),
+    htmlContent: z.string().optional().default(""),
     threadId: z.string().optional(),
     parentMessageId: z.string().optional(),
     scheduledAt: z.string().min(1, "scheduledAt is required"),

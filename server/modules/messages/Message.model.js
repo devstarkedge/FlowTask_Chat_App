@@ -230,12 +230,10 @@ const messageSchema = new Schema({
   },
   content: {
     type: String,
-    maxlength: 10000,
     default: '',
   },
   htmlContent: {
     type: String,
-    maxlength: 50000,
     default: '',
   },
   contentType: {

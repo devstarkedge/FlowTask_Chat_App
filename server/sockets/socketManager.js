@@ -105,7 +105,7 @@ export async function initializeSocket(httpServer, corsOptions) {
     cors: corsOptions,
     pingTimeout: 60000,
     pingInterval: 25000,
-    maxHttpBufferSize: 1e6, // 1MB
+    maxHttpBufferSize: 1e7, // 10MB
     transports: ['websocket', 'polling'],
     perMessageDeflate: {
       threshold: 1024, // Only compress messages > 1KB

@@ -5,8 +5,8 @@ const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId');
 export const saveDraftSchema = z.object({
   channelId: objectId,
   threadId: objectId.optional().nullable(),
-  content: z.string().max(10000).optional().default(''),
-  htmlContent: z.string().max(50000).optional().default(''),
+  content: z.string().optional().default(''),
+  htmlContent: z.string().optional().default(''),
   attachments: z.array(z.object({
     fileId: objectId.optional(),
     fileName: z.string().max(255).optional(),

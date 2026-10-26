@@ -33,12 +33,10 @@ const draftSchema = new Schema({
   content: {
     type: String,
     default: '',
-    maxlength: 10000,
   },
   htmlContent: {
     type: String,
     default: '',
-    maxlength: 50000,
   },
   attachments: [{
     fileId: { type: Schema.Types.ObjectId, ref: 'FileAsset' },

@@ -1,4 +1,4 @@
-const {withInfoPlist,withEntitlementsPlist,withXcodeProject,withDangerousMod,createRunOncePlugin}=require('expo/config-plugins');
+const {withInfoPlist,withEntitlementsPlist,withXcodeProject,withDangerousMod,withPodfile,createRunOncePlugin}=require('expo/config-plugins');
 const fs=require('node:fs');
 const path=require('node:path');
 const plist=require('@expo/plist');
@@ -11,15 +11,23 @@ function configureProject(project,config){
   const main=project.getFirstTarget().uuid;
   const target=existing?{uuid:existing[0],pbxNativeTarget:existing[1]}:project.addTarget(targetName,'app_extension',targetName,bundleId);
   if(!existing){
-  project.addBuildPhase([targetName+'/SampleHandler.swift'],'PBXSourcesBuildPhase','Sources',target.uuid);
-  const group=project.addPbxGroup([targetName+'/SampleHandler.swift'],targetName);
-  project.addToPbxGroup(group.uuid,project.getFirstProject().firstProject.mainGroup);
-  project.addBuildPhase([],'PBXFrameworksBuildPhase','Frameworks',target.uuid);
-  for(const framework of ['ReplayKit.framework','CoreImage.framework','CoreMedia.framework','ImageIO.framework'])project.addFramework(framework,{target:target.uuid,link:true});
-  project.addSourceFile('TaskChatHuddle.m',{target:main},project.getFirstProject().firstProject.mainGroup);
+    const group=project.addPbxGroup(['SampleHandler.swift'],targetName,targetName);
+    project.addToPbxGroup(group.uuid,project.getFirstProject().firstProject.mainGroup);
+    project.addBuildPhase(['SampleHandler.swift'],'PBXSourcesBuildPhase','Sources',target.uuid);
+    project.addBuildPhase([],'PBXFrameworksBuildPhase','Frameworks',target.uuid);
+    for(const framework of ['ReplayKit.framework','CoreImage.framework','CoreMedia.framework','ImageIO.framework'])project.addFramework(framework,{target:target.uuid,link:true});
+    project.addSourceFile('TaskChatHuddle.m',{target:main},project.getFirstProject().firstProject.mainGroup);
   }
-  for(const reference of Object.values(project.pbxFileReferenceSection())){
-    if(reference && typeof reference==='object')for(const key of Object.keys(reference))if(reference[key]===undefined)delete reference[key];
+  for(const section of [project.pbxFileReferenceSection(),project.hash.project.objects.PBXGroup]){
+    if(section && typeof section==='object'){
+      for(const obj of Object.values(section)){
+        if(obj && typeof obj==='object'){
+          for(const key of Object.keys(obj)){
+            if(obj[key]===undefined)delete obj[key];
+          }
+        }
+      }
+    }
   }
   const objects=project.hash.project.objects;
   const list=objects.XCConfigurationList[target.pbxNativeTarget.buildConfigurationList];
@@ -30,9 +38,16 @@ function configureProject(project,config){
     const parent=objects.XCBuildConfiguration[mainEntry.value].buildSettings;
     Object.assign(settings,{INFOPLIST_FILE:`${targetName}/${targetName}-Info.plist`,CODE_SIGN_ENTITLEMENTS:`${targetName}/${targetName}.entitlements`,
       PRODUCT_BUNDLE_IDENTIFIER:bundleId,SWIFT_VERSION:'5.0',CLANG_ENABLE_MODULES:'YES',APPLICATION_EXTENSION_API_ONLY:'YES',
+      ENABLE_USER_SCRIPT_SANDBOXING:'NO',
       IPHONEOS_DEPLOYMENT_TARGET:parent.IPHONEOS_DEPLOYMENT_TARGET || '15.1',TARGETED_DEVICE_FAMILY:'"1,2"',CODE_SIGN_STYLE:'Automatic',
       CURRENT_PROJECT_VERSION:config.ios.buildNumber || parent.CURRENT_PROJECT_VERSION || '1',MARKETING_VERSION:config.version || parent.MARKETING_VERSION || '1.0.0'});
     if(parent.DEVELOPMENT_TEAM || config.ios.appleTeamId)settings.DEVELOPMENT_TEAM=parent.DEVELOPMENT_TEAM || config.ios.appleTeamId;
+  }
+  const allConfigs=project.pbxXCBuildConfigurationSection();
+  for(const key in allConfigs){
+    if(allConfigs[key] && allConfigs[key].buildSettings){
+      allConfigs[key].buildSettings.ENABLE_USER_SCRIPT_SANDBOXING='NO';
+    }
   }
   return project;
 }
@@ -53,6 +68,31 @@ function withHuddleBroadcast(config){
     fs.writeFileSync(path.join(directory,targetName+'.entitlements'),plist.default.build({'com.apple.security.application-groups':[group]}));
     return mod;
   }]);
+  config=withPodfile(config,mod=>{
+    let contents=mod.modResults.contents;
+    const patch=`
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+      end
+    end
+    Dir.glob("#{installer.sandbox.target_support_files_dir}/**/*-frameworks.sh").each do |script|
+      text = File.read(script)
+      if text.include?('readlink "${source}"')
+        File.write(script, text.gsub('readlink "${source}"', 'readlink -f "${source}"'))
+      end
+    end
+`;
+    if(!contents.includes('ENABLE_USER_SCRIPT_SANDBOXING')){
+      if(contents.includes('post_install do |installer|')){
+        contents=contents.replace('post_install do |installer|',`post_install do |installer|${patch}`);
+      }else{
+        contents+=`\npost_install do |installer|\n${patch}\nend\n`;
+      }
+    }
+    mod.modResults.contents=contents;
+    return mod;
+  });
   return withXcodeProject(config,mod=>{configureProject(mod.modResults,mod);return mod;});
 }
 module.exports=createRunOncePlugin(withHuddleBroadcast,'taskchat-huddle-broadcast','1.0.0');

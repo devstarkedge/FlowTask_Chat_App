@@ -1,0 +1,54 @@
+# ─── Dependencies ───
+# EAS Build installs dependencies in the cloud using package.json & package-lock.json
+node_modules/
+
+# ─── Expo & Bundler Caches ───
+.expo/
+dist/
+dist_*/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# ─── Generated Native Folders ───
+# Managed workflow generates native android/ios folders on the build server via prebuild
+android/
+ios/
+
+# ─── Temporary / Verification Folders ───
+.verification-*/
+.verification-android-icon/
+output.txt
+
+# ─── Tests & Test Coverage ───
+**/__tests__/
+**/*.test.js
+**/*.test.jsx
+**/*.spec.js
+**/*.spec.jsx
+coverage/
+
+# ─── Environment & Secrets ───
+.env*.local
+.env.development
+.env.test
+
+# ─── Logs & Debugging ───
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# ─── OS & IDE Files ───
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ─── Unneeded Local Helpers & Documentation ───
+CALLING.md
+LICENSE
+resize.cjs
+resize-sharp.cjs
+verify-setup.js
+babel.config.old.cjs

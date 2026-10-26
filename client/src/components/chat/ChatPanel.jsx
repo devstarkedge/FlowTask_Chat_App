@@ -55,7 +55,9 @@ export default function ChatPanel({
       setShowConnectionBanner(false);
       return;
     }
-    const timer = setTimeout(() => setShowConnectionBanner(true), 1500);
+    // Debounce the connection banner: only show if status stays non-connected
+    // for more than 4s. This prevents brief reconnect blips from flashing a banner.
+    const timer = setTimeout(() => setShowConnectionBanner(true), 4000);
     return () => clearTimeout(timer);
   }, [connectionStatus]);
 

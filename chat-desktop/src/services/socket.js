@@ -1,6 +1,5 @@
 import { bindHuddleSocket } from './huddleSocketService'
 import { useHuddleStore } from '../stores/huddleStore'
-import { bindSocketRecovery } from './socketRecovery'
 import { authAPI } from './api'
 import { io } from 'socket.io-client'
 import { queryClient } from '../queries/queryClient'
@@ -21,12 +20,11 @@ import logger from '../utils/logger'
 import { handleChannelRemoved } from './channelEvents'
 import { handleUserProfileUpdated } from './userProfileEvents'
 import { useUserProfileStore } from '../stores/userProfileStore'
-import { showDesktopNotification } from './desktopService'
-import { notificationService } from '../notifications'
 
 let socket = null
-let socketRecovery = null
 let disposeHuddleSocket = null
+let _disconnectTime = 0   // timestamp when socket last disconnected
+const BRIEF_DISCONNECT_THRESHOLD_MS = 5000  // under 5s = brief blip, skip full cascade
 
 function getSocketUrl() {
   const explicit = import.meta.env.VITE_SOCKET_URL
@@ -115,7 +113,6 @@ const SOCKET_EVENTS = {
   ANNOUNCEMENT_UPDATED: 'announcement:updated',
 
   // Tasks
-  TASK_CREATED: 'task:created',
   TASK_DELETED: 'task:deleted',
   TASK_UPDATED: 'task:updated',
 
@@ -148,84 +145,7 @@ const SOCKET_EVENTS = {
   CUSTOM_GROUP_DELETED: 'customGroup:deleted',
 }
 
-// Centralized idempotent recovery guard
-let isRecoveryInProgress = false
-
-export function performConnectionRecovery(reason = 'unknown') {
-  if (isRecoveryInProgress) {
-    logger.log('[RECOVERY] already in progress, skipping', { reason })
-    return Promise.resolve()
-  }
-
-  isRecoveryInProgress = true
-  logger.log('[RECOVERY] started', { reason })
-
-  return new Promise((resolve) => {
-    try {
-      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
-      if (!workspaceId) {
-        isRecoveryInProgress = false
-        return resolve()
-      }
-
-      useAuthStore.getState().fetchChannelSyncStatus()
-      const channelStore = useChannelStore.getState()
-      channelStore.fetchChannels().then(() => {
-        const activeChannelId = channelStore.activeChannelId
-        if (activeChannelId) {
-          useChatStore.getState().fetchMessages(activeChannelId)
-        }
-        channelStore.fetchUnreads()
-        logger.log('[RECOVERY] completed successfully', { reason })
-        useChatStore.getState().setConnectionStatus('connected')
-        resolve()
-      }).catch((err) => {
-        logger.error('[RECOVERY] failed during data fetch:', err.message)
-        resolve()
-      }).finally(() => {
-        isRecoveryInProgress = false
-      })
-    } catch (err) {
-      logger.error('[RECOVERY] failed:', err.message)
-      isRecoveryInProgress = false
-      resolve()
-    }
-  })
-}
-
-let isNetworkListenersSetup = false
-
-export function setupNetworkListeners() {
-  if (isNetworkListenersSetup || typeof window === 'undefined') return
-  isNetworkListenersSetup = true
-
-  window.addEventListener('online', () => {
-    logger.log('[NETWORK] online event received')
-    if (socket?.connected) {
-      useChatStore.getState().setConnectionStatus('connected')
-      return
-    }
-    const status = useChatStore.getState().connectionStatus
-    if (status !== 'connected') {
-      useChatStore.getState().setConnectionStatus('connecting')
-      if (socket && !socket.connected) {
-        if (socketRecovery?.isRecovering || (socket.active && !socketRecovery?.isBlocked)) return socket
-        socket.auth = getSocketAuth()
-        socket.connect()
-      } else if (!socket) {
-        connectSocket()
-      }
-    }
-  })
-
-  window.addEventListener('offline', () => {
-    logger.log('[NETWORK] offline event received')
-    useChatStore.getState().setConnectionStatus('offline')
-  })
-}
-
 export function connectSocket() {
-  setupNetworkListeners()
   const { token, workspaceId } = getSocketAuth()
   if (!token || !workspaceId) return
   if (socket?.connected) return socket
@@ -242,65 +162,56 @@ export function connectSocket() {
 
   // Reuse existing disconnected instance instead of creating duplicate clients.
   if (socket && !socket.connected) {
-    if (socketRecovery?.isRecovering || (socket.active && !socketRecovery?.isBlocked)) return socket
     socket.auth = getSocketAuth()
-    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
-    if (isOnline) {
-      useChatStore.getState().setConnectionStatus('connecting')
-      socket.connect()
-    } else {
-      useChatStore.getState().setConnectionStatus('offline')
-    }
+    useChatStore.getState().setConnectionStatus('connecting')
+    socket.connect()
     return socket
   }
 
-  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
-  useChatStore.getState().setConnectionStatus(isOnline ? 'connecting' : 'offline')
+  useChatStore.getState().setConnectionStatus('connecting')
 
   socket = io(socketUrl, {
     auth: (cb) => cb(getSocketAuth()),
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 15,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
   })
 
+
+  disposeHuddleSocket?.()
   disposeHuddleSocket = bindHuddleSocket(socket, () => useWorkspaceStore.getState().activeWorkspaceId)
-  const recoverySocket = socket
-  socketRecovery = bindSocketRecovery(recoverySocket, {
-    getAuth: getSocketAuth,
-    refreshSession: () => authAPI.me(),
-    setStatus: status => useChatStore.getState().setConnectionStatus(status),
-    isCurrent: () => socket === recoverySocket,
-    log: (event, details) => (event === 'reconnect_attempt' ? logger.info : logger.warn)('[Socket] Recovery', { event, ...details }),
-  })
 
   socket.on('connect', () => {
-    logger.log('[SOCKET] Connected:', socket.id)
-    useChatStore.getState().setConnectionStatus('connected')
-
     useUserProfileStore.getState().clearProfiles()
     useWorkspaceStore.getState().fetchMembers()
-
     authAPI.me().then(({ data }) => {
       const currentUser = data.data.user || data.data
-      const existingUser = useAuthStore.getState().user
-      if (!existingUser || existingUser._id !== currentUser._id || existingUser.updatedAt !== currentUser.updatedAt) {
-        logger.log('[AUTH] user state updated on connect')
-        useAuthStore.setState({ user: currentUser })
-      }
-    }).catch((error) => logger.warn('[AUTH] Profile refresh on connect failed', { error: error.message }))
+      useAuthStore.setState({ user: currentUser })
+    }).catch((error) => logger.warn('Profile refresh on reconnect failed', { error: error.message }))
 
-    performConnectionRecovery('socket_connect')
+    logger.log('[Socket] Connected:', socket.id)
+    useChatStore.getState().setConnectionStatus('connected')
 
+    // Reconcile sidebar state against the server. Channel-room membership
+    // itself no longer needs a client-driven join loop here — the server
+    // joins every accessible channel room as part of its own connection
+    // handshake (see socketManager.js), off the same channel list it already
+    // computes for presence. Looping 'channel:join' per channel here was
+    // redundant and, at 100+ channels, caused a DB query storm (2 queries
+    // per channel) on every connect/reconnect.
     try {
+      useChannelStore.getState().fetchChannels()
+      useAuthStore.getState().fetchChannelSyncStatus()
+      
+      // Sync active conversation focus with the server upon connect
       const activeChannelId = useChannelStore.getState().activeChannelId
       if (activeChannelId && document.visibilityState === 'visible') {
         socket.emit('window:focus', { channelId: activeChannelId })
       }
     } catch (err) {
-      logger.error('[SOCKET] Failed to reconcile on connect:', err.message)
+      logger.error('[Socket] Failed to reconcile on connect:', err.message)
     }
   })
 
@@ -322,9 +233,104 @@ export function connectSocket() {
   })
 
   socket.on('disconnect', (reason) => {
-    logger.log('[SOCKET] Disconnected, reason:', reason)
-    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
-    useChatStore.getState().setConnectionStatus(socketRecovery?.isBlocked ? 'recovery_required' : socketRecovery?.isRecovering ? 'connecting' : isOnline ? 'disconnected' : 'offline')
+    logger.log('[Socket] Disconnected:', reason)
+    _disconnectTime = Date.now()
+    useChatStore.getState().setConnectionStatus('disconnected')
+  })
+
+  socket.on('reconnect_attempt', (attempt) => {
+    socket.auth = getSocketAuth()
+    logger.log('[Socket] Reconnecting... attempt', attempt)
+    useChatStore.getState().setConnectionStatus('connecting')
+  })
+
+  socket.on('reconnect', (attempt) => {
+    logger.log('[Socket] Reconnected after', attempt, 'attempts')
+    useChatStore.getState().setConnectionStatus('connected')
+
+    const disconnectDuration = _disconnectTime > 0
+      ? Date.now() - _disconnectTime
+      : Infinity
+
+    // Channel-room membership doesn't need client action here — a Socket.IO
+    // 'reconnect' opens a brand-new underlying connection, so the server's
+    // connection handler runs again and re-joins every accessible channel
+    // room itself (see socketManager.js). Re-emitting 'channel:join' per
+    // channel from the client was pure duplicate work, and at 100+ channels
+    // it doubled the DB-query storm this same reconnect already causes
+    // server-side.
+    try {
+      const activeChannelId = useChannelStore.getState().activeChannelId
+      if (activeChannelId && document.visibilityState === 'visible') {
+        // Re-sync active conversation focus with the server upon reconnect
+        socket.emit('window:focus', { channelId: activeChannelId })
+      }
+    } catch (err) {
+      logger.error('[Socket] Failed to resync focus after reconnect:', err.message)
+    }
+
+    // ── Brief disconnect (< 5s): skip full cascade ──
+    // The socket already rejoined rooms server-side. Real-time events will
+    // fill any tiny gaps. No need to refetch channels, messages, unreads, etc.
+    if (disconnectDuration < BRIEF_DISCONNECT_THRESHOLD_MS) {
+      logger.log('[Socket] Brief disconnect — skipping full re-sync', { disconnectDuration })
+      return
+    }
+
+    // ── Long disconnect: full re-sync to catch missed data ──
+    logger.log('[Socket] Long disconnect — running full re-sync', { disconnectDuration })
+    try {
+      useAuthStore.getState().fetchChannelSyncStatus()
+      const channelStore = useChannelStore.getState()
+      channelStore.fetchChannels().then(() => {
+        const activeChannelId = channelStore.activeChannelId
+        if (activeChannelId) {
+          useChatStore.getState().fetchMessages(activeChannelId)
+        }
+        channelStore.fetchUnreads()
+      })
+    } catch (err) {
+      logger.error('[Socket] Failed to re-sync after reconnect:', err.message)
+    }
+  })
+
+  socket.on('auth:expired', async () => {
+    logger.warn('[Socket] Server reported auth expired, attempting token sync')
+    try {
+      const { data } = await authAPI.sync()
+      if (data?.data) {
+        const fresh = getSocketAuth()
+        socket.auth = fresh
+        socket.emit('auth:refresh', { token: fresh.token })
+      }
+    } catch (e) {
+      logger.error('[Socket] auth:expired recovery failed:', e.message)
+    }
+  })
+
+  socket.on('connect_error', (err) => {
+    const freshAuth = getSocketAuth()
+    socket.auth = freshAuth
+
+    logger.error('[Socket] Connection error:', err.message)
+
+    if (!freshAuth.token || !freshAuth.workspaceId) {
+      logger.warn('[Socket] Missing token/workspace for socket auth, disconnecting')
+      socket.disconnect()
+      useChatStore.getState().setConnectionStatus('disconnected')
+      return
+    }
+
+    // If auth failed (often due stale token), retry with latest auth payload.
+    if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
+      logger.warn('[Socket] Auth error detected, retrying with fresh auth context')
+      useChatStore.getState().setConnectionStatus('connecting')
+      setTimeout(() => {
+        if (socket && !socket.connected) {
+          socket.connect()
+        }
+      }, 600)
+    }
   })
 
   // ─── Message Events ──────────────────────────────────────────────────
@@ -373,9 +379,6 @@ export function connectSocket() {
     // when user is actively viewing the conversation.
     unreadManager.handleMessageReceived(message)
     useChannelStore.getState().handleNewMessage(message)
-
-    // ── Desktop Notifications ──────────────────────────────────────────────
-    notificationService.processEvent(SOCKET_EVENTS.MESSAGE_CREATE, message)
   })
 
   // ─── Thread Reply Events ──────────────────────────────────────────────
@@ -398,7 +401,6 @@ export function connectSocket() {
         useChatStore.getState().incrementReplyCount(resolvedRootId, message.channelId)
       }
     }
-    notificationService.processEvent(SOCKET_EVENTS.THREAD_REPLY, { message, rootMessageId })
   })
 
   // Thread stats update — carries populated participant data for replier avatars
@@ -487,6 +489,7 @@ export function connectSocket() {
   })
 
   socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, handleChannelRemoved)
+  socket.on(SOCKET_EVENTS.CHANNEL_DELETED, handleChannelRemoved)
 
   socket.on(SOCKET_EVENTS.CHANNEL_UPDATED, ({ channelId, updates }) => {
     const store = useChannelStore.getState()
@@ -741,19 +744,34 @@ export function connectSocket() {
   // ─── Notification Events ────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
-    logger.log('[Desktop][Activity] socket received', notification)
-    logger.log('[Desktop][Activity] activity ID', notification?._id || notification?.id || notification?.activityId)
 
-    // Update Activity store (useNotificationStore) so Activity UI updates in real-time
-    useNotificationStore.getState().addNotification(notification)
+    // Suppress notification if user is actively viewing the channel, EXCEPT for critical system notifications
+    const activeChannelId = useChannelStore.getState().activeChannelId
+    const notifChannelId = notification.channelId?._id || notification.channelId || notification.conversationId
+    const isCriticalNotification = ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) || notification.priority === 'high'
 
-    // Process native desktop OS notifications / sounds
-    const processed = notificationService.processEvent(SOCKET_EVENTS.NOTIFICATION, notification)
-
-    // Keep legacy in-memory store for toast/badge
-    if (processed) {
-      useChatStore.getState().addNotification(notification)
+    // Drop notification if channel/user is muted
+    const store = useNotificationStore.getState();
+    const channelPrefs = store.preferences?.channels?.[notifChannelId] || store.preferences?.channels?.[String(notifChannelId)];
+    const isMuted = notifChannelId && (channelPrefs?.muted || channelPrefs?.paused);
+    if (isMuted && !isCriticalNotification) {
+      return // Suppress notification completely
     }
+    
+    if (
+      !isCriticalNotification &&
+      notifChannelId &&
+      activeChannelId &&
+      String(notifChannelId) === String(activeChannelId) &&
+      document.hasFocus()
+    ) {
+      return
+    }
+    
+    // Persist to notification store
+    useNotificationStore.getState().addNotification(notification)
+    // Also keep legacy in-memory notification for toast/badge
+    useChatStore.getState().addNotification(notification)
   })
 
   // ─── Multi-Device Notification Sync ──────────────────────────────────
@@ -863,22 +881,12 @@ export function connectSocket() {
   })
 
   // ─── Task Events ─────────────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.TASK_CREATED, (payload) => {
-    notificationService.processEvent(SOCKET_EVENTS.TASK_CREATED, payload)
-  })
-
-  socket.on(SOCKET_EVENTS.TASK_UPDATED, (payload) => {
-    notificationService.processEvent(SOCKET_EVENTS.TASK_UPDATED, payload)
-  })
-
-  socket.on(SOCKET_EVENTS.TASK_DELETED, (payload) => {
-    const { taskId, cardId, channelId, workspaceId } = payload || {}
+  socket.on(SOCKET_EVENTS.TASK_DELETED, ({ taskId, cardId, channelId, workspaceId }) => {
     const id = taskId || cardId
     if (!id) return
     const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
     if (workspaceId && workspaceId !== activeWsId) return
     useChatStore.getState().handleTaskDeleted?.(id, channelId)
-    notificationService.processEvent(SOCKET_EVENTS.TASK_DELETED, payload)
     logger.log('[Socket] Task deleted:', id)
   })
 
@@ -915,8 +923,6 @@ export function disconnectSocket() {
   disposeHuddleSocket?.()
   disposeHuddleSocket = null
   useHuddleStore.getState().reset()
-  socketRecovery?.dispose()
-  socketRecovery = null
   if (socket) {
     socket.disconnect()
     socket = null
@@ -1011,6 +1017,16 @@ export function leaveChannel(channelId) {
 
 export function emitPresenceUpdate(status) {
   socket?.emit('presence:update', { status })
+}
+
+if (typeof window !== 'undefined' && !window.__socketOnlineHandlerBound) {
+  window.__socketOnlineHandlerBound = true
+  window.addEventListener('online', () => {
+    logger.log('[Socket] Network back online, ensuring connection')
+    if (socket && !socket.connected) {
+      socket.connect()
+    }
+  })
 }
 
 export function getSocket() {

@@ -55,7 +55,9 @@ export default function ChatPanel({
       setShowConnectionBanner(false);
       return;
     }
-    const timer = setTimeout(() => setShowConnectionBanner(true), 1500);
+    // Debounce the connection banner: only show if status stays non-connected
+    // for more than 4s. This prevents brief reconnect blips from flashing a banner.
+    const timer = setTimeout(() => setShowConnectionBanner(true), 4000);
     return () => clearTimeout(timer);
   }, [connectionStatus]);
 
@@ -302,39 +304,19 @@ export default function ChatPanel({
       {showConnectionBanner && connectionStatus === "connecting" && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: "var(--warning-color, #f59e0b)", color: "#000" }}
+          style={{ background: "var(--warning-color)", color: "var(--text-inverse)" }}
         >
-          <Loader size={12} className="animate-spin" />
+          <Loader size={12} />
           Reconnecting…
         </div>
       )}
-      {showConnectionBanner && (connectionStatus === "disconnected" || connectionStatus === "offline") && (
+      {showConnectionBanner && connectionStatus === "disconnected" && (
         <div
           className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: "var(--danger-color, #ef4444)", color: "#fff" }}
+          style={{ background: "var(--danger-color)", color: "var(--text-white)" }}
         >
           <WifiOff size={12} />
           Connection lost. Trying to reconnect…
-        </div>
-      )}
-      {connectionStatus === "recovery_required" && (
-        <div
-          className="flex items-center justify-between px-4 py-2 text-xs font-medium animate-fade-in shadow-sm"
-          style={{ background: "#f59e0b", color: "#000" }}
-        >
-          <div className="flex items-center gap-2">
-            <WifiOff size={14} />
-            <span className="font-semibold">Unable to reconnect. Refresh to try again.</span>
-          </div>
-          <button
-            onClick={() => {
-              console.warn('[REFRESH] window.location.reload triggered by manual recovery button click');
-              window.location.reload();
-            }}
-            className="px-3 py-1 rounded bg-black text-white hover:bg-gray-800 text-xs font-semibold cursor-pointer transition-colors"
-          >
-            Refresh
-          </button>
         </div>
       )}
 

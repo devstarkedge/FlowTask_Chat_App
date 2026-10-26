@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Channel from './Channel.model.js';
 import ChannelMember from './ChannelMember.model.js';
+import ChannelPin from './ChannelPin.model.js';
 import { CHANNEL_TYPES, CHANNEL_VISIBILITY } from '../../config/constants.js';
 import { injectWorkspaceFilter } from '../../middleware/workspaceContext.js';
 import cache from '../../services/cache.service.js';
@@ -392,6 +393,47 @@ class ChannelRepository {
    * @param {Date} timestamp
    * @returns {Promise<void>}
    */
+  /**
+   * Delete a custom channel and clean up memberships and pin records.
+   * @param {string} channelId
+   * @param {string} workspaceId
+   * @returns {Promise<boolean>}
+   */
+  async deleteChannel(channelId, workspaceId) {
+    let session = null;
+    let useTransaction = true;
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+    } catch {
+      useTransaction = false;
+    }
+
+    try {
+      const opts = useTransaction && session ? { session } : {};
+      await Channel.deleteOne({ _id: channelId, workspaceId }, opts);
+      await ChannelMember.deleteMany({ channelId }, opts);
+      await ChannelPin.deleteMany({ channelId }, opts);
+
+      if (useTransaction && session) {
+        await session.commitTransaction();
+      }
+    } catch (err) {
+      if (useTransaction && session) {
+        await session.abortTransaction();
+      }
+      throw err;
+    } finally {
+      if (session) {
+        session.endSession();
+      }
+    }
+
+    // Invalidate caches
+    await cache.delPattern('channels:*');
+    return true;
+  }
+
   async updateLastMessage(channelId, preview, timestamp, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: channelId }, workspaceId);
     await Channel.updateOne(

@@ -8,6 +8,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { messageAPI } from "../../services/api";
 import logger from "../../utils/logger";
+import MessageContentResolver from "./MessageContentResolver";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -267,20 +268,22 @@ export default function MessageDetailsPanel({ message, onClose, onForward }) {
                 </span>
               </div>
             )}
-            {looksLikeHtml ? (
-              <div
-                className="rich-message-content"
-                style={{ fontSize: 13, color: "var(--text-primary, #ddd)", lineHeight: 1.5 }}
-                dangerouslySetInnerHTML={{ __html: contentPreview }}
-              />
-            ) : (
-              <div style={{
-                fontSize: 13, color: "var(--text-primary, #ddd)",
-                whiteSpace: "pre-wrap", lineHeight: 1.5, wordBreak: "break-word",
-              }}>
-                {contentPreview}
-              </div>
-            )}
+            <MessageContentResolver rawContent={msg.content} message={msg}>
+              {looksLikeHtml ? (
+                <div
+                  className="rich-message-content"
+                  style={{ fontSize: 13, color: "var(--text-primary, #ddd)", lineHeight: 1.5 }}
+                  dangerouslySetInnerHTML={{ __html: contentPreview }}
+                />
+              ) : (
+                <div style={{
+                  fontSize: 13, color: "var(--text-primary, #ddd)",
+                  whiteSpace: "pre-wrap", lineHeight: 1.5, wordBreak: "break-word",
+                }}>
+                  {contentPreview}
+                </div>
+              )}
+            </MessageContentResolver>
           </div>
 
           {/* Image Preview (for image messages) */}

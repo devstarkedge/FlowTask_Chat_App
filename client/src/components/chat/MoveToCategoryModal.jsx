@@ -4,7 +4,7 @@ import { X, Search, Check, FolderInput, Hash, Lock, Volume2 } from 'lucide-react
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api from "../../services/api";
-import { getDepartmentChannels, isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { getDepartmentChannels, isChatAppChannel } from "../../utils/channelOrigin";
 import { categoryAssignmentId, getCustomCategoryOwners } from "../../utils/categoryAssignments";
 
 const STYLES = `
@@ -81,7 +81,7 @@ export default function MoveToCategoryModal({ initialCategory, onClose }) {
   const nonDmChannels = useMemo(() => {
     const targetId = categoryAssignmentId(initialCategory);
     return channels.filter(c => {
-      if (!isPersonalCategoryChannel(c)) return false;
+      if (!isChatAppChannel(c)) return false;
       return customOwners.get(categoryAssignmentId(c._id)) !== targetId;
     });
   }, [channels, customOwners, initialCategory]);

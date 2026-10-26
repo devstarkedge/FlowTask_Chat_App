@@ -19,13 +19,18 @@ export function getAppBaseUrl() {
     return window.location.origin;
   }
 
-  // 3. Fallback to backend URL if running in Electron (file://) and no explicit APP_URL is set
+  // 3. Fallback to production app URL if backend is on Render
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  if (backendUrl && (backendUrl.includes("chat-app-api-cyyl.onrender.com") || backendUrl.includes("onrender.com"))) {
+    return "https://flowtask-chat-app.onrender.com";
+  }
+
+  // 4. Fallback to backend URL if running in Electron (file://) and no explicit APP_URL is set
   if (backendUrl && /^https?:\/\//i.test(backendUrl)) {
     return backendUrl.replace(/\/+$/, "");
   }
 
-  // 4. Final fallback for local development if everything else fails
+  // 5. Final fallback for local development if everything else fails
   return "http://localhost:5173";
 }
 

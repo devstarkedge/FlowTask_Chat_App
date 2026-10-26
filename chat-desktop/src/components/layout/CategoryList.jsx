@@ -4,7 +4,7 @@ import { Folder, ListPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import SidebarSection from "./sidebar/SidebarSection";
 import SidebarItem from "./sidebar/SidebarItem";
 import ChannelListItem from "./sidebar/ChannelListItem";
-import { getDepartmentChannels, isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { getDepartmentChannels, isPersonalCategoryChannel, isChatAppChannel } from "../../utils/channelOrigin";
 import { categoryAssignmentId, getCustomCategoryOwners } from "../../utils/categoryAssignments";
 
 
@@ -188,7 +188,7 @@ export default function CategoryList({
         } else {
           const categoryId = categoryAssignmentId(category._id);
           categoryChannels = channels.filter((channel) => (
-            isPersonalCategoryChannel(channel)
+            isChatAppChannel(channel)
             && customCategoryOwners.get(categoryAssignmentId(channel._id)) === categoryId
           ));
         }

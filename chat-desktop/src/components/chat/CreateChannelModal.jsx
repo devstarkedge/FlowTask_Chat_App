@@ -868,7 +868,7 @@ export default function CreateChannelModal({ onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const trimmed = name.trim();
+    const trimmed = (slugPreview || name.trim()).toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/[\s_]+/g, "-").replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
     if (!trimmed || trimmed.length < 2) {
       toast.error("Channel name must be at least 2 characters");
       return;

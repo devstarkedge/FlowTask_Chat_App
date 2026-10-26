@@ -39,6 +39,7 @@ async function cachedGet(prefix, url, params) {
 }
 
 export const directoriesAPI = {
+  invalidateChannels: () => invalidatePrefix('channels'),
   // People tab (cached)
   getUsers: (params) => cachedGet('users', '/directories/users', params),
 

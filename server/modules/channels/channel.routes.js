@@ -6,6 +6,7 @@ import {
   createChannel,
   updateChannel,
   archiveChannel,
+  deleteChannel,
   createDM,
   createSelfDM,
   addMember,
@@ -78,6 +79,7 @@ router.post(
   requirePermission("channel:archive"),
   archiveChannel,
 );
+router.delete("/:id", requireChannelAccess(), deleteChannel);
 router.post(
   "/:id/members",
   addMember,

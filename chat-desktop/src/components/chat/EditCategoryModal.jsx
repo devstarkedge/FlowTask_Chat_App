@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useChannelStore } from '../../stores/channelStore';
 import { categoryAPI } from '../../services/api';
 import Loader from '../shared/Loader';
-import { isPersonalCategoryChannel } from '../../utils/channelOrigin';
+import { isPersonalCategoryChannel, isChatAppChannel } from '../../utils/channelOrigin';
 
 const STYLES = `
   .ecm-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
@@ -107,7 +107,7 @@ export default function EditCategoryModal({ category, onClose }) {
     .filter((channel) => channel.type !== 'dm' && channel.type !== 'self' && !channel.isArchived), [channels]);
 
   const accessibleChannels = useMemo(() => channels
-    .filter(isPersonalCategoryChannel)
+    .filter(isChatAppChannel)
     .sort((a, b) => (a.name || '').localeCompare(b.name || '')), [channels]);
 
   const usedDepartmentIds = useMemo(() => new Set(categories
@@ -130,7 +130,7 @@ export default function EditCategoryModal({ category, onClose }) {
   useEffect(() => {
     if (category.type !== 'department' || categoryType !== 'custom' || seededDepartmentChannels.current) return;
     const ids = channelsForDepartment(departmentChannels, category.departmentId)
-      .filter(isPersonalCategoryChannel)
+      .filter(isChatAppChannel)
       .map((channel) => idOf(channel._id));
     setSelectedChannelIds(ids);
     seededDepartmentChannels.current = true;
@@ -147,7 +147,7 @@ export default function EditCategoryModal({ category, onClose }) {
     }
     if (nextType === 'custom' && category.type === 'department') {
       const ids = channelsForDepartment(departmentChannels, category.departmentId)
-      .filter(isPersonalCategoryChannel)
+      .filter(isChatAppChannel)
       .map((channel) => idOf(channel._id));
       setSelectedChannelIds(ids);
       seededDepartmentChannels.current = true;
@@ -263,7 +263,7 @@ export default function EditCategoryModal({ category, onClose }) {
                 </div>
                 <div className="ecm-channel-list" aria-label="Accessible channels">
                   {visibleChannels.length === 0 ? (
-                    <div className="ecm-empty">No accessible channels are available.</div>
+                    <div className="ecm-empty">No custom channels are available.</div>
                   ) : visibleChannels.map((channel) => {
                     const channelId = idOf(channel._id);
                     const selected = selectedChannelIds.includes(channelId);
@@ -276,7 +276,7 @@ export default function EditCategoryModal({ category, onClose }) {
                     );
                   })}
                 </div>
-                <div className="ecm-note">When changing a Department category to Custom, its currently visible department channels are selected automatically and can be adjusted here.</div>
+                <div className="ecm-note">Only custom channels created in the chat app (not synced from FlowTask) can be organized here.</div>
               </div>
             )}
           </div>

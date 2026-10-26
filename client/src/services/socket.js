@@ -174,7 +174,7 @@ export function connectSocket() {
     auth: (cb) => cb(getSocketAuth()),
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
   })
@@ -291,6 +291,20 @@ export function connectSocket() {
       })
     } catch (err) {
       logger.error('[Socket] Failed to re-sync after reconnect:', err.message)
+    }
+  })
+
+  socket.on('auth:expired', async () => {
+    logger.warn('[Socket] Server reported auth expired, attempting token sync')
+    try {
+      const { data } = await authAPI.sync()
+      if (data?.data) {
+        const fresh = getSocketAuth()
+        socket.auth = fresh
+        socket.emit('auth:refresh', { token: fresh.token })
+      }
+    } catch (e) {
+      logger.error('[Socket] auth:expired recovery failed:', e.message)
     }
   })
 
@@ -475,6 +489,7 @@ export function connectSocket() {
   })
 
   socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, handleChannelRemoved)
+  socket.on(SOCKET_EVENTS.CHANNEL_DELETED, handleChannelRemoved)
 
   socket.on(SOCKET_EVENTS.CHANNEL_UPDATED, ({ channelId, updates }) => {
     const store = useChannelStore.getState()
@@ -1002,6 +1017,16 @@ export function leaveChannel(channelId) {
 
 export function emitPresenceUpdate(status) {
   socket?.emit('presence:update', { status })
+}
+
+if (typeof window !== 'undefined' && !window.__socketOnlineHandlerBound) {
+  window.__socketOnlineHandlerBound = true
+  window.addEventListener('online', () => {
+    logger.log('[Socket] Network back online, ensuring connection')
+    if (socket && !socket.connected) {
+      socket.connect()
+    }
+  })
 }
 
 export function getSocket() {

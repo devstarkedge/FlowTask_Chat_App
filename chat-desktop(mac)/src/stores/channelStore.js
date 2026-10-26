@@ -7,8 +7,6 @@ import { useAuthStore } from './authStore'
 import { getSocket } from '../services/socket'
 import { getCustomCategoryOwners, moveChannelsToCategory, normalizeCategoryAssignments } from '../utils/categoryAssignments'
 
-const channelFetches = new Map()
-
 /**
  * Extract a plain string ID from any id-like value:
  *   - Mongoose ObjectId instances → .toString()
@@ -77,36 +75,29 @@ export const useChannelStore = create(
 
   fetchChannels: async (overrideWorkspaceId = null) => {
     // Dynamic import avoids circular dependency with workspaceStore
-    const { useWorkspaceStore } = await import('./workspaceStore')
-    const workspaceId = overrideWorkspaceId || useWorkspaceStore.getState().activeWorkspaceId
+    let workspaceId = overrideWorkspaceId
+    if (!workspaceId) {
+      const { useWorkspaceStore } = await import('./workspaceStore')
+      workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    }
     if (!workspaceId) return
-    const userId = useAuthStore.getState().user?._id
-    const key = `${userId}:${workspaceId}`
-    if (channelFetches.has(key)) return channelFetches.get(key)
-    const isCurrent = () => workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
-      userId === useAuthStore.getState().user?._id
     set({ isLoading: true })
-    const request = (async () => {
-      try {
-        const options = { headers: { 'X-Workspace-Id': workspaceId } }
-        const { data } = await channelAPI.list(options)
-        if (!isCurrent()) return
-        // Normalise every channel so _id is always a plain string
-        const channels = (data.data.channels || []).map(normalizeChannel)
-        get().setChannels(channels)
-        set({ isLoading: false })
-        get().fetchUnreads()
-        get().fetchCategories()
-        get().fetchDepartments()
-      } catch (error) {
-        if (isCurrent()) set({ isLoading: false })
-        logger.error('Failed to fetch channels:', error)
-      } finally {
-        channelFetches.delete(key)
-      }
-    })()
-    channelFetches.set(key, request)
-    return request
+    try {
+      const options = overrideWorkspaceId
+        ? { headers: { 'X-Workspace-Id': overrideWorkspaceId } }
+        : undefined
+      const { data } = await channelAPI.list(options)
+      // Normalise every channel so _id is always a plain string
+      const channels = (data.data.channels || []).map(normalizeChannel)
+      get().setChannels(channels)
+      set({ isLoading: false })
+      get().fetchUnreads()
+      get().fetchCategories()
+      get().fetchDepartments()
+    } catch (error) {
+      set({ isLoading: false })
+      logger.error('Failed to fetch channels:', error)
+    }
   },
   
   fetchCategories: async () => {
@@ -472,6 +463,23 @@ export const useChannelStore = create(
     }
   },
 
+  deleteChannel: async (channelId) => {
+    try {
+      await channelAPI.delete(channelId)
+      get().removeChannel(channelId)
+      try {
+        const { useChatStore } = await import('./chatStore')
+        const chat = useChatStore.getState()
+        const threadChannelId = chat.activeThread?.channelId?._id || chat.activeThread?.channelId
+        if (String(threadChannelId) === String(channelId)) chat.closeThread()
+      } catch {}
+      toast.success('Channel deleted')
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to delete channel')
+      throw error
+    }
+  },
+
   archiveChannel: async (channelId) => {
     try {
       await channelAPI.archive(channelId)
@@ -496,7 +504,7 @@ export const useChannelStore = create(
       get().fetchMembers(channelId)
       toast.success('Member added')
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to add member')
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to add member')
       throw error
     }
   },
@@ -507,7 +515,7 @@ export const useChannelStore = create(
       get().fetchMembers(channelId)
       toast.success('Member removed')
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to remove member')
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to remove member')
       throw error
     }
   },

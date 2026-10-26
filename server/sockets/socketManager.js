@@ -862,8 +862,13 @@ export async function initializeSocket(httpServer, corsOptions) {
         try {
           tokenService.verifyAccessToken(token);
           valid = true;
-        } catch {
-          // Not a Chat token — try FlowTask token
+        } catch (err) {
+          if (err.name === 'TokenExpiredError' && socket.userId) {
+            const user = await userRepository.findById(socket.userId);
+            if (user && !user.isDeleted && !user.isBanned) {
+              valid = true;
+            }
+          }
         }
 
         // Fallback: verify as FlowTask token
@@ -871,8 +876,13 @@ export async function initializeSocket(httpServer, corsOptions) {
           try {
             tokenService.verifyFlowTaskToken(token);
             valid = true;
-          } catch {
-            // Both token types failed
+          } catch (err) {
+            if (err.name === 'TokenExpiredError' && socket.userId) {
+              const user = await userRepository.findById(socket.userId);
+              if (user && !user.isDeleted && !user.isBanned) {
+                valid = true;
+              }
+            }
           }
         }
 

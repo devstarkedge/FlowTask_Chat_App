@@ -4,6 +4,7 @@ import ChannelMember from "./ChannelMember.model.js";
 import PendingChannelParticipant from "./PendingChannelParticipant.model.js";
 import ChannelPin from "./ChannelPin.model.js";
 import channelRepository from "./channel.repository.js";
+import auditLogService from "../../services/auditLog.service.js";
 import { isRecipientChannel } from "./recipientChannelAccess.js";
 import favoritesService from "../favorites/favorites.service.js";
 import userRepository from "../users/user.repository.js";
@@ -568,6 +569,8 @@ class ChannelService {
       slug = appendCollisionSuffix(slug, Date.now().toString(36));
     }
 
+    const channelName = slugify(data.name) || data.name;
+
     const members = [{ userId: creatorId, role: CHANNEL_MEMBER_ROLES.OWNER }];
 
     // Add initial members if provided (for private channels or explicit invites)
@@ -585,7 +588,7 @@ class ChannelService {
       : CHANNEL_TYPES.PRIVATE;
 
     const channel = await channelRepository.create({
-      name: data.name,
+      name: channelName,
       slug,
       type: channelType,
       recipientOnly: data.recipientOnly === true,
@@ -1411,12 +1414,28 @@ class ChannelService {
       null,
     );
 
+    // Handle already-existing members gracefully without duplicate records
+    const isAlreadyMember = channel.hasMember(chatUserId) || (await ChannelMember.isMember(channelId, chatUserId));
+    if (isAlreadyMember) {
+      return channel;
+    }
+
     // Always go through repository to keep ChannelMember and embedded members in sync.
     const updated = await channelRepository.addMember(
       channelId,
       chatUserId,
       role,
       effectiveWsId,
+    );
+
+    const userToAdd = await userRepository.findById(chatUserId);
+    auditLogService.logMemberAdded(
+      channelId,
+      channel.name,
+      chatUserId,
+      userToAdd?.name || 'Member',
+      effectiveWsId,
+      'manual',
     );
 
     // Send full channel payload so frontend can render icons, categorize, etc.
@@ -2096,7 +2115,7 @@ class ChannelService {
     });
     if (!channel) throw new NotFoundError("Channel not found");
 
-    if (!channel.hasMember(userId)) return channel;
+    if (!channel.hasMember(userId) && !(await ChannelMember.isMember(channelId, userId))) return channel;
 
     // Prevent removing the last owner unless it's a system action
     if (channel.getMemberRole(userId) === CHANNEL_MEMBER_ROLES.OWNER) {
@@ -2114,17 +2133,36 @@ class ChannelService {
       channel.workspaceId,
     );
 
+    const effectiveWsId = channel.workspaceId?.toString();
+    leaveChannelRoom(userId.toString(), channelId.toString(), effectiveWsId);
+
     emitToUser(
       userId.toString(),
       SOCKET_EVENTS.CHANNEL_REMOVED,
-      { channelId },
-      channel.workspaceId?.toString(),
+      { channelId: channelId.toString(), workspaceId: effectiveWsId },
+      effectiveWsId,
     );
     emitToChannel(
       channelId.toString(),
       SOCKET_EVENTS.MEMBER_LEFT,
-      { channelId, userId },
-      channel.workspaceId?.toString(),
+      { channelId: channelId.toString(), userId: userId.toString() },
+      effectiveWsId,
+    );
+    emitToChannel(
+      channelId.toString(),
+      SOCKET_EVENTS.CHANNEL_MEMBERS_UPDATED,
+      { channelId: channelId.toString(), memberCount: updated.memberCount },
+      effectiveWsId,
+    );
+
+    const removedUser = await userRepository.findById(userId);
+    auditLogService.logMemberRemoved(
+      channelId,
+      channel.name,
+      userId,
+      removedUser?.name || 'Member',
+      effectiveWsId,
+      'manual',
     );
 
     // Persist channel remove notification
@@ -2197,7 +2235,9 @@ class ChannelService {
     const allowed = {};
     if (channel.recipientOnly && updates.name !== undefined) allowed.nameFromMembers = false;
     if (updates.name !== undefined) {
-      allowed.name = sanitizeHtml(updates.name);
+      allowed.name = isCustomChannel(channel)
+        ? (slugify(updates.name) || sanitizeHtml(updates.name))
+        : sanitizeHtml(updates.name);
     }
     if (updates.slug !== undefined) {
       allowed.slug = updates.slug;
@@ -2311,6 +2351,128 @@ class ChannelService {
 
     logger.info("Channel archived", { channelId, archivedBy: userId });
     return updated;
+  }
+
+  /**
+   * Determine if a channel is a custom workspace channel (not sourced from FlowTask or system).
+   */
+  isCustomChannel(channel) {
+    if (!channel) return false;
+    if (channel.systemManaged) return false;
+    if (channel.flowTaskRef && (channel.flowTaskRef.entityType || channel.flowTaskRef.entityId)) return false;
+    if (['project', 'department', 'team', 'system'].includes(channel.type)) return false;
+    if (channel.type === 'dm' || channel.type === 'self' || channel.recipientOnly) return false;
+    if (channel.slug && typeof channel.slug === 'string' && channel.slug.startsWith('flowtask-')) return false;
+    return true;
+  }
+
+  /**
+   * Delete a custom workspace channel.
+   * Removes channel, memberships, pins, related records, and notifies former members.
+   */
+  async deleteChannel(channelId, actorId, actorName, workspaceId) {
+    const channel = await channelRepository.findById(channelId, { workspaceId });
+    if (!channel) {
+      throw new NotFoundError("Channel not found");
+    }
+
+    if (!this.isCustomChannel(channel)) {
+      throw new ForbiddenError(
+        "Only custom workspace channels can be deleted. FlowTask-managed and system channels cannot be deleted.",
+      );
+    }
+
+    const effectiveWsId = channel.workspaceId?.toString() || workspaceId?.toString();
+
+    // Collect all former member user IDs before deleting memberships
+    const memberIds = await ChannelMember.getMemberIds(channelId);
+    const embeddedMemberIds = (channel.members || []).map((m) => m.userId.toString());
+    const allFormerMemberIds = [...new Set([...memberIds, ...embeddedMemberIds])];
+
+    // Clean up channel document, memberships, and pins in repository
+    await channelRepository.deleteChannel(channelId, effectiveWsId);
+
+    // Clean up related associations across data models
+    try {
+      const [
+        { default: Category },
+        { default: UserFavorite },
+        { default: Draft },
+        { default: Message },
+        { default: Thread },
+        { default: MessageReaction },
+        { default: SavedMessage },
+        { default: ScheduledMessage },
+        { default: ReadReceipt },
+        { default: Notification },
+      ] = await Promise.all([
+        import("../categories/Category.model.js"),
+        import("../favorites/UserFavorite.model.js"),
+        import("../drafts/Draft.model.js"),
+        import("../messages/Message.model.js"),
+        import("../threads/Thread.model.js"),
+        import("../messages/MessageReaction.model.js"),
+        import("../messages/SavedMessage.model.js"),
+        import("../messages/ScheduledMessage.model.js"),
+        import("../readReceipts/readReceipt.model.js"),
+        import("../notifications/Notification.model.js"),
+      ]);
+
+      await Promise.allSettled([
+        Category.updateMany({ workspaceId: effectiveWsId, channelIds: channelId }, { $pull: { channelIds: channelId } }),
+        UserFavorite.deleteMany({ workspaceId: effectiveWsId, targetId: channelId }),
+        PendingChannelParticipant.deleteMany({ channelId }),
+        Draft.deleteMany({ channelId, workspaceId: effectiveWsId }),
+        Message.deleteMany({ channelId, workspaceId: effectiveWsId }),
+        Thread.deleteMany({ channelId, workspaceId: effectiveWsId }),
+        MessageReaction.deleteMany({ channelId }),
+        SavedMessage.deleteMany({ channelId }),
+        ScheduledMessage.deleteMany({ channelId, workspaceId: effectiveWsId }),
+        ReadReceipt.deleteMany({ channelId, workspaceId: effectiveWsId }),
+        Notification.deleteMany({ channelId, workspaceId: effectiveWsId }),
+      ]);
+    } catch (cleanupErr) {
+      logger.warn("Secondary channel cleanup error (non-fatal)", { channelId, error: cleanupErr.message });
+    }
+
+    // Notify all former members so views update immediately
+    for (const memberId of allFormerMemberIds) {
+      emitToUser(
+        memberId,
+        SOCKET_EVENTS.CHANNEL_REMOVED,
+        { channelId: channelId.toString(), workspaceId: effectiveWsId },
+        effectiveWsId,
+      );
+      emitToUser(
+        memberId,
+        SOCKET_EVENTS.CHANNEL_DELETED,
+        { channelId: channelId.toString(), workspaceId: effectiveWsId },
+        effectiveWsId,
+      );
+      leaveChannelRoom(memberId, channelId.toString(), effectiveWsId);
+    }
+
+    // Broadcast to workspace
+    emitToWorkspace(effectiveWsId, SOCKET_EVENTS.CHANNEL_DELETED, {
+      channelId: channelId.toString(),
+      workspaceId: effectiveWsId,
+    });
+    emitToWorkspace(effectiveWsId, SOCKET_EVENTS.CHANNEL_REMOVED, {
+      channelId: channelId.toString(),
+      workspaceId: effectiveWsId,
+    });
+
+    // Record audit log entry
+    auditLogService.logChannelDeleted(
+      channelId,
+      channel.name,
+      actorId,
+      actorName,
+      effectiveWsId,
+    );
+
+    logger.info("Custom channel deleted", { channelId, deletedBy: actorId, workspaceId: effectiveWsId });
+    return true;
   }
 
   /**

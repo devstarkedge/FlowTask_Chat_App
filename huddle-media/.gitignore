@@ -2,6 +2,7 @@ node_modules/
 .env
 *.env
 .dockerignore
+!.dockerignore
 *.log
 *.md
 *.test.js

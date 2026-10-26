@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Link2, ChevronDown, Settings, Hash, User } from 'lucide-react';
+import { X, Link2, Hash, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
@@ -143,9 +143,7 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
             </button>)}
             {searchError && <p role="alert" style={{fontSize:13}}>{searchError}</p>}
           </div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Share a link in a direct message or channel. Existing {workspace?.name || 'workspace'} access stays the same.</p>
-          <button style={{...buttonStyle,display:'flex',alignItems:'center',gap:8,width:'100%',padding:'14px 0'}} onClick={() => setAdvanced(value => !value)} aria-expanded={advanced}><Settings size={18}/><span style={{flex:1,textAlign:'left'}}>Advanced Settings</span><ChevronDown size={18}/></button>
-          {advanced && <div style={{padding:'8px 0',display:'flex',flexDirection:'column',gap:12}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><span>Public link</span><button disabled={toggling} onClick={togglePublic} style={{...buttonStyle,border:'1px solid var(--border-primary)',borderRadius:6}}>{toggling ? '...' : sharing.isPublic ? 'Enabled' : 'Disabled'}</button></div>{sharing.isPublic && sharing.publicToken && <button style={{...buttonStyle,textAlign:'left',color:'#3b82f6'}} onClick={() => copy(getPublicCanvasUrl(sharing.publicToken))}>Copy Public Link</button>}</div>}
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 0 }}>Share a link in a direct message or channel. Existing {workspace?.name || 'workspace'} access stays the same.</p>
         </div>
         <footer style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 24px',borderTop:'1px solid var(--border-secondary)'}}><button style={{...buttonStyle,display:'flex',alignItems:'center',gap:6,color:'#3b82f6'}} onClick={() => copy(getCanvasUrl(canvasId))}><Link2 size={16}/>Copy Link</button><button disabled={!selected || saving} onClick={share} style={{padding:'9px 18px',border:'none',borderRadius:7,background:'#1666aa',color:'#fff',cursor:selected?'pointer':'default',opacity: (!selected || saving) ? 0.5 : 1}}>{saving?'Sharing...':'Share'}</button></footer>
       </div>

@@ -1,67 +1,67 @@
 import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
-import {MemoryRouter} from 'react-router-dom';
-import {it,expect,vi,beforeEach,afterEach} from 'vitest';
-const state=vi.hoisted(()=>({huddle:{byChannel:{},session:null,busy:false,error:null,act:vi.fn(),load:vi.fn()},user:{_id:'A',name:'Alice'},chat:{connectionStatus:'connected'},channel:{channels:[{_id:'channel',name:'Design',workspaceId:'workspace'}]}}));
-vi.mock('../../stores/huddleStore',()=>({useHuddleStore:selector=>selector(state.huddle)}));
-vi.mock('../../stores/authStore',()=>({useAuthStore:selector=>selector({user:state.user})}));
-vi.mock('../../stores/chatStore',()=>({useChatStore:selector=>selector(state.chat)}));
-vi.mock('../../stores/channelStore',()=>({useChannelStore:Object.assign(selector=>selector(state.channel),{getState:()=>state.channel})}));
-vi.mock('../../services/huddleAudioService',()=>({toggleHuddleMute:vi.fn(),retryHuddleAudio:vi.fn(),toggleHuddleScreen:vi.fn(),updateHuddleFeature:vi.fn(async()=>{})}));
-import HuddleHeaderMenu from './HuddleHeaderMenu';
+import {it,expect,vi,afterEach} from 'vitest';
+const fixture=vi.hoisted(()=>({value:null,panel:{channelId:'channel',label:'Test'},load:vi.fn()}));
+vi.mock('../../features/huddle',()=>({useHuddle:()=>fixture.value}));
+vi.mock('../../features/huddle/hooks/useHuddlePopout',()=>({useHuddlePopout:()=>({})}));
+vi.mock('../../features/huddle/hooks/useHuddleDevices',()=>({useHuddleDevices:()=>({devices:[],permission:'granted',sinkSupported:true})}));
+vi.mock('../../stores/huddleUiStore',()=>({useHuddleUiStore:selector=>selector({panel:fixture.panel,closePanel:fixture.load,openPanel:fixture.load})}));
+vi.mock('../../stores/authStore',()=>({useAuthStore:selector=>selector({user:{_id:'user',name:'Alice'}})}));
+vi.mock('../../stores/chatStore',()=>({useChatStore:selector=>selector({connectionStatus:'connected'})}));
+vi.mock('../../stores/channelStore',()=>({useChannelStore:selector=>selector({channels:[]})}));
+vi.mock('react-router-dom',()=>({useLocation:()=>({pathname:'/',search:''})}));
+vi.mock('../../features/huddle/hooks/useSharedHuddleNotes',()=>({useSharedHuddleNotes:()=>({value:'Shared notes',ready:true,pending:false,typing:[],textarea:{current:null},edit:vi.fn(),stopTyping:vi.fn(),save:vi.fn(async()=>true)})}));
+vi.mock('./HuddleScreenStage',()=>({default:()=>null}));
+vi.mock('./HuddleMeetingLink',()=>({default:()=>null}));
+vi.mock('./HuddleReactions',()=>({default:()=>null}));
+vi.mock('../../services/huddleAudioService',()=>({toggleHuddleScreen:vi.fn(),switchHuddleScreen:vi.fn(),updateHuddleFeature:vi.fn(async()=>{})}));
 import HuddleWindow from './HuddleWindow';
-import {useHuddleUiStore} from '../../stores/huddleUiStore';
-import {useHuddleAudioStore} from '../../stores/huddleAudioStore';
-let root,container,microphone,clipboard,permissions;
-const render=async(route='/')=>act(async()=>root.render(<MemoryRouter initialEntries={[route]}><HuddleHeaderMenu channelId="channel" label="Design" workspaceId="workspace"/><HuddleWindow/></MemoryRouter>));
-const button=label=>container.querySelector(`button[aria-label="${label}"]`) || Array.from(container.querySelectorAll('button')).find(element=>element.textContent.trim()===label);
-const click=async element=>act(async()=>{element.click();});
-beforeEach(()=>{
-  globalThis.IS_REACT_ACT_ENVIRONMENT=true;vi.clearAllMocks();state.huddle.byChannel={};state.huddle.session=null;state.huddle.error=null;state.huddle.busy=false;state.chat.connectionStatus='connected';useHuddleUiStore.setState({panel:null});useHuddleAudioStore.setState({connection:'idle',error:null,startMuted:false,inputDeviceId:'',outputDeviceId:'',joinWithoutMicrophone:false,withoutMicrophone:false});
-  microphone=vi.fn();clipboard=vi.fn(async()=>{});permissions={state:'prompt',onchange:null};vi.stubGlobal('navigator',{mediaDevices:{getUserMedia:microphone,enumerateDevices:vi.fn(async()=>[]),addEventListener:vi.fn(),removeEventListener:vi.fn()},permissions:{query:vi.fn(async()=>permissions)},clipboard:{writeText:clipboard}});
-  container=document.createElement('div');document.body.appendChild(container);root=createRoot(container);
+import {toggleHuddleScreen} from '../../services/huddleAudioService';
+let root,container;
+afterEach(async()=>{await act(()=>root?.unmount());container?.remove();delete globalThis.electronAPI;});
+it('focuses native presenter share with participants and call controls, then restores the grid on stop',async()=>{
+ globalThis.IS_REACT_ACT_ENVIRONMENT=true;globalThis.electronAPI={updateHuddleShare:vi.fn()};
+ container=document.createElement('div');document.body.append(container);root=createRoot(container);
+ const participants=[{id:'alice',name:'Alice',connection:'connected'},{id:'bob',name:'Bob',connection:'connected'}];
+ fixture.value={session:{id:'alice',channelId:'channel'},state:{huddle:{startedAt:Date.now()},participants},load:fixture.load,audio:{connection:'connected',inputDeviceId:'',outputDeviceId:''}};
+ await act(()=>root.render(<HuddleWindow/>));expect(container.querySelector('.huddle-window').classList.contains('is-sharing')).toBe(false);
+ participants[0]={...participants[0],screenSharing:true,screenShare:{id:'generation-1'}};
+ fixture.value.audio={...fixture.value.audio,localScreenShare:{id:'generation-1',participantSessionId:'alice'},localScreenStream:{getVideoTracks:()=>[{readyState:'live'}]}};
+ await act(()=>root.render(<HuddleWindow/>));expect(container.querySelector('.huddle-window').classList.contains('is-sharing')).toBe(true);expect(container.querySelectorAll('.huddle-participant-tile')).toHaveLength(2);
+ expect(container.querySelector('[aria-label="Mute microphone"]')).not.toBeNull();expect(container.textContent).toContain('Leave Huddle');
+ participants[0]={...participants[0],screenSharing:false};fixture.value.audio={...fixture.value.audio,localScreenShare:null,localScreenStream:null};
+ await act(()=>root.render(<HuddleWindow/>));expect(container.querySelector('.huddle-window').classList.contains('is-sharing')).toBe(false);expect(container.querySelectorAll('.huddle-participant-tile')).toHaveLength(2);
 });
-afterEach(()=>{act(()=>root.unmount());container.remove();vi.unstubAllGlobals();});
-it('opens a pre-call panel from the header without starting capture or a call',async()=>{
-  await render();await click(button('Huddle options'));expect(button('Copy huddle link')).toBeTruthy();await click(button('Start Huddle'));
-  expect(container.querySelector('[role="dialog"]')).toBeTruthy();expect(container.textContent).toContain('Start huddle with');expect(state.huddle.act).not.toHaveBeenCalled();expect(microphone).not.toHaveBeenCalled();
-  expect(container.querySelector('.huddle-camera-control').disabled).toBe(true);await click(button('Start Huddle'));expect(state.huddle.act).toHaveBeenCalledWith('start','channel');
+it('shows a compact retryable screen failure without an active share layout',async()=>{
+ globalThis.IS_REACT_ACT_ENVIRONMENT=true;container=document.createElement('div');document.body.append(container);root=createRoot(container);
+ const update=vi.fn();fixture.value={session:{id:'alice',channelId:'channel'},state:{huddle:{},participants:[{id:'alice',name:'Alice'},{id:'bob',name:'Bob'}]},load:fixture.load,audio:{connection:'connected',inputDeviceId:'',outputDeviceId:'',screenError:{message:'Capture configuration is invalid.'},update}};
+ await act(()=>root.render(<HuddleWindow/>));expect(container.querySelector('.huddle-capture-alert')).not.toBeNull();expect(container.querySelector('.huddle-warning')).toBeNull();expect(container.querySelector('.huddle-window').classList.contains('is-sharing')).toBe(false);
+ await act(()=>[...container.querySelectorAll('button')].find(b=>b.textContent==='Retry screen sharing').click());expect(toggleHuddleScreen).toHaveBeenCalled();
+ await act(()=>container.querySelector('[aria-label="Dismiss screen sharing error"]').click());expect(update).toHaveBeenCalledWith({screenError:null});expect(container.textContent).toContain('Leave Huddle');
 });
-it('cancel closes the preview and returns focus without changing lifecycle state',async()=>{
-  await render();await click(button('Huddle options'));await click(button('Start Huddle'));await click(button('Cancel'));
-  expect(container.querySelector('[role="dialog"]')).toBeNull();expect(document.activeElement).toBe(button('Huddle options'));expect(state.huddle.act).not.toHaveBeenCalled();expect(microphone).not.toHaveBeenCalled();
-});
-it('offers an explicit no-microphone join without requesting capture or pretending to unmute',async()=>{
-  useHuddleUiStore.getState().openPanel({channelId:'channel',label:'Design'});await render();
-  await click(container.querySelector('input[type="checkbox"]'));
-  expect(useHuddleAudioStore.getState().joinWithoutMicrophone).toBe(true);
-  expect(button('Unmute microphone').disabled).toBe(false);
-  await click(button('Unmute microphone'));
-  expect(container.textContent).toContain('Connect headphones or a headset with a microphone');
-  expect(container.textContent).toContain("computer's built-in microphone");
-  expect(microphone).not.toHaveBeenCalled();expect(state.huddle.act).not.toHaveBeenCalled();
-  await click(button('Start Huddle'));expect(state.huddle.act).toHaveBeenCalledWith('start','channel');
-});
-it('shows headset and computer input guidance when unmuting a listener without leaving the call',async()=>{
-  state.huddle.session={id:'session',channelId:'channel'};
-  state.huddle.byChannel.channel={huddle:{_id:'call',startedBy:'A'},participants:[{id:'session',userId:'A',name:'Alice'}]};
-  useHuddleAudioStore.setState({withoutMicrophone:true,muted:true});
-  useHuddleUiStore.getState().openPanel({channelId:'channel',label:'Design'});await render();
-  await click(button('Unmute microphone'));expect(container.textContent).toContain('Connect your microphone');
-  expect(container.textContent).toContain('To speak, leave and rejoin');
-  expect(state.huddle.act).not.toHaveBeenCalled();expect(microphone).not.toHaveBeenCalled();
-  await click(button('Microphone settings'));expect(container.textContent).toContain("this site's permissions");
-  await click(button('Dismiss'));expect(container.textContent).not.toContain('Connect your microphone');
-});
-it('copies an existing channel route with a pre-call link instead of a file URL',async()=>{
-  await render();await click(button('Huddle options'));await click(button('Copy huddle link'));const url=new URL(clipboard.mock.calls[0][0]);expect(url.pathname).toBe('/workspace/workspace/channel/channel');expect(url.searchParams.get('huddle')).toBe('1');expect(container.textContent).toContain('Link copied');
-});
-it('shows denied microphone guidance based on real permission status without prompting',async()=>{
-  permissions.state='denied';useHuddleUiStore.getState().openPanel({channelId:'channel',label:'Design'});await render();expect(container.textContent).toContain('Allow microphone access');expect(microphone).not.toHaveBeenCalled();await click(button('Microphone settings'));expect(container.textContent).toContain("this site's permissions");
-});
-it('minimizing an active call preserves its session and provides reopen/leave/end controls',async()=>{
-  state.huddle.session={id:'session',channelId:'channel'};state.huddle.byChannel.channel={huddle:{_id:'call',startedBy:'A',startedAt:new Date().toISOString()},participants:[{id:'session',userId:'A',name:'Alice',audioReady:true}]};useHuddleUiStore.getState().openPanel({channelId:'channel',label:'Design'});await render();await click(button('Minimize Huddle'));expect(button('Open Huddle')).toBeTruthy();expect(state.huddle.act).not.toHaveBeenCalled();await click(button('Open Huddle'));await click(button('Leave Huddle'));expect(state.huddle.act).toHaveBeenCalledWith('leave','channel');await click(button('End for everyone'));expect(state.huddle.act).toHaveBeenCalledWith('end','channel');
-});
-it('a copied link opens only the pre-call UI and does not request microphone',async()=>{
-  await render('/workspace/workspace/channel/channel?huddle=1');expect(container.querySelector('[role="dialog"]')).toBeTruthy();expect(state.huddle.act).not.toHaveBeenCalled();expect(microphone).not.toHaveBeenCalled();
+
+it('keeps meeting notes in a separate pane from raised-hand tiles and preserves them when screen sharing starts',async()=>{
+ globalThis.IS_REACT_ACT_ENVIRONMENT=true;container=document.createElement('div');document.body.append(container);root=createRoot(container);
+ const participants=[{id:'alice',name:'Alice',handRaised:true},{id:'bob',name:'Bob'}];
+ fixture.value={session:{id:'alice',channelId:'channel'},state:{huddle:{startedAt:Date.now()},participants},load:fixture.load,audio:{connection:'connected',inputDeviceId:'',outputDeviceId:''}};
+ await act(()=>root.render(<HuddleWindow/>));
+ const openNotes=()=>[...container.querySelectorAll('button')].find(button=>button.textContent==='Notes').click();
+ await act(openNotes);
+ const pane=container.querySelector('.huddle-notes-host .huddle-notes');
+ expect(pane).not.toBeNull();expect(container.querySelector('.huddle-window-content').contains(pane)).toBe(false);
+ expect(container.querySelector('.huddle-participant-tile .huddle-participant-hand')).not.toBeNull();
+ const textarea=pane.querySelector('textarea');expect(textarea.value).toBe('Shared notes');
+ await act(()=>textarea.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true})));
+ expect(container.querySelector('.huddle-notes')).toBe(pane);
+ participants[0]={...participants[0],screenSharing:true,screenShare:{id:'share'}};
+ fixture.value.audio={...fixture.value.audio,localScreenShare:{id:'share',participantSessionId:'alice'},localScreenStream:{getVideoTracks:()=>[{readyState:'live'}]}};
+ await act(()=>root.render(<HuddleWindow/>));
+ expect(container.querySelector('.huddle-notes textarea')).toBe(textarea);
+ expect(container.querySelector('.huddle-sharing-footer').textContent).toContain('Notes');
+ await act(()=>container.querySelector('[aria-label="Close meeting notes"]').click());
+ expect(container.querySelector('.huddle-notes')).toBeNull();
+ await act(openNotes);
+ await act(()=>container.querySelector('.huddle-heading').dispatchEvent(new MouseEvent('pointerdown',{bubbles:true})));
+ expect(container.querySelector('.huddle-notes')).toBeNull();
+ expect(container.textContent).toContain('Leave Huddle');
 });

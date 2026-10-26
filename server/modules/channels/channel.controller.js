@@ -124,6 +124,59 @@ export const updateChannel = asyncHandler(async (req, res) => {
  * POST /api/chat/channels/:id/archive
  * Archive a channel.
  */
+/**
+ * DELETE /api/chat/channels/:id
+ * Delete a custom workspace channel.
+ */
+export const deleteChannel = asyncHandler(async (req, res) => {
+  const channel = req.channel || await channelService.getChannelById(req.params.id, req.user._id, req.workspaceId);
+  if (!channel) {
+    return res.status(404).json({
+      success: false,
+      error: { message: "Channel not found" },
+    });
+  }
+
+  // Preserve FlowTask-managed and system channels
+  if (!channelService.isCustomChannel(channel)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: "FLOWTASK_CHANNEL_PROTECTED",
+        message: "Only custom workspace channels can be deleted. FlowTask-managed and system channels cannot be deleted.",
+      },
+    });
+  }
+
+  // Verify authorization: Workspace Owner/Admin OR Channel Owner/Creator
+  const isWsAdminOrOwner = ['owner', 'admin'].includes(req.membership?.role);
+  const isChannelOwnerOrCreator =
+    channel.createdBy?.toString() === req.user._id?.toString() ||
+    channel.isOwner?.(req.user._id);
+
+  if (!isWsAdminOrOwner && !isChannelOwnerOrCreator) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: "FORBIDDEN",
+        message: "You do not have permission to delete this channel.",
+      },
+    });
+  }
+
+  await channelService.deleteChannel(
+    channel._id,
+    req.user._id,
+    req.user.name || req.user.username || "User",
+    req.workspaceId,
+  );
+
+  res.json({
+    success: true,
+    data: { message: "Channel deleted successfully", channelId: channel._id },
+  });
+});
+
 export const archiveChannel = asyncHandler(async (req, res) => {
   const channel = await channelService.archiveChannel(
     req.params.id,
@@ -227,31 +280,51 @@ export const addMember = asyncHandler(async (req, res) => {
   // Look up channel if not already on request (e.g. from requireChannelAccess middleware)
   const channel = req.channel || await channelService.getChannelById(channelId, null, req.workspaceId);
 
-  if (channel && isSystemManagedProjectChannel(channel)) {
-    return res.status(403).json({
+  if (!channel) {
+    return res.status(404).json({
       success: false,
-      error: {
-        code: "PROJECT_CHANNEL_MEMBERS_MANAGED",
-        message:
-          "Project channel members are synced from FlowTask and cannot be changed manually",
-      },
+      error: { message: "Channel not found" },
     });
   }
 
-  if (channel && channel.slug === 'flowtask-admin') {
-    return res.status(403).json({
-      success: false,
-      error: { message: "Admin channel membership is fully automated based on user roles." }
-    });
-  }
-
-  if (channel && channel.slug === 'flowtask-managers') {
-    const userRepository = (await import("../users/user.repository.js")).default;
-    const userToAdd = await userRepository.findById(userId);
-    if ((userToAdd?.role || '').toLowerCase() !== 'manager') {
+  // Preserve FlowTask-managed and system channels
+  if (!channelService.isCustomChannel(channel)) {
+    if (channel.slug === 'flowtask-admin') {
       return res.status(403).json({
         success: false,
-        error: { message: "Only users with the Manager role can be added to the Managers channel." }
+        error: { message: "Admin channel membership is fully automated based on user roles." }
+      });
+    }
+    if (channel.slug === 'flowtask-managers') {
+      const userRepository = (await import("../users/user.repository.js")).default;
+      const userToAdd = await userRepository.findById(userId);
+      if ((userToAdd?.role || '').toLowerCase() !== 'manager') {
+        return res.status(403).json({
+          success: false,
+          error: { message: "Only users with the Manager role can be added to the Managers channel." }
+        });
+      }
+    } else {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: "FLOWTASK_CHANNEL_PROTECTED",
+          message: "FlowTask-managed channels cannot be manually modified.",
+        },
+      });
+    }
+  } else {
+    // Custom channel permission check: Workspace Admin/Owner OR Channel Admin/Owner OR Public channel
+    const isWsAdminOrOwner = ['owner', 'admin'].includes(req.membership?.role);
+    const isChannelAdminOrOwner = channel.isOwner?.(req.user._id) || channel.getMemberRole?.(req.user._id) === 'admin';
+    const isPublic = channel.visibility === 'public';
+    if (!isWsAdminOrOwner && !isChannelAdminOrOwner && !isPublic) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to add members to this channel.",
+        },
       });
     }
   }
@@ -275,25 +348,37 @@ export const addMember = asyncHandler(async (req, res) => {
  * Remove a member from a channel.
  */
 export const removeMember = asyncHandler(async (req, res) => {
-  if (isSystemManagedProjectChannel(req.channel)) {
+  const channel = req.channel || await channelService.getChannelById(req.params.id, null, req.workspaceId);
+  if (!channel) {
+    return res.status(404).json({
+      success: false,
+      error: { message: "Channel not found" },
+    });
+  }
+
+  if (!channelService.isCustomChannel(channel)) {
     return res.status(403).json({
       success: false,
       error: {
-        code: "PROJECT_CHANNEL_MEMBERS_MANAGED",
-        message:
-          "Project channel members are synced from FlowTask and cannot be changed manually",
+        code: "FLOWTASK_CHANNEL_PROTECTED",
+        message: "FlowTask-managed and system channel memberships cannot be modified manually.",
       },
     });
   }
 
-  if (req.channel && (req.channel.slug === 'flowtask-admin' || req.channel.slug === 'flowtask-managers')) {
+  const isWsAdminOrOwner = ['owner', 'admin'].includes(req.membership?.role);
+  const isChannelAdminOrOwner = channel.isOwner?.(req.user._id) || channel.getMemberRole?.(req.user._id) === 'admin';
+  if (!isWsAdminOrOwner && !isChannelAdminOrOwner) {
     return res.status(403).json({
       success: false,
-      error: { message: "System channel membership is fully automated and cannot be changed manually." }
+      error: {
+        code: "FORBIDDEN",
+        message: "You do not have permission to remove members from this channel.",
+      },
     });
   }
 
-  const channel = await channelService.removeMember(
+  const updatedChannel = await channelService.removeMember(
     req.params.id,
     req.params.userId,
     req.user._id,
@@ -302,7 +387,7 @@ export const removeMember = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: { channel },
+    data: { channel: updatedChannel },
   });
 });
 

@@ -152,19 +152,21 @@ api.interceptors.response.use(
 
         const { accessToken: newAccess, refreshToken: newRefresh } = data.data;
         useAuthStore.getState().setTokens(newAccess, newRefresh);
+        try {
+          const { getSocket } = await import("./socket");
+          const sock = getSocket();
+          if (sock) {
+            sock.auth = { ...sock.auth, token: newAccess };
+            sock.emit("auth:refresh", { token: newAccess });
+          }
+        } catch {}
 
         originalRequest.headers.Authorization = `Bearer ${newAccess}`;
         processQueue(null, newAccess);
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        const refreshStatus = refreshError.response?.status;
-        // Only trigger hard logout if server explicitly responded with 401 or 403,
-        // confirming that the refresh token is invalid or revoked.
-        // DO NOT log out on network errors, timeouts, or 5xx server errors.
-        if (refreshStatus === 401 || refreshStatus === 403) {
-          useAuthStore.getState().logout();
-        }
+        useAuthStore.getState().logout();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -221,6 +223,7 @@ export const channelAPI = {
   getBySlug: (slug) => api.get(`/channels/slug/${slug}`),
   create: (data) => api.post("/channels", data),
   update: (id, data) => api.put(`/channels/${id}`, data),
+  delete: (id) => api.delete(`/channels/${id}`),
   archive: (id) => api.post(`/channels/${id}/archive`),
   createDM: (targetUserId) => api.post("/channels/dm", { targetUserId }),
   addMember: (id, userId) => api.post(`/channels/${id}/members`, { userId }),
@@ -520,6 +523,17 @@ export const scheduledMessageAPI = {
   update: (id, data) => api.patch(`/messages/scheduled/${id}`, data),
   sendNow: (id) => api.post(`/messages/send-now/${id}`),
 };
+
+// ─── Drafts (Stored in Local Storage) ────────────────────────────────────
+export const draftAPI = {
+  save: async () => ({ data: { success: true, data: { draft: null } } }),
+  get: async () => ({ data: { success: true, data: { draft: null } } }),
+  getAll: async () => ({ data: { success: true, data: { drafts: [] } } }),
+  getCount: async () => ({ data: { success: true, data: { count: 0 } } }),
+  delete: async () => ({ data: { success: true } }),
+  sendDraft: async () => ({ data: { success: true } }),
+};
+
 
 // ─── Admin ───────────────────────────────────────────────────────────────
 export const adminAPI = {

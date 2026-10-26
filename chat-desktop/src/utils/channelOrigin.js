@@ -8,6 +8,7 @@ export function isFlowTaskSyncedChannel(channel) {
   if (!channel) return false;
   if (channel.systemManaged) return true;
   if (channel.flowTaskRef?.entityType || channel.flowTaskRef?.entityId) return true;
+  if (channel.slug && (channel.slug.startsWith('flowtask-') || channel.slug === 'general')) return true;
   return FLOWTASK_CHANNEL_TYPES.has(channel.type);
 }
 

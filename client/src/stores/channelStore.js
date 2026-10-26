@@ -463,6 +463,23 @@ export const useChannelStore = create(
     }
   },
 
+  deleteChannel: async (channelId) => {
+    try {
+      await channelAPI.delete(channelId)
+      get().removeChannel(channelId)
+      try {
+        const { useChatStore } = await import('./chatStore')
+        const chat = useChatStore.getState()
+        const threadChannelId = chat.activeThread?.channelId?._id || chat.activeThread?.channelId
+        if (String(threadChannelId) === String(channelId)) chat.closeThread()
+      } catch {}
+      toast.success('Channel deleted')
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to delete channel')
+      throw error
+    }
+  },
+
   archiveChannel: async (channelId) => {
     try {
       await channelAPI.archive(channelId)
@@ -487,7 +504,7 @@ export const useChannelStore = create(
       get().fetchMembers(channelId)
       toast.success('Member added')
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to add member')
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to add member')
       throw error
     }
   },
@@ -498,7 +515,7 @@ export const useChannelStore = create(
       get().fetchMembers(channelId)
       toast.success('Member removed')
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to remove member')
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to remove member')
       throw error
     }
   },

@@ -363,6 +363,7 @@ export const SOCKET_EVENTS = Object.freeze({
 // ─── Audit Actions ──────────────────────────────────────────────────────────
 export const AUDIT_ACTIONS = Object.freeze({
   CHANNEL_CREATED: 'CHANNEL_CREATED',
+  CHANNEL_DELETED: 'CHANNEL_DELETED',
   MEMBER_ADDED: 'MEMBER_ADDED',
   MEMBER_REMOVED: 'MEMBER_REMOVED',
   CHANNEL_ARCHIVED: 'CHANNEL_ARCHIVED',

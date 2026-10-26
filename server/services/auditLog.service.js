@@ -104,6 +104,18 @@ class AuditLogService {
   /**
    * Log channel archived.
    */
+  logChannelDeleted(channelId, channelName, actorId, actorName, workspaceId) {
+    this.log({
+      action: 'CHANNEL_DELETED',
+      entityType: 'channel',
+      entityId: channelId,
+      actorId,
+      actorName,
+      details: { channelName },
+      workspaceId,
+    });
+  }
+
   logChannelArchived(channelId, channelName, actorId, actorName, workspaceId) {
     this.log({
       action: 'CHANNEL_ARCHIVED',

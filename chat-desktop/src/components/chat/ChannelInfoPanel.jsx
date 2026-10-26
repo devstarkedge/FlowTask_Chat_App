@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   X,
   Users,
@@ -11,6 +12,7 @@ import {
   Globe,
   Star,
   FolderInput,
+  Trash2,
 } from "lucide-react";
 import { categoryAPI } from "../../services/api";
 import toast from "react-hot-toast";
@@ -23,7 +25,7 @@ import EditChannelModal from "./EditChannelModal";
 import AddMemberModal from "./AddMemberModal";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
-import { isPersonalCategoryChannel } from "../../utils/channelOrigin";
+import { isPersonalCategoryChannel, isChatAppChannel } from "../../utils/channelOrigin";
 import { categoryAssignmentId } from "../../utils/categoryAssignments";
 import "./custom-css/channelInfoPanel.css";
 
@@ -33,11 +35,13 @@ import "./custom-css/channelInfoPanel.css";
    Main component
 ───────────────────────────────────────────── */
 export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }) {
+  const navigate = useNavigate();
   const {
     membersByChannel,
     isMembersLoading,
     setShowInfoPanel,
     removeMember,
+    deleteChannel,
     leaveChannel,
     fetchCategories,
     moveChannelsToCategory,
@@ -50,12 +54,35 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   );
   const { user } = useAuthStore();
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const isEnterpriseOrPro = activeWorkspace?.plan === 'enterprise' || activeWorkspace?.plan === 'pro';
   const { confirm } = useDeleteConfirm();
   const { isFavorited, toggleFavorite, favorites } = useFavoritesStore();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryDropdownRef = useRef(null);
+
+  // Close "Move To" dropdown on outside click or Escape key
+  useEffect(() => {
+    if (!showCategoryDropdown) return;
+    const handleOutsideClick = (e) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target)) {
+        setShowCategoryDropdown(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowCategoryDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showCategoryDropdown]);
 
   const channelId = channel?._id?.toString?.();
   const isStarred = channelId
@@ -102,12 +129,15 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   const isPrivate =
     channel.visibility === "private" ||
     (channel.visibility == null && channel.type === "private");
+  const isCustom = isChatAppChannel(channel);
+  const isWsAdmin = ["owner", "admin"].includes(activeWorkspace?.role);
+  const canDeleteChannel = isCustom && (isOwner || isWsAdmin);
   const canManageMembership =
-    isAdmin && !isDM && (!isSystem || channel?.slug === 'flowtask-managers') && !isSystemManagedProject && channel?.slug !== 'flowtask-admin';
-  const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1)
+    isAdmin && !isDM && (isCustom || channel?.slug === 'flowtask-managers');
+  const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1);
   const canLeaveChannel = !isSystem && !isSystemManagedProject && !isLastOwner;
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
-  const canMoveToCategory = canEditChannel && isPersonalCategoryChannel(channel);
+  const canMoveToCategory = canEditChannel && isCustom;
   const customCategories = categories?.filter((c) => c.type === "custom") || [];
   const currentCustomCategory = customCategories.find((category) => (
     (category.channelIds || []).some((id) => categoryAssignmentId(id) === channelId)
@@ -167,6 +197,27 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
         error: 'Failed to leave channel',
       });
       setShowInfoPanel(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const askDelete = async () => {
+    const ok = await confirm({
+      title: 'Delete channel',
+      message: `Are you sure you want to delete #${channel.name}? The channel and all its membership associations will be permanently removed. This action cannot be undone.`,
+      confirmLabel: 'Delete Channel',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await toast.promise(deleteChannel(channel._id), {
+        loading: 'Deleting channel…',
+        success: 'Channel deleted',
+        error: (err) => err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to delete channel',
+      });
+      setShowInfoPanel(false);
+      navigate(`/workspace/${activeWorkspace?._id || activeWorkspaceId}`);
     } catch (err) {
       console.error(err);
     }
@@ -337,11 +388,14 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
 
             {/* Move to Category — Chat App channels and custom categories only */}
             {canMoveToCategory && (
-              <div style={{ position: "relative", flex: 1, display: "flex" }}>
+              <div ref={categoryDropdownRef} style={{ position: "relative", flex: 1, display: "flex" }}>
                 <button
-                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                  type="button"
+                  onClick={() => setShowCategoryDropdown((prev) => !prev)}
                   className="btn-ghost"
                   style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                  aria-expanded={showCategoryDropdown}
+                  aria-haspopup="true"
                 >
                   <FolderInput size={13} />
                   Move To
@@ -352,35 +406,83 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                     style={{ 
                       top: "100%", 
                       right: 0, 
-                      minWidth: "160px", 
+                      minWidth: "170px", 
                       marginTop: 4, 
                       maxHeight: "250px", 
                       overflowY: "auto",
                       background: "var(--bg-modal, var(--bg-secondary))",
                       border: "1px solid var(--border-primary)",
-                      color: "var(--text-primary)"
+                      color: "var(--text-primary)",
+                      boxShadow: "var(--shadow-md, 0 4px 14px rgba(0,0,0,0.18))",
                     }}
                   >
-                    {customCategories.length > 0 && (
+                    {customCategories.length > 0 ? (
                       <>
-                        {customCategories.map(cat => (
-                          <button
-                            key={cat._id}
-                            className="w-full text-left transition-colors"
-                            style={{
-                              padding: "6px 16px",
-                              color: "var(--text-primary)",
-                              opacity: categoryAssignmentId(cat._id) === categoryAssignmentId(currentCustomCategory?._id) ? 0.55 : 1,
-                            }}
-                            disabled={categoryAssignmentId(cat._id) === categoryAssignmentId(currentCustomCategory?._id)}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-hover, var(--bg-hover))"; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                            onClick={() => handleAssignCategory(cat._id)}
-                          >
-                            {cat.name}{categoryAssignmentId(cat._id) === categoryAssignmentId(currentCustomCategory?._id) ? ' (current)' : ''}
-                          </button>
-                        ))}
+                        {customCategories.map((cat) => {
+                          const isCurrent = categoryAssignmentId(cat._id) === categoryAssignmentId(currentCustomCategory?._id);
+                          return (
+                            <button
+                              key={cat._id}
+                              type="button"
+                              className="w-full text-left transition-colors"
+                              style={{
+                                padding: "7px 16px",
+                                color: "var(--text-primary)",
+                                opacity: isCurrent ? 0.55 : 1,
+                                cursor: isCurrent ? "default" : "pointer",
+                                display: "block",
+                                width: "100%",
+                              }}
+                              disabled={isCurrent}
+                              onMouseEnter={(e) => {
+                                if (!isCurrent) {
+                                  e.currentTarget.style.background = "var(--surface-hover, var(--bg-hover))";
+                                }
+                              }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                              onClick={() => handleAssignCategory(cat._id)}
+                            >
+                              {cat.name}{isCurrent ? " (current)" : ""}
+                            </button>
+                          );
+                        })}
+                        {currentCustomCategory && (
+                          <>
+                            <div style={{ height: 1, background: "var(--border-secondary, var(--border-primary))", margin: "4px 0" }} />
+                            <button
+                              type="button"
+                              className="w-full text-left transition-colors"
+                              style={{
+                                padding: "7px 16px",
+                                color: "var(--danger-color, #ef4444)",
+                                fontSize: 12,
+                                cursor: "pointer",
+                                display: "block",
+                                width: "100%",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "color-mix(in srgb, var(--danger-color, #ef4444) 10%, transparent)";
+                              }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                              onClick={() => handleAssignCategory(null)}
+                            >
+                              Remove from category
+                            </button>
+                          </>
+                        )}
                       </>
+                    ) : (
+                      <div
+                        style={{
+                          padding: "10px 16px",
+                          fontSize: 12,
+                          color: "var(--text-muted)",
+                          textAlign: "center",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        No category created
+                      </div>
                     )}
                   </div>
                 )}
@@ -396,6 +498,19 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                 title="Leave channel"
               >
                 <LogOut size={13} />
+              </button>
+            )}
+
+            {/* Delete Custom Channel */}
+            {canDeleteChannel && (
+              <button
+                onClick={askDelete}
+                className="btn-danger"
+                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                title="Delete channel"
+              >
+                <Trash2 size={13} />
+                Delete
               </button>
             )}
           </div>

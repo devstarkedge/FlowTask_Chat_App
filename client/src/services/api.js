@@ -152,6 +152,14 @@ api.interceptors.response.use(
 
         const { accessToken: newAccess, refreshToken: newRefresh } = data.data;
         useAuthStore.getState().setTokens(newAccess, newRefresh);
+        try {
+          const { getSocket } = await import("./socket");
+          const sock = getSocket();
+          if (sock) {
+            sock.auth = { ...sock.auth, token: newAccess };
+            sock.emit("auth:refresh", { token: newAccess });
+          }
+        } catch {}
 
         originalRequest.headers.Authorization = `Bearer ${newAccess}`;
         processQueue(null, newAccess);
@@ -215,6 +223,7 @@ export const channelAPI = {
   getBySlug: (slug) => api.get(`/channels/slug/${slug}`),
   create: (data) => api.post("/channels", data),
   update: (id, data) => api.put(`/channels/${id}`, data),
+  delete: (id) => api.delete(`/channels/${id}`),
   archive: (id) => api.post(`/channels/${id}/archive`),
   createDM: (targetUserId) => api.post("/channels/dm", { targetUserId }),
   addMember: (id, userId) => api.post(`/channels/${id}/members`, { userId }),

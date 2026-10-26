@@ -1,8 +1,12 @@
-import {useHuddleUiStore} from '../../stores/huddleUiStore';
+import { useHuddleUiStore } from '../../stores/huddleUiStore';
 import HuddleHeaderMenu from '../huddles/HuddleHeaderMenu';
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
-import { MessageCircle, Search, Menu, Pin, FileText, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus } from "lucide-react";
+import { useParams, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
+import { isChatAppChannel } from "../../utils/channelOrigin";
+import { MessageCircle, Search, Menu, Pin, FileText, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus, Trash2 } from "lucide-react";
 import ChannelMemberCount from "./ChannelMemberCount";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -45,7 +49,10 @@ export default function ChatHeader({
   // onRemoveCanvasTab: () => void
   onRemoveCanvasTab,
 }) {
-  const { membersByChannel, toggleInfoPanel, showInfoPanel } = useChannelStore();
+  const { membersByChannel, toggleInfoPanel, showInfoPanel, deleteChannel } = useChannelStore();
+  const navigate = useNavigate();
+  const { confirm } = useDeleteConfirm();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   // Always read the latest channel from the store so privacy/name/topic changes
   // reflect instantly in the header without waiting for parent re-render.
   const channel = useChannelStore((s) =>
@@ -85,6 +92,31 @@ export default function ChatHeader({
   const canvasPopupRef = useRef(null);
   // Ref for the canvas tab button (so we don't close immediately on the open click)
   const canvasTabRef = useRef(null);
+
+  const isCustom = isChatAppChannel(channel);
+  const isWsAdmin = ['owner', 'admin'].includes(activeWorkspace?.role);
+  const isChannelOwner = channel?.createdBy === user?._id || channel?.isOwner?.(user?._id);
+  const canDeleteChannel = isCustom && (isChannelOwner || isWsAdmin);
+
+  const askDelete = async () => {
+    const ok = await confirm({
+      title: 'Delete channel',
+      message: `Are you sure you want to delete #${channel?.name}? The channel and all its membership associations will be permanently removed. This action cannot be undone.`,
+      confirmLabel: 'Delete Channel',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await toast.promise(deleteChannel(channel._id), {
+        loading: 'Deleting channel…',
+        success: 'Channel deleted',
+        error: (err) => err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to delete channel',
+      });
+      navigate(`/workspace/${workspaceId}`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const isConstrained = showInfoPanel || !!activeThread;
 
@@ -367,13 +399,7 @@ export default function ChatHeader({
             />
           )}
 
-          <HdrBtn
-            icon={Pin}
-            title="Pinned messages"
-            label={pinCount > 0 && !isConstrained ? String(pinCount) : undefined}
-            onClick={onTogglePins}
-            size={14}
-          />
+          <HuddleHeaderMenu channelId={channelId} label={displayChannelName} workspaceId={workspaceId} />
 
           <HdrBtn
             icon={MoreVertical}
@@ -418,6 +444,18 @@ export default function ChatHeader({
                 Channel
               </p>
               <DropItem icon={Info}        iconColor="blue" label="Channel details"  sublabel="Settings, members & more" onClick={() => { toggleInfoPanel(); setShowMoreActions(false); }} />
+              {canDeleteChannel && (
+                <DropItem
+                  icon={Trash2}
+                  iconColor="red"
+                  label="Delete channel"
+                  sublabel="Remove channel & members"
+                  onClick={() => {
+                    setShowMoreActions(false);
+                    askDelete();
+                  }}
+                />
+              )}
             </div>
           </div>
         )}

@@ -1,8 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { useChannelStore } from '../../stores/channelStore'
+import { useAuthStore } from '../../stores/authStore'
+import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { useDeleteConfirm } from '../../hooks/useDeleteConfirm'
+import { isChatAppChannel } from '../../utils/channelOrigin'
 import {
   X, Hash, Lock, Globe, CheckCircle2,
   AlignLeft, MessageSquare, Sparkles, AlertTriangle,
+  Trash2,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -200,7 +207,12 @@ function SectionDivider({ label }) {
 
 /* ─── Main component ──────────────────────────────────────────────── */
 export default function EditChannelModal({ channel, onClose }) {
-  const { editChannel } = useChannelStore()
+  const { editChannel, deleteChannel } = useChannelStore()
+  const { user } = useAuthStore()
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const { confirm } = useDeleteConfirm()
+  const navigate = useNavigate()
 
   const [name,         setName]         = useState(channel.name || '')
   const [description,  setDescription]  = useState(channel.description || '')
@@ -223,6 +235,35 @@ export default function EditChannelModal({ channel, onClose }) {
     || description !== (channel.description || '')
     || topic !== (channel.topic || '')
     || visibility !== (channel.visibility || 'public')
+
+  const isCustom = isChatAppChannel(channel)
+  const isWsAdmin = ['owner', 'admin'].includes(activeWorkspace?.role)
+  const isChannelOwner = channel.createdBy === user?._id || channel.isOwner?.(user?._id)
+  const canDeleteChannel = isCustom && (isChannelOwner || isWsAdmin)
+
+  const handleDelete = async () => {
+    const ok = await confirm({
+      title: 'Delete channel',
+      message: `Are you sure you want to delete #${channel.name}? The channel and all its membership associations will be permanently removed. This action cannot be undone.`,
+      confirmLabel: 'Delete Channel',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setIsSubmitting(true)
+    try {
+      await toast.promise(deleteChannel(channel._id), {
+        loading: 'Deleting channel…',
+        success: 'Channel deleted',
+        error: (err) => err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to delete channel',
+      })
+      onClose()
+      navigate(`/workspace/${activeWorkspace?._id || activeWorkspaceId}`)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -268,7 +309,7 @@ export default function EditChannelModal({ channel, onClose }) {
             background: 'var(--surface-primary)',
             border: '1px solid var(--border-color)',
             borderRadius: 'var(--radius-xl)',
-            width: 'min(500px, 94vw)',
+            width: 'min(520px, 94vw)',
             boxShadow: 'var(--shadow-modal)',
             overflow: 'hidden',
             display: 'flex',
@@ -609,6 +650,58 @@ export default function EditChannelModal({ channel, onClose }) {
                 </InputWrap>
               </motion.div>
 
+              {/* ── Danger Zone ── */}
+              {canDeleteChannel && (
+                <motion.div variants={item} style={{ marginTop: 4 }}>
+                  <SectionDivider label="Danger zone" />
+                  <div style={{
+                    marginTop: 8,
+                    padding: '12px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid color-mix(in srgb, var(--danger-color, #ef4444) 28%, transparent)',
+                    background: 'color-mix(in srgb, var(--danger-color, #ef4444) 6%, transparent)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--danger-color, #ef4444)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}>
+                        <Trash2 size={14} />
+                        Delete Channel
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                        Permanently remove this channel and all its membership associations.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={isSubmitting}
+                      className="btn-danger"
+                      style={{
+                        fontSize: 12,
+                        padding: '6px 12px',
+                        gap: 6,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Trash2 size={13} />
+                      Delete
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
               {/* ── Error ── */}
               <AnimatePresence>
                 {error && (
@@ -638,32 +731,33 @@ export default function EditChannelModal({ channel, onClose }) {
           {/* ══ Footer ══════════════════════════════════════════════ */}
           <div style={{
             display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', gap: 10,
+            justifyContent: 'space-between', gap: 12,
             padding: '14px 20px',
             borderTop: '1px solid var(--border-secondary)',
             background: 'var(--surface-secondary)',
             flexShrink: 0,
           }}>
             {/* Dirty indicator */}
-            <AnimatePresence>
-              {isDirty ? (
-                <motion.div
-                  initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }} transition={{ duration: .18 }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    fontSize: 11, color: 'var(--text-muted)',
-                  }}
-                >
-                  <Sparkles size={11} style={{ color: 'var(--accent-color)' }} />
-                  Unsaved changes
-                </motion.div>
-              ) : (
-                <div />
-              )}
-            </AnimatePresence>
+            <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center' }}>
+              <AnimatePresence>
+                {isDirty && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -6 }} transition={{ duration: .18 }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      fontSize: 11, color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Sparkles size={11} style={{ color: 'var(--accent-color)' }} />
+                    Unsaved changes
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <button type="button" onClick={onClose} className="btn-ghost"
                 style={{ fontSize: 13 }}>
                 Cancel
@@ -676,7 +770,7 @@ export default function EditChannelModal({ channel, onClose }) {
                 className="btn-primary"
                 whileHover={isSubmitting ? {} : { y: -1 }}
                 whileTap={isSubmitting ? {} : { scale: .97 }}
-                style={{ minWidth: 114, fontSize: 13, position: 'relative' }}
+                style={{ minWidth: 114, fontSize: 13, position: 'relative', flexShrink: 0 }}
               >
                 <AnimatePresence mode="wait">
                   {isSubmitting ? (

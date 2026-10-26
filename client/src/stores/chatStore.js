@@ -1681,6 +1681,40 @@ export const useChatStore = create((set, get) => ({
         }),
         { duration: 6000 },
       );
+        } else if (normalized.type === 'channel_invite') {
+      const inviterName = normalized.senderName || 'Someone';
+      const channelName = normalized.channelName ? `#${normalized.channelName}` : 'a channel';
+      const toastText = `${inviterName} added you to ${channelName}`;
+
+      toast.custom(
+        (t) => createElement(NotificationToast, {
+          notification: {
+            ...normalized,
+            senderName: inviterName,
+            channelName: normalized.channelName,
+            messagePreview: toastText,
+          },
+          onClick: () => {
+            const chId = normalized.channelId?._id || normalized.channelId || normalized.conversationId;
+            const wsId = normalized.workspaceId;
+            if (chId) {
+              const { setActiveChannel } = useChannelStore.getState();
+              setActiveChannel(chId);
+              if (wsId) {
+                if (typeof window !== 'undefined' && window.electronAPI) {
+                  window.location.hash = `/workspace/${wsId}/channel/${chId}`;
+                } else {
+                  window.location.href = `/workspace/${wsId}/channel/${chId}`;
+                }
+              }
+            }
+            toast.dismiss(t.id);
+          },
+          onDismiss: () => toast.dismiss(t.id),
+          playSound: true,
+        }),
+        { duration: 5000 },
+      );
     } else if (normalized.type === 'system' || normalized.type === 'bot_alert') {
       toast.success(normalized.title || 'Notification received', { 
         duration: 3000,

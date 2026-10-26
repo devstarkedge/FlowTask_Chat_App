@@ -335,6 +335,7 @@ export const addMember = asyncHandler(async (req, res) => {
     role,
     req.workspaceId,
     req.user._id,
+    req.user.name || req.user.username || "Someone",
   );
 
   res.json({

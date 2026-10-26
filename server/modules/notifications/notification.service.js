@@ -211,19 +211,26 @@ class NotificationService {
   /**
    * Create a channel invite notification.
    */
-  async createChannelInviteNotification({ workspaceId, recipientId, channelId, channelName, inviterName, inviterId }) {
+  async createChannelInviteNotification({ workspaceId, recipientId, channelId, channelName, inviterName, inviterId, inviterAvatar }) {
+    const safeInviterName = inviterName || 'Someone';
+    const safeChannelName = channelName || 'channel';
+    const titleText = `${safeInviterName} added you to #${safeChannelName}`;
     return this.create({
       workspaceId,
       recipientId,
       type: 'channel_invite',
-      title: `${inviterName} added you to #${channelName}`,
-      body: '',
+      title: titleText,
+      body: titleText,
+      messagePreview: titleText,
       sourceType: 'channel',
       sourceId: channelId,
       channelId,
       senderId: inviterId,
-      senderName: inviterName,
-      channelName,
+      senderName: safeInviterName,
+      senderAvatar: inviterAvatar || null,
+      channelName: safeChannelName,
+      conversationId: channelId,
+      conversationType: 'channel',
     });
   }
 

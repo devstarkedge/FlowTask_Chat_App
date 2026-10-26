@@ -748,7 +748,7 @@ export function connectSocket() {
     // Suppress notification if user is actively viewing the channel, EXCEPT for critical system notifications
     const activeChannelId = useChannelStore.getState().activeChannelId
     const notifChannelId = notification.channelId?._id || notification.channelId || notification.conversationId
-    const isCriticalNotification = ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) || notification.priority === 'high'
+    const isCriticalNotification = ['reminder_overdue', 'system', 'bot_alert', 'channel_invite'].includes(notification.type) || notification.priority === 'high'
 
     // Drop notification if channel/user is muted
     const store = useNotificationStore.getState();

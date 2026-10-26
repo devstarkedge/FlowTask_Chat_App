@@ -1,6 +1,6 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useState } from 'react'
-import { X, MessageCircle, AtSign, MessageSquareText, Bell, Bot } from 'lucide-react'
+import { X, MessageCircle, AtSign, MessageSquareText, Bell, Bot, UserPlus } from 'lucide-react'
 
 const TOAST_DURATION = 5000
 const TYPE_ICONS = {
@@ -8,6 +8,7 @@ const TYPE_ICONS = {
   mention: AtSign,
   thread_reply: MessageSquareText,
   keyword_match: AtSign,
+  channel_invite: UserPlus,
   default: Bell,
 }
 

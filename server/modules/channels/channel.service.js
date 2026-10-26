@@ -634,6 +634,7 @@ class ChannelService {
     // Get creator details to populate in invite notifications
     const creatorUser = await userRepository.findById(creatorId);
     const creatorName = creatorUser?.name || 'Someone';
+    const creatorAvatar = creatorUser?.avatar || null;
 
     // Notify explicitly added members (for private channels or explicit invites)
     for (const member of members) {
@@ -654,6 +655,7 @@ class ChannelService {
                 channelName: channel.name,
                 inviterName: creatorName,
                 inviterId: creatorId,
+                inviterAvatar: creatorAvatar,
               })
               .catch(() => {});
           },
@@ -1406,6 +1408,7 @@ class ChannelService {
     role = CHANNEL_MEMBER_ROLES.MEMBER,
     workspaceId,
     addedByUserId = null,
+    addedByName = null,
   ) {
     const channel = await channelRepository.findById(channelId, {
       workspaceId,
@@ -1478,23 +1481,28 @@ class ChannelService {
     // Persist channel invite notification
     import("../notifications/notification.service.js").then(
       async ({ default: notificationService }) => {
-        let inviterName = "System";
+        let inviterName = addedByName || "Someone";
+        let inviterAvatar = null;
         if (addedByUserId) {
           const inviter = await userRepository.findById(addedByUserId);
           if (inviter) {
-            inviterName = inviter.name;
+            inviterName = addedByName || inviter.name || inviter.displayName || inviter.username || "Someone";
+            inviterAvatar = inviter.avatar || null;
           }
         }
-        notificationService
+        await notificationService
           .createChannelInviteNotification({
-            workspaceId: channel.workspaceId,
+            workspaceId: resolvedWorkspaceId || channel.workspaceId,
             recipientId: chatUserId,
             channelId: channel._id,
             channelName: channel.name,
             inviterName,
             inviterId: addedByUserId,
+            inviterAvatar,
           })
-          .catch(() => {});
+          .catch((err) => {
+            logger.warn("Failed to send channel invite notification", { error: err.message });
+          });
       },
     );
 

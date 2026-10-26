@@ -173,7 +173,18 @@ class PermissionEngine {
     // Conversation privacy applies before administrative channel capabilities.
     if (isRecipientChannel(channel)) return hasRecipientMembership(channel, principal._id);
 
-    // VIEW_ALL_CHANNELS bypasses membership checks
+    // Private custom channels: strict membership check (creator and assigned members only).
+    // VIEW_ALL_CHANNELS does not bypass privacy for custom private channels.
+    const isFlowTaskProject = channel.type === 'project' || channel.flowTaskRef?.entityType === 'board';
+    const isCustomPrivate = (channel.visibility === 'private' || channel.type === 'private') && !isFlowTaskProject;
+    if (isCustomPrivate) {
+      const userId = principal._id?.toString();
+      const isMember = (typeof channel.hasMember === 'function' && channel.hasMember(principal._id) === true) ||
+        (Array.isArray(channel.members) && channel.members.some((m) => (m.userId || m._id || m)?.toString() === userId));
+      return Boolean(isMember);
+    }
+
+    // VIEW_ALL_CHANNELS bypasses membership checks for non-private channels
     if (this.hasCapability(principal, CAPABILITIES.VIEW_ALL_CHANNELS, { workspaceId })) {
       return true;
     }
@@ -219,6 +230,16 @@ class PermissionEngine {
   canManageChannel(principal, channel) {
     if (!principal || !channel) return false;
     if (isRecipientChannel(channel) && !hasRecipientMembership(channel, principal._id)) return false;
+
+    const isFlowTaskProject = channel.type === 'project' || channel.flowTaskRef?.entityType === 'board';
+    const isCustomPrivate = (channel.visibility === 'private' || channel.type === 'private') && !isFlowTaskProject;
+    const userId = principal._id?.toString();
+    const isMember = (typeof channel.hasMember === 'function' && channel.hasMember(principal._id) === true) ||
+      (Array.isArray(channel.members) && channel.members.some((m) => (m.userId || m._id || m)?.toString() === userId));
+
+    if (isCustomPrivate && !isMember) {
+      return false;
+    }
 
     // Admin can manage everything
     if (this.hasCapability(principal, CAPABILITIES.MANAGE_MEMBERS)) {

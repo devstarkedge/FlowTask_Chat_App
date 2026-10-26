@@ -173,11 +173,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     });
     if (!ok) return;
     try {
-      await toast.promise(removeMember(channel._id, memberId), {
-        loading: 'Removing member…',
-        success: `${memberName || 'Member'} removed`,
-        error: 'Failed to remove member',
-      });
+      await removeMember(channel._id, memberId);
     } catch (err) {
       console.error(err);
     }
@@ -191,11 +187,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     });
     if (!ok) return;
     try {
-      await toast.promise(leaveChannel(channel._id), {
-        loading: 'Leaving channel…',
-        success: 'You left the channel',
-        error: 'Failed to leave channel',
-      });
+      await leaveChannel(channel._id);
       setShowInfoPanel(false);
     } catch (err) {
       console.error(err);
@@ -211,11 +203,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     });
     if (!ok) return;
     try {
-      await toast.promise(deleteChannel(channel._id), {
-        loading: 'Deleting channel…',
-        success: 'Channel deleted',
-        error: (err) => err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to delete channel',
-      });
+      await deleteChannel(channel._id);
       setShowInfoPanel(false);
       navigate(`/workspace/${activeWorkspace?._id || activeWorkspaceId}`);
     } catch (err) {

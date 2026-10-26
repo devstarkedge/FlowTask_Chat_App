@@ -427,7 +427,10 @@ export async function initializeSocket(httpServer, corsOptions) {
           return;
         }
 
-        // Permission engine: workspace-level capability can join native channels.
+        const isFlowTaskProject = channel.type === 'project' || channel.flowTaskRef?.entityType === 'board';
+        const isCustomPrivate = (channel.visibility === 'private' || channel.type === 'private') && !isFlowTaskProject;
+
+        // Permission engine: workspace-level capability can join native channels (excluding private custom channels).
         const { default: permissionEngine } = await import('../services/permissionEngine.js');
         const scopedUser = {
           ...(user.toObject ? user.toObject() : user),
@@ -435,7 +438,9 @@ export async function initializeSocket(httpServer, corsOptions) {
           flowTaskAccess: socket.workspaceMembership?.flowTaskAccess || null,
         };
         if (
-          !isRecipientChannel(channel) && permissionEngine.canViewAllChannels(scopedUser, { workspaceId: wsId })
+          !isRecipientChannel(channel) &&
+          !isCustomPrivate &&
+          permissionEngine.canViewAllChannels(scopedUser, { workspaceId: wsId })
         ) {
           const joinRoom = buildRoomName(wsId, 'channel', channelId);
           socket.join(joinRoom);
@@ -499,10 +504,11 @@ export async function initializeSocket(httpServer, corsOptions) {
         const { default: ChannelMember } = await import('../modules/channels/ChannelMember.model.js');
 
         let isAuthorized = false;
-        if (socket.workspaceMembership?.role === 'admin' || socket.workspaceMembership?.role === 'owner') {
+        if (!isCustomPrivate && (socket.workspaceMembership?.role === 'admin' || socket.workspaceMembership?.role === 'owner')) {
           isAuthorized = true;
         } else {
-          isAuthorized = channel.hasMember(user._id)
+          isAuthorized = (typeof channel.hasMember === 'function' ? channel.hasMember(user._id) : false)
+            || (Array.isArray(channel.members) && channel.members.some((m) => (m.userId || m._id || m)?.toString() === user._id.toString()))
             ? true
             : await ChannelMember.isMember(channelId, user._id);
         }

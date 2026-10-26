@@ -1097,13 +1097,20 @@ class ChannelService {
     });
 
     if (isAdmin) {
-      // Workspace owners and admins see all non-archived, non-DM workspace channels
-      // (including all FlowTask project channels) plus their DM conversations and member channels.
+      // Workspace owners and admins see non-archived public/system/project workspace channels
+      // plus their member channels (including any private channels they were added to) and DMs.
+      // Private custom channels are strictly isolated to their explicit members.
       const workspaceChannels = await Channel.find({
         workspaceId,
         isArchived: false,
         type: { $ne: 'dm' },
         recipientOnly: { $ne: true },
+        $or: [
+          { visibility: CHANNEL_VISIBILITY.PUBLIC },
+          { type: CHANNEL_TYPES.PROJECT },
+          { 'flowTaskRef.entityType': 'board' },
+          { type: CHANNEL_TYPES.SYSTEM },
+        ],
       }).lean();
       const nonDmMemberChannels = memberChannels.filter(
         (c) => c.type !== 'dm' && !c.recipientOnly,

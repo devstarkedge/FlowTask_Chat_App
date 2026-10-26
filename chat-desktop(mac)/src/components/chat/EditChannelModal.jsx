@@ -251,11 +251,7 @@ export default function EditChannelModal({ channel, onClose }) {
     if (!ok) return
     setIsSubmitting(true)
     try {
-      await toast.promise(deleteChannel(channel._id), {
-        loading: 'Deleting channel…',
-        success: 'Channel deleted',
-        error: (err) => err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to delete channel',
-      })
+      await deleteChannel(channel._id)
       onClose()
       navigate(`/workspace/${activeWorkspace?._id || activeWorkspaceId}`)
     } catch (err) {

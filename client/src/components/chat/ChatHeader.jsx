@@ -107,11 +107,7 @@ export default function ChatHeader({
     });
     if (!ok) return;
     try {
-      await toast.promise(deleteChannel(channel._id), {
-        loading: 'Deleting channel…',
-        success: 'Channel deleted',
-        error: (err) => err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to delete channel',
-      });
+      await deleteChannel(channel._id);
       navigate(`/workspace/${workspaceId}`);
     } catch (err) {
       console.error(err);

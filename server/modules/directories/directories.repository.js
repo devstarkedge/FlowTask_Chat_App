@@ -164,7 +164,16 @@ class DirectoriesRepository {
     const filter = injectWorkspaceFilter({
       isArchived: false,
       type: { $ne: 'dm' },
-      $and: [recipientDiscoveryFilter(requesterId, memberChannelIds)],
+      $and: [
+        recipientDiscoveryFilter(requesterId, memberChannelIds),
+        {
+          $or: [
+            { visibility: 'public', type: { $ne: 'private' } },
+            ...(memberChannelIds.length > 0 ? [{ _id: { $in: memberChannelIds } }] : []),
+            ...(requesterId ? [{ 'members.userId': requesterId }] : []),
+          ],
+        },
+      ],
     }, workspaceId);
 
     if (search) {

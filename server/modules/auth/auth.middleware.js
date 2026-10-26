@@ -183,8 +183,11 @@ export function requireChannelAccess() {
         return next();
       }
 
-      // Chat workspace admins and owners can access non-DM workspace channels.
-      if (req.membership?.role === 'admin' || req.membership?.role === 'owner') {
+      const isFlowTaskProject = isFlowTaskProjectChannel(channel);
+      const isCustomPrivate = (channel.visibility === 'private' || channel.type === 'private') && !isFlowTaskProject;
+
+      // Chat workspace admins and owners can access non-DM, non-private workspace channels.
+      if (!isCustomPrivate && (req.membership?.role === 'admin' || req.membership?.role === 'owner')) {
         req.channel = channel;
         return next();
       }

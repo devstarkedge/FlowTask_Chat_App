@@ -70,22 +70,16 @@ function withHuddleBroadcast(config){
   }]);
   config=withPodfile(config,mod=>{
     let contents=mod.modResults.contents;
-    const patch=`
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-      end
-    end
-    Dir.glob("#{installer.sandbox.target_support_files_dir}/**/*-frameworks.sh").each do |script|
-      text = File.read(script)
-      if text.include?('readlink "${source}"')
-        File.write(script, text.gsub('readlink "${source}"', 'readlink -f "${source}"'))
-      end
-    end
-`;
+    const patch=[
+      '    installer.pods_project.targets.each do |target|',
+      '      target.build_configurations.each do |config|',
+      '        config.build_settings[\'ENABLE_USER_SCRIPT_SANDBOXING\'] = \'NO\'',
+      '      end',
+      '    end'
+    ].join('\n');
     if(!contents.includes('ENABLE_USER_SCRIPT_SANDBOXING')){
       if(contents.includes('post_install do |installer|')){
-        contents=contents.replace('post_install do |installer|',`post_install do |installer|${patch}`);
+        contents=contents.replace('post_install do |installer|',`post_install do |installer|\n${patch}`);
       }else{
         contents+=`\npost_install do |installer|\n${patch}\nend\n`;
       }

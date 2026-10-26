@@ -1,16 +1,35 @@
 import React from "react";
 import { FileText } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useChannelStore } from '../../stores/channelStore';
+import { getChannelPath, getDMPath } from '../../utils/chatRoutes';
 
-export default function CanvasDocumentCard({ url, canvasId, token, isPublic }) {
+export default function CanvasDocumentCard({ url, canvasId, token, isPublic, title, previewText, channelId, workspaceId }) {
   const navigate = useNavigate();
-
+  const location = useLocation();
 
   const handleOpen = () => {
-    if (canvasId) {
-      navigate(`/canvas/${canvasId}`);
-    } else if (isPublic && token) {
+    if (isPublic && token) {
       navigate(`/public/canvas/${token}`);
+    } else if (canvasId) {
+      // Keep the receiving conversation mounted. The standalone deep-link
+      // loader navigates to the owner's channel, which may be a different DM.
+      const conversation = location.pathname.match(/^(\/workspace\/[^/]+\/(?:channel|dms)\/([^/]+))(?:\/|$)/);
+      const messageChannelId = String(channelId?._id || channelId || '');
+      const messageWorkspaceId = String(workspaceId?._id || workspaceId || location.pathname.match(/^\/workspace\/([^/]+)/)?.[1] || '');
+      if (conversation && (!messageChannelId || messageChannelId === conversation[2])) {
+        navigate(conversation[1], {
+          state: { targetTab: `canvas:${canvasId}`, targetChannelId: conversation[2] },
+        });
+      } else if (messageChannelId && messageWorkspaceId) {
+        const channel = useChannelStore.getState().channels.find(item => String(item._id) === messageChannelId);
+        const destination = channel?.type === 'dm' || channel?.type === 'self' ? getDMPath : getChannelPath;
+        navigate(destination(messageWorkspaceId, messageChannelId), {
+          state: { targetTab: `canvas:${canvasId}`, targetChannelId: messageChannelId },
+        });
+      } else {
+        navigate(`/canvas/${canvasId}`);
+      }
     } else {
       // Fallback if we only have URL
       window.open(url, "_blank");
@@ -19,7 +38,7 @@ export default function CanvasDocumentCard({ url, canvasId, token, isPublic }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "4px 0" }}>
-      {/* Premium Slack-like Canvas Card */}
+      {/* Shared canvas card */}
       <div
         onClick={handleOpen}
         role="button"
@@ -78,7 +97,7 @@ export default function CanvasDocumentCard({ url, canvasId, token, isPublic }) {
                 lineHeight: 1.2,
               }}
             >
-              Canvas Document
+              {title || "Canvas Document"}
             </h4>
             <div style={{ fontSize: 12, color: "var(--text-muted, #64748b)", marginTop: 2 }}>
               Canvas {isPublic ? "• Public Share" : ""}
@@ -86,8 +105,9 @@ export default function CanvasDocumentCard({ url, canvasId, token, isPublic }) {
           </div>
         </div>
 
-        {/* Mock Body Preview (mimicking the grid/content in the user's screenshot) */}
+        {/* Preview supplied by the shared document, when available. */}
         <div style={{ padding: "0 16px 16px" }}>
+          {previewText ? <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted, #64748b)', overflowWrap: 'anywhere' }}>{previewText}</p> :
           <div
             style={{
               border: "1px solid var(--border-secondary, #e2e8f0)",
@@ -104,6 +124,7 @@ export default function CanvasDocumentCard({ url, canvasId, token, isPublic }) {
               <div style={{ flex: 1, height: 24 }} />
             </div>
           </div>
+          }
         </div>
       </div>
 

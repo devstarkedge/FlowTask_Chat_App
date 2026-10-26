@@ -12,7 +12,8 @@
     "dev:all": "concurrently \"npm run dev:server\" \"npm run dev:desktop\"",
     "install:all": "cd server && npm install && cd ../client && npm install",
     "build:client": "cd client && npm run build",
-    "start": "cd server && npm start"
+    "start": "cd server && npm start",
+    "start:huddles": "npm --prefix server run start:with-media"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

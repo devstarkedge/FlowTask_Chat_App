@@ -8,6 +8,10 @@ export function assertCloudinaryDeliveryUrl(value, cloudName) {
   if (!cloudName || url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') || !(
     (url.hostname === 'res.cloudinary.com' && path.startsWith(`/${resource}/`)) ||
     (url.hostname === 'api.cloudinary.com' && path.startsWith(`/v1_1/${resource}/`))
-  )) throw new ForbiddenError('Invalid file delivery origin');
+  )) {
+    const error = new ForbiddenError('Invalid file delivery origin');
+    error.code = 'FILE_DELIVERY_ORIGIN_INVALID';
+    throw error;
+  }
   return url;
 }

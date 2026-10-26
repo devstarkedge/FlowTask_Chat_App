@@ -14,7 +14,6 @@ export default function TaskBlock({ block, checked = false, onToggle, children, 
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          marginTop: 3,
           cursor: 'pointer',
         }}
         contentEditable={false}

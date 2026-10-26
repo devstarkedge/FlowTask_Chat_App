@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { X, Shield, UserPlus, Globe, Check } from 'lucide-react-native';
+import { X, Shield, Globe, Check } from "lucide-react-native";
 import Avatar from '../../components/Avatar';
 import api from '../../services/api';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';

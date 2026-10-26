@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
-import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, MessageSquare, FolderInput } from 'lucide-react-native';
+import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, FolderInput } from "lucide-react-native";
 import { AppAvatar, HeaderBackButton } from '../components/common';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useChannelDetails } from '../hooks/useChannelDetails';

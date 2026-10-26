@@ -82,7 +82,7 @@ export default ({ config }) => {
       [
         'expo-notifications',
         {
-          sounds: IOS_NOTIFICATION_SOUND_ASSETS,
+          sounds: [...IOS_NOTIFICATION_SOUND_ASSETS, './assets/sounds/huddle_incoming.wav'],
         },
       ],
       ...basePlugins,

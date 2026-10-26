@@ -14,7 +14,7 @@ import {
   isDesktopApp,
   setWindowControlsColor,
 } from "../services/desktopService";
-import { useEffect } from "react";
+
 
 const FEATURES = [
   {

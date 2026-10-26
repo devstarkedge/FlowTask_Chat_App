@@ -15,22 +15,7 @@ import { formatRelativeTime } from '../utils/dateUtils';
 import { ScreenLayout, FilterTabs, LoadingState, EmptyState, HeaderBackButton } from '../components/common';
 import ReminderModal from '../components/ReminderModal';
 import CreateReminderModal from '../components/CreateReminderModal';
-import { 
-  Bookmark,
-  FileText,
-  Clock,
-  ChevronLeft,
-  Plus,
-  AlignRight,
-  Check,
-  Archive,
-  Trash2,
-  Share,
-  Link,
-  Square,
-  Hash,
-  Lock,
-} from 'lucide-react-native';
+import { Bookmark, FileText, Clock, Plus, Check, Archive, Trash2, Square } from "lucide-react-native";
 import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import logger from '../utils/logger';

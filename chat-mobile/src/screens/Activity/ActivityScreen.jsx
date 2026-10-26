@@ -30,7 +30,7 @@ const FILTERS = [
 
 
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { Archive, BellOff, CheckCircle, Clock, Trash2 } from 'lucide-react-native';
+import { CheckCircle, Clock, Trash2 } from "lucide-react-native";
 import Toast from 'react-native-toast-message';
 import { usePreferencesStore } from "../../stores/preferencesStore";
 

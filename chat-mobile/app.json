@@ -14,14 +14,20 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "TaskChat accesses your photo library to show recent photos and videos and let you select and upload them to workspace channels and conversations. For example, you can choose a screenshot and share it with members of a channel. TaskChat also uses photo library access when you save downloaded photos and videos to Photos.",
         "NSPhotoLibraryAddUsageDescription": "TaskChat saves photos and videos you download from workspace channels and conversations to your photo library. For example, you can save a photo shared by a channel member to Photos.",
-        "NSCameraUsageDescription": "TaskChat uses your camera to take photos and record videos that you choose to share in workspace channels and conversations. For example, you can photograph a project update and send it to members of a channel.",
-        "NSMicrophoneUsageDescription": "TaskChat uses your microphone to record audio clips and sound for video clips that you choose to share in workspace channels and conversations. For example, you can record a spoken project update and send it to members of a channel."
+        "NSCameraUsageDescription": "TaskChat uses your camera for Huddle video calls and to take photos and record videos that you choose to share in workspace channels and conversations. For example, you can show a project update during a Huddle or send a photo to members of a channel.",
+        "NSMicrophoneUsageDescription": "TaskChat uses your microphone for Huddle calls and to record audio clips and sound for video clips that you choose to share in workspace channels and conversations. For example, you can discuss a project in a Huddle or send a spoken update to members of a channel.",
+        "UIBackgroundModes": [
+          "audio",
+          "remote-notification"
+        ]
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
-            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
           }
         ],
         "NSPrivacyTracking": false,
@@ -42,10 +48,18 @@
       "permissions": [
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
-        "READ_MEDIA_AUDIO"
+        "RECORD_AUDIO",
+        "CAMERA",
+        "MODIFY_AUDIO_SETTINGS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PROJECTION",
+        "BLUETOOTH_CONNECT",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "blockedPermissions": [
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_AUDIO"
       ],
       "intentFilters": [
         {
@@ -81,7 +95,9 @@
     "plugins": [
       [
         "./plugins/withAndroidLauncherInset.cjs",
-        { "insetPercent": 14 }
+        {
+          "insetPercent": 14
+        }
       ],
       "expo-secure-store",
       "@react-native-community/datetimepicker",
@@ -113,7 +129,18 @@
           "image": "./assets/Vector.png",
           "imageWidth": 200
         }
-      ]
+      ],
+        "@config-plugins/react-native-webrtc",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/huddle_incoming.wav"
+          ]
+        }
+      ],
+      "./plugins/withHuddleCalling.cjs",
+      "./plugins/withHuddleBroadcast.cjs"
     ]
   }
 }

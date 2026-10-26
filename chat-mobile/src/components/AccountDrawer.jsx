@@ -29,30 +29,7 @@ import PresenceModal from "./PresenceModal";
 import CustomizeHomeModal from "./CustomizeHomeModal";
 import { useUIStore } from "../stores/uiStore";
 import { useShallow } from 'zustand/react/shallow';
-import {
-  X,
-  User,
-  Settings,
-  Bell,
-  Lock,
-  Key,
-  Bookmark,
-  MessageSquare,
-  Edit3,
-  Clock,
-  Users,
-  UserPlus,
-  Hash,
-  BellOff,
-  Activity,
-  FileText,
-  Send,
-  LogOut,
-  CircleChevronRight,
-  Smile,
-  Layers2,
-  LogOut as LogOutIcon,
-} from "lucide-react-native";
+import { X, User, Settings, UserPlus, BellOff, Activity, LogOut, CircleChevronRight, Smile, Layers2 } from "lucide-react-native";
 import { rnShadowToBoxShadow } from "../utils/styleUtils";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isCustomStatusValid } from '../utils/statusUtils';
@@ -151,12 +128,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
     }
   };
 
-  const handleClose = () => {
-    if (Platform.OS === "web") {
-      document.activeElement?.blur();
-    }
-    onClose();
-  };
+
 
   const navigateTo = (screen) => {
     onClose();
@@ -205,11 +177,7 @@ const AccountDrawer = ({ visible, onClose, navigation }) => {
     <View style={[styles.divider, { backgroundColor: colors.border }]} />
   );
 
-  const SectionTitle = ({ title }) => (
-    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-      {title}
-    </Text>
-  );
+
 
   return (
     <AccessibleModal

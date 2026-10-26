@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { MessageSquare, Check, ArrowRight } from "lucide-react";
+import { Check, ArrowRight } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 
 const PLANS = [

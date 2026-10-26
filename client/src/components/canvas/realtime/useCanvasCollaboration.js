@@ -57,7 +57,7 @@ export function useCanvasCollaboration(canvasId) {
     let mounted = true;
     let releaseFn = null;
     let localProvider = null;
-    let connectTimer = null;
+
 
     // Handler references declared here so cleanup can remove the exact
     // listeners registered on the shared provider instance.

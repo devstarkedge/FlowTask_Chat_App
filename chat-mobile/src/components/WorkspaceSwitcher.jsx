@@ -15,13 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useThemeStore } from "../stores/themeStore";
-import {
-  Plus,
-  Settings,
-  HelpCircle,
-  MoreVertical,
-  X,
-} from "lucide-react-native";
+import { Plus, Settings, MoreVertical, X } from "lucide-react-native";
 import WorkspaceAvatar from "./WorkspaceAvatar";
 import AddWorkspaceScreen from "./workspace/AddWorkspaceScreen";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -75,23 +69,7 @@ const WorkspaceSwitcher = ({ visible, onClose, onWorkspaceSelected = onClose, na
     }).start();
   }, [visible, SIDEBAR_WIDTH]);
 
-  const handleInvite = (ws) => {
-    const code = ws?.inviteCode || ws?.code || 'WS123';
-    Alert.alert(
-      'Invite to Workspace',
-      `Share this invite code with others to let them join ${ws.name}:\n\nCode: ${code}`,
-      [
-        { text: 'OK' },
-        {
-          text: 'Copy Code',
-          onPress: () => {
-            const Clipboard = require('expo-clipboard');
-            Clipboard.setStringAsync(code);
-          }
-        }
-      ]
-    );
-  };
+
 
   const handleWorkspaceSwitch = async (workspaceId) => {
     if (switchingRef.current) return;

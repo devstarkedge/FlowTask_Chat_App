@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useChannelStore } from "../../stores/channelStore";
-import { X, Search, Check, FolderPlus, Hash, Lock, Volume2, Users, ChevronDown } from 'lucide-react';
+import { X, Search, Check, FolderPlus, Hash, Lock, Volume2, ChevronDown } from "lucide-react";
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api, { categoryAPI } from "../../services/api";

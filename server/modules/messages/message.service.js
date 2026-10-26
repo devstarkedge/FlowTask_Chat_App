@@ -1,10 +1,13 @@
 import { authorizeFileReferences } from '../files/fileAccess.service.js';
+import canvasRepository from '../canvas/canvas.repository.js';
+import { canvasAttachmentIds } from '../canvas/canvasAttachments.js';
+import { canvasShareIds } from '../canvas/canvasShareLinks.js';
 import readReceiptRepository from '../readReceipts/readReceipt.repository.js';
 import messageRepository from './message.repository.js';
 import channelRepository from '../channels/channel.repository.js';
 import threadRepository from '../threads/thread.repository.js';
 import userRepository from '../users/user.repository.js';
-import { emitToChannel, emitToUser, getRoomOccupancy, getIO } from '../../sockets/socketManager.js';
+import { emitToChannel, emitToUser, getRoomOccupancy } from '../../sockets/socketManager.js';
 import { sanitizeHtml, stripHtml, truncate, extractMentions } from '../../utils/sanitize.js';
 import { parsePagination, buildCursorFilter, cursorPaginationResponse } from '../../utils/pagination.js';
 import { messageSocketPayload, reactionSocketPayload, deleteSocketPayload } from '../../utils/socketPayload.js';
@@ -66,6 +69,27 @@ class MessageService {
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
 
     await authorizeFileReferences(fileReferences, authorId, workspaceId || channel.workspaceId);
+    const canvasFiles = [];
+    if (contentType === 'canvas_share' && canvasMeta?.canvasId) {
+      if (!/^[a-f\d]{24}$/i.test(String(canvasMeta.canvasId))) throw new ValidationError('Invalid canvas');
+    }
+    const referencedFiles = new Set((fileReferences || []).map(String));
+    for (const sharedCanvasId of canvasShareIds({ content, htmlContent, contentType, canvasMeta })) {
+      const sharedCanvas = await canvasRepository.findById(sharedCanvasId, workspaceId || channel.workspaceId);
+      if (!sharedCanvas) {
+        if (contentType === 'canvas_share') throw new NotFoundError('Canvas not found');
+        continue;
+      }
+      const ids = canvasAttachmentIds(sharedCanvas.content).filter(id => !referencedFiles.has(id));
+      // Re-sharing cannot turn a guessed asset ID into permission to read it.
+      for (let offset = 0; offset < ids.length; offset += 10) {
+        await authorizeFileReferences(ids.slice(offset, offset + 10), authorId, workspaceId || channel.workspaceId);
+      }
+      for (const fileId of ids) {
+        referencedFiles.add(fileId);
+        canvasFiles.push({ fileId, canvasId: sharedCanvasId });
+      }
+    }
 
     // Sanitize content
     const sanitizedContent = content ? sanitizeHtml(content) : '';
@@ -238,6 +262,14 @@ class MessageService {
     // Persist
     const message = await messageRepository.create(messageData);
 
+    if (canvasFiles.length) {
+      await FileReference.insertMany(canvasFiles.map(({ fileId, canvasId }) => ({
+        workspaceId: workspaceId || channel.workspaceId,
+        channelId, messageId: message._id, canvasId,
+        fileId, referencedBy: authorId, contextType: 'canvas',
+      })));
+    }
+
     if (fileReferences && fileReferences.length > 0) {
       const refContextType = actualThreadId
         ? 'thread'
@@ -260,16 +292,10 @@ class MessageService {
       await FileReference.insertMany(refsToCreate);
     }
 
-    // Populate author and fileReferences for emission
-    let populated = await messageRepository.findById(message._id, {
+    // create already populates the author. Only attachment references need a reload.
+    const populated = fileReferences?.length ? await messageRepository.findById(message._id, {
       workspaceId: (workspaceId || channel.workspaceId)?.toString(),
-    });
-
-    // Check delivery status BEFORE building the socket payload so the ACK / CREATE event
-    // inherently contains the 'delivered' state. This prevents a race condition in the UI!
-    if (channel.type === CHANNEL_TYPES.DM) {
-      await this._updateDeliveryStatus(populated, channel, authorId).catch(() => {});
-    }
+    }) : message;
 
     // Update channel's last message and emit socket event so sidebar reorders in real-time
     // Build preview: text wins, fall back to attachment label so the channel sidebar
@@ -358,6 +384,12 @@ class MessageService {
       } catch (err) {
         logDeliveryFailure(message._id, err);
       }
+    }
+
+    // Receipts must never hold up delivery or the sender's next queued request.
+    // CREATE and ACK go first; actual read acknowledgements advance to seen.
+    if (channel.type === CHANNEL_TYPES.DM) {
+      this._updateDeliveryStatus(populated, channel, authorId).catch(() => {});
     }
 
     // Update unread counts for other members
@@ -878,70 +910,15 @@ class MessageService {
       // Check if recipient is online (has active sockets)
       if (recipient.socketIds && recipient.socketIds.length > 0) {
         const now = new Date();
-        const channelIdStr = channel._id.toString();
-        const recipientIdStr = recipientParticipantId.toString();
-
-        // ── Check if recipient is actively viewing this DM ──────────────────
-        // Use in-memory socket state (socket.activeChannelId) rather than DB
-        // because socket.activeChannelId is set synchronously when window:focus
-        // fires, while the DB write is async and may lag by milliseconds.
-        let recipientIsViewing = false;
-        const io = getIO();
-        if (io) {
-          try {
-            const sockets = await io.fetchSockets();
-            for (const sock of sockets) {
-              const sockUserId = sock.chatUser?._id?.toString?.();
-              if (sockUserId === recipientIdStr && sock.activeChannelId === channelIdStr) {
-                recipientIsViewing = true;
-                break;
-              }
-            }
-          } catch (err) {
-            // Fallback to DB-based check if socket fetch fails
-            const activeWinChannel = recipient.chatPreferences?.activeWindowChannel?.toString();
-            recipientIsViewing = activeWinChannel === channelIdStr;
-          }
-        } else {
-          // Fallback: DB-based check
-          const activeWinChannel = recipient.chatPreferences?.activeWindowChannel?.toString();
-          recipientIsViewing = activeWinChannel === channelIdStr;
-        }
-
-        if (recipientIsViewing) {
-          // Recipient has the DM open — skip 'delivered', go straight to 'seen'
-          message.status = 'seen';
-          message.seenAt = now;
-
-          await messageRepository.update(message._id, {
-            status: 'seen',
-            seenAt: now,
-          }, channel.workspaceId?.toString());
-
-          // Notify the sender with blue double-tick immediately
-          emitToUser(senderUserId.toString(), SOCKET_EVENTS.MESSAGE_STATUS, {
+        const workspaceId = channel.workspaceId?.toString();
+        const result = await messageRepository.markDelivered(message._id, workspaceId, now);
+        if (result.modifiedCount) {
+          emitToUser(senderIdStr, SOCKET_EVENTS.MESSAGE_STATUS, {
             messageId: message._id.toString(),
-            channelId: channelIdStr,
-            status: 'seen',
-            seenAt: now,
-          }, channel.workspaceId?.toString());
-        } else {
-          // Recipient is online but not actively viewing — mark as delivered
-          message.status = 'delivered';
-          message.deliveredAt = now;
-
-          await messageRepository.update(message._id, {
+            channelId: channel._id.toString(),
             status: 'delivered',
             deliveredAt: now,
-          }, channel.workspaceId?.toString());
-
-          // Notify the sender about delivery
-          emitToUser(senderUserId.toString(), SOCKET_EVENTS.MESSAGE_STATUS, {
-            messageId: message._id.toString(),
-            channelId: channelIdStr,
-            status: 'delivered',
-            deliveredAt: now,
-          }, channel.workspaceId?.toString());
+          }, workspaceId);
         }
       }
     } catch (error) {

@@ -39,6 +39,8 @@ function ResolvedMessageContent({ rawContent, message, children }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {children}
         <CanvasDocumentCard
+          channelId={message.channelId}
+          workspaceId={message.workspaceId}
           canvasId={message.canvasMeta.canvasId}
           title={message.canvasMeta.title}
           previewText={message.canvasMeta.previewText}
@@ -59,6 +61,8 @@ function ResolvedMessageContent({ rawContent, message, children }) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <CanvasDocumentCard
+          channelId={message?.channelId}
+          workspaceId={message?.workspaceId}
           url={trimmed}
           canvasId={parsed.canvasId}
           token={parsed.token}
@@ -82,6 +86,8 @@ function ResolvedMessageContent({ rawContent, message, children }) {
         {children}
         {canvasLinks.map((link, idx) => (
           <CanvasDocumentCard
+            channelId={message?.channelId}
+            workspaceId={message?.workspaceId}
             key={idx}
             url={link.url}
             canvasId={link.parsed.canvasId}

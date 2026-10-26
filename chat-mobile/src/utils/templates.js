@@ -1,20 +1,4 @@
-import {
-  FileText,
-  Users,
-  Zap,
-  Target,
-  BookOpen,
-  BarChart3,
-  CheckSquare,
-  Newspaper,
-  Briefcase,
-  Heart,
-  AlertTriangle,
-  UserPlus,
-  Code,
-  Rocket,
-  Calendar,
-} from "lucide-react-native";
+import { FileText, Users, BookOpen, CheckSquare, Newspaper, Briefcase, UserPlus, Code, Rocket, Calendar } from "lucide-react-native";
 import { markdownToDoc } from "./markdownToDoc";
 
 const TEMPLATES = [
@@ -537,7 +521,7 @@ function buildTemplateContent(templateIdOrTemplate) {
   const h = (level, text) => ({ type: "heading", attrs: { level }, content: [{ type: "text", text }] });
   const li = (text = "") => ({ type: "listItem", content: [p(text)] });
   const bullet = (...items) => ({ type: "bulletList", content: items.map((t) => li(t)) });
-  const bold = (text) => ({ type: "text", text, marks: [{ type: "bold" }] });
+
   
   const table = () => ({
     type: "table",

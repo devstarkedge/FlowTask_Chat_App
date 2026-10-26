@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
-import { Smile, Moon, BellOff, User, Settings, Download, LogOut, HelpCircle, MessageSquare } from 'lucide-react'
+import { Smile, Moon, BellOff, User, Settings, Download, LogOut } from "lucide-react";
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import toast from 'react-hot-toast'
 import { useProfileStore } from '../../stores/profileStore'
@@ -26,19 +26,7 @@ export default function UserProfileMenu({
   const { profileUser, openProfile } = useProfileStore();
   const openDownloads = useUIStore((s) => s.openDownloads);
 
-  const handleMessageYourself = async () => {
-    try {
-      const channel = await useChannelStore.getState().createDM(user._id)
-      if (channel?._id) {
-        navigate(`/workspace/${workspaceId}/dm/${channel._id}`)
-      }
-      onClose()
-      toast.success('Opened your personal space')
-    } catch (error) {
-      console.error('Failed to create self-DM:', error)
-      toast.error('Failed to open personal space')
-    }
-  }
+
 
   const STATUS_COLORS = {
     online: "var(--status-online)",

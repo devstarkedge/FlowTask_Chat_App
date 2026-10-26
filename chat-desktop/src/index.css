@@ -3582,10 +3582,71 @@ body {
 }
 
 .sidebar-item-badge {
+  /* Conversation rows override the badge placement below. */
   font-size: 11px;
   min-width: 20px;
   height: 20px;
   border-radius: 10px;
+}
+
+/* Keep DM names, previews and delivery metadata aligned at every sidebar width. */
+.sidebar-item.sidebar-item--conversation {
+  min-height: 48px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.sidebar-item--conversation .sidebar-item-icon {
+  width: 28px;
+  height: 28px;
+  margin-right: 9px;
+}
+.sidebar-item--conversation .sidebar-item-content {
+  flex: 1 1 0%;
+}
+.sidebar-item--conversation .sidebar-item-label {
+  line-height: 18px;
+}
+.sidebar-item--conversation .sidebar-item-sublabel {
+  line-height: 17px;
+}
+.sidebar-item--conversation .sidebar-item-meta {
+  display: grid;
+  grid-template-rows: 18px 17px;
+  justify-items: end;
+  align-items: center;
+  align-self: flex-start;
+  gap: 1px;
+  margin-left: 10px;
+  white-space: nowrap;
+}
+.sidebar-item--conversation .sidebar-item-meta > :first-child:not(.sidebar-item-badge) {
+  grid-row: 1;
+  font-size: 10px;
+  line-height: 18px;
+}
+.sidebar-item--conversation .sidebar-item-badge {
+  grid-row: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  line-height: 17px;
+}
+.sidebar-item--conversation .sidebar-self-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.sidebar-self-label > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-self-label > span:last-child {
+  flex-shrink: 0;
 }
 
 /* ─── Collapsed Sidebar Adjustments ─────────────────────────────────────── */

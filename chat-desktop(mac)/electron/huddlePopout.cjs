@@ -1,6 +1,6 @@
 // Only presentation is detached. The original renderer remains the call owner.
 function installHuddlePopout(parent,{BrowserWindow,ipcMain,icon,openExternal,security,capture}) {
-  const contents=parent.webContents;let child=null,disposed=false;
+  const contents=parent.webContents;let child=null,disposed=false,controlRevision=0;
   const alive=()=>!disposed && !parent.isDestroyed() && !contents.isDestroyed();
   contents.setWindowOpenHandler(details=>{
     if(alive() && details.url==='about:blank' && details.frameName==='taskchat-huddle' && !child) {
@@ -12,16 +12,27 @@ function installHuddlePopout(parent,{BrowserWindow,ipcMain,icon,openExternal,sec
   const created=(window,details)=>{
     if(disposed || details.frameName!=='taskchat-huddle' || details.url!=='about:blank')return;
     if(child){window.destroy();return;}
-    child=window;security.allowWindow(window);capture.allowWindow(window);
+    child=window;window.setSkipTaskbar(false);security.allowWindow(window);capture.allowWindow(window);
     window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
     window.webContents.on('will-navigate',(event,url)=>{if(url!=='about:blank')event.preventDefault();});
     window.once('closed',()=>{if(child===window)child=null;});
   };
   contents.on('did-create-window',created);
-  const control=(event,action)=>{
+  const control=async(event,action)=>{
     if(!alive() || event.sender!==contents || event.senderFrame!==contents.mainFrame || !['minimize','restore','maximize','close'].includes(action) || !child || child.isDestroyed())return {ok:false};
+    const current=child,revision=++controlRevision;
     if(action==='close'){child.close();return {ok:true};}
-    if(action==='minimize'){if(!child.isVisible())child.showInactive();child.minimize();}
+    if(action==='minimize'){
+      current.setSkipTaskbar(false);
+      if(!current.isVisible()){
+        current.showInactive();
+        // Give Windows a rendered Huddle frame for its taskbar preview.
+        try{await current.webContents.capturePage(undefined,{stayAwake:true});}catch{}
+      }
+      if(!alive() || current.isDestroyed() || child!==current)return {ok:false};
+      if(revision!==controlRevision)return {ok:true};
+      current.minimize();
+    }
     if(action==='restore'){if(child.isMinimized())child.restore();child.show();child.focus();}
     if(action==='maximize'){if(child.isMaximized())child.unmaximize();else child.maximize();}
     return {ok:true,maximized:child.isMaximized()};

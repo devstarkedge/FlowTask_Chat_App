@@ -5,7 +5,7 @@ import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { categoryAPI } from '../services/api';
-import { X, Check, Edit2, Trash2, FolderInput, FolderOutput } from 'lucide-react-native';
+import { X, Edit2, Trash2, FolderInput, FolderOutput } from "lucide-react-native";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemoveChannels }) => {

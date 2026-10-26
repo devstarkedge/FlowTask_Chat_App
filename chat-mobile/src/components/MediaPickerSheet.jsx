@@ -10,7 +10,7 @@ import {
   FlatList,
   Image,
 } from 'react-native';
-import { Camera, Image as ImageIcon, Mic, Video, FileText, Smile, Layers, Clock, X } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, FileText, Smile, Layers, Clock } from "lucide-react-native";
 import MediaLibrary from '../utils/safeMediaLibrary';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureCapturePermission } from '../utils/capturePermissions';

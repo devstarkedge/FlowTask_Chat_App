@@ -1,6 +1,6 @@
 import { useLiveProfileData } from '../../../hooks/useLiveProfileData';
 import { useState, useRef, useEffect } from "react";
-import { Check, MessageSquarePlus, X, Reply, Clock } from "lucide-react";
+import { Check, MessageSquarePlus, X, Reply } from "lucide-react";
 import { Avatar } from "../../chat/MemberAvatarGroup";
 import { useCanvasUiStore } from "../../../stores/canvasUiStore";
 

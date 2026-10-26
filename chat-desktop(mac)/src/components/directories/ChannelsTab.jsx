@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Hash, Lock, Plus, Users, ChevronDown, X, Globe, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { Search, Hash, Lock, Plus, Users, ChevronDown, X, Globe, CheckCircle2 } from "lucide-react";
 import Loader from '../shared/Loader';
 import { Virtuoso } from "react-virtuoso";
 import { directoriesAPI } from "../../services/directoriesAPI";

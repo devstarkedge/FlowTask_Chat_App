@@ -704,7 +704,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const SHEET_MAX_WIDTH_STATIC = 480;
+
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },

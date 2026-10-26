@@ -283,7 +283,14 @@ export async function downloadFile(file, onProgress) {
   const response = await fetch(url, { headers });
 
   if (!response.ok) {
-    throw new Error(`Download failed (HTTP ${response.status})`);
+    // Preserve the server's safe error instead of hiding every denial behind HTTP 403.
+    const payload = await response.json().catch(() => null);
+    const message = payload?.error?.message || payload?.message;
+    const code = payload?.error?.code;
+    const error = new Error(`Download failed (HTTP ${response.status}${code ? ', ' + code : ''})${message ? ': ' + message : ''}`);
+    error.status = response.status;
+    error.code = code || 'FILE_DOWNLOAD_FAILED';
+    throw error;
   }
 
   const contentLength = +response.headers.get('Content-Length') || 0;

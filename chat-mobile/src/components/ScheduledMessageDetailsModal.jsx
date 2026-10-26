@@ -10,14 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import {
-  X,
-  Clock,
-  Edit3,
-  Trash2,
-  Send,
-  Calendar,
-} from 'lucide-react-native';
+import { X, Edit3, Trash2, Send, Calendar } from "lucide-react-native";
 import { formatRelativeTime, formatScheduledDate } from '../utils/dateUtils';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { useConversationDetails } from '../hooks/useConversationDetails';

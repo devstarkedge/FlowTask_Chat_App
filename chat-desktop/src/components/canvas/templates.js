@@ -1,5 +1,5 @@
 // Centralized templates and content builders for Canvas
-import { FileText, Users, Zap, Target, BookOpen, BarChart3, CheckSquare, Newspaper, Briefcase, Heart, AlertTriangle, UserPlus, Code, Rocket, Calendar } from "lucide-react";
+import { Users, Newspaper, UserPlus, Code, Rocket } from "lucide-react";
 import PROD_TEMPLATES from "../../data/production-templates.json";
 import markdownToDoc from "../../utils/markdownToDoc";
 
@@ -152,7 +152,7 @@ function buildTemplateContent(templateIdOrTemplate) {
   const li = (text = "") => ({ type: "listItem", content: [p(text)] });
   const bullet = (...items) => ({ type: "bulletList", content: items.map((t) => li(t)) });
   const ordered = (...items) => ({ type: "orderedList", content: items.map((t) => li(t)) });
-  const bold = (text) => ({ type: "text", text, marks: [{ type: "bold" }] });
+
   
   // Custom helpers for rich content
   const table = () => ({

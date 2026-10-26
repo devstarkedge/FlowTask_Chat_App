@@ -32,6 +32,10 @@ const fileReferenceSchema = new Schema({
     // index: removed — covered by compound { messageId: 1, fileId: 1 }
     sparse: true
   },
+  canvasId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Canvas',
+  },
   threadId: { 
     type: Schema.Types.ObjectId, 
     ref: 'Thread',
@@ -45,7 +49,7 @@ const fileReferenceSchema = new Schema({
   },
   contextType: { 
     type: String, 
-    enum: ['channel', 'dm', 'thread'], 
+    enum: ['channel', 'dm', 'thread', 'canvas'],
     required: true 
   },
 }, {

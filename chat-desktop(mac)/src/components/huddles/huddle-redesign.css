@@ -148,3 +148,9 @@
 .huddle-screen-stage:fullscreen .huddle-screen-toolbar button{position:static;inset:auto;height:30px;padding:4px 8px}
 .huddle-screen-stage:fullscreen video{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain}
 @media(max-width:600px){.huddle-window.is-sharing .huddle-heading{display:block}.huddle-window.is-sharing .huddle-call-layout{grid-template-columns:minmax(0,1fr)}.huddle-sharing-indicator{display:none}.huddle-window .huddle-screen-stage .huddle-screen-toolbar button{padding:4px;min-width:26px}}
+
+/* Inline panels move inside the app; detached Electron panels use native dragging. */
+.huddle-window-chrome{-webkit-app-region:no-drag}
+.huddle-window-chrome.is-draggable{cursor:move;touch-action:none;user-select:none}
+body.huddle-popout .huddle-window-chrome{-webkit-app-region:drag;cursor:move;user-select:none}
+body.huddle-popout .huddle-window-chrome>button{-webkit-app-region:no-drag;cursor:pointer}

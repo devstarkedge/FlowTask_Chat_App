@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from "react";
 import { useNotificationStore } from '../../stores/notificationStore'
 import { useChannelStore } from '../../stores/channelStore'
-import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Smartphone, Hash, Lock, MessageCircle, Bot, Clock, Zap, Shield, Tags, Moon, Users, Check, Plus, Trash2, Search } from 'lucide-react';
+import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Smartphone, Hash, Lock, MessageCircle, Clock, Zap, Shield, Tags, Moon, Check, Plus, Trash2 } from "lucide-react";
 import Loader from '../shared/Loader';
 import toast from 'react-hot-toast'
 import { notificationAPI } from '../../services/api'

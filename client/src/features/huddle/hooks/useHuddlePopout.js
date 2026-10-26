@@ -13,12 +13,18 @@ export function useHuddlePopout({panel,session,closePanel}) {
     previousPanel.current=panel;wasJoined.current=Boolean(session);
   },[panel,session]);
   useEffect(()=>()=>{record.current?.close();record.current=null;},[]);
+  useEffect(()=>{
+    if(!host)return;
+    // The portal must commit its content before the native thumbnail is captured.
+    const current=record.current;
+    control('minimize')?.then(result=>{if(!result?.ok && record.current===current)close();}).catch(()=>{if(record.current===current)close();});
+  },[host]);
   const minimize=()=>{
     if(!globalThis.electronAPI?.controlHuddleWindow){closePanel();return;}
     if(!record.current) {
       const created=openHuddlePopout({label:panel?.label,onClosed:()=>{record.current=null;setHost(null);closedAction.current();}});
       if(!created){closePanel();return;}
-      record.current=created;setHost(created.host);
+      record.current=created;setHost(created.host);return;
     }
     control('minimize')?.then(result=>{if(!result?.ok)close();}).catch(close);
   };

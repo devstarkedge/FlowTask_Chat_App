@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Star, Eye, Plus, Copy, FileText } from "lucide-react";
+import { Star, Plus, FileText } from "lucide-react";
 
 function getPrimaryCover(template) {
   if (!template) return null;

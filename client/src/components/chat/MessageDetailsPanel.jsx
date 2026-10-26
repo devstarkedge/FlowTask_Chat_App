@@ -2,30 +2,7 @@ import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import {
-  X,
-  MessageSquare,
-  Hash,
-  Send,
-  Pin,
-  Edit,
-  Heart,
-  Repeat,
-  AtSign,
-  Forward,
-  MessageCircle,
-  FileText,
-  Image as ImageIcon,
-  Film,
-  Music,
-  File,
-  Calendar,
-  User,
-  HardDrive,
-  Copy,
-  Check,
-  ChevronRight,
-} from "lucide-react";
+import { X, MessageSquare, Hash, Pin, Edit, Heart, Repeat, AtSign, Forward, MessageCircle, FileText, Image as ImageIcon, Film, Music, Calendar, User, Copy, Check } from "lucide-react";
 import { format } from "date-fns";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";

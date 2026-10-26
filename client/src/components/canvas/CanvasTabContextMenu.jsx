@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Edit2, Copy, XSquare, Trash2 } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from 'react-dom';
+import { Edit2, Copy, XSquare } from "lucide-react";
 import Loader from '../shared/Loader';
 import { useCanvasStore } from "../../stores/canvasStore";
 
@@ -13,8 +14,28 @@ export default function CanvasTabContextMenu({
 }) {
   const menuRef = useRef(null);
   const duplicateCanvas = useCanvasStore((s) => s.duplicateCanvas);
-  const deleteCanvas = useCanvasStore((s) => s.deleteCanvas);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [position, setPosition] = useState({ left: x, top: y });
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    const doc = menu.ownerDocument;
+    const win = doc.defaultView;
+    const place = () => {
+      const bounds = menu.getBoundingClientRect();
+      const width = doc.documentElement.clientWidth || win.innerWidth;
+      const height = doc.documentElement.clientHeight || win.innerHeight;
+      setPosition({
+        left: Math.max(8, Math.min(x, width - (menu.offsetWidth || bounds.width) - 8)),
+        top: Math.max(8, Math.min(y, height - (menu.offsetHeight || bounds.height) - 8)),
+      });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(menu);
+    win.addEventListener('resize', place);
+    return () => { observer.disconnect(); win.removeEventListener('resize', place); };
+  }, [x, y]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -66,15 +87,21 @@ export default function CanvasTabContextMenu({
   //   }
   // };
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
+      role="menu"
+      aria-label="Canvas tab options"
       style={{
         position: "fixed",
-        top: y,
-        left: x,
+        top: position.top,
+        left: position.left,
         zIndex: 1000,
         width: 180,
+        maxWidth: 'calc(100vw - 16px)',
+        maxHeight: 'calc(100vh - 16px)',
+        overflowY: 'auto',
+        boxSizing: 'border-box',
         background: "rgba(23, 23, 23, 0.85)",
         backdropFilter: "blur(12px)",
         border: "1px solid rgba(255, 255, 255, 0.08)",
@@ -167,6 +194,6 @@ export default function CanvasTabContextMenu({
           </button> */}
         </>
       )}
-    </div>
+    </div>, document.body
   );
 }

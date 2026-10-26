@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { createUniversalAudioSound } from '../utils/audioPlayerService';
 import { Play, Pause } from 'lucide-react-native';

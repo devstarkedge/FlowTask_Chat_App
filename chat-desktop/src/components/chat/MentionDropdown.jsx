@@ -1,7 +1,7 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
-import { useEffect, useRef, useCallback, memo } from 'react'
+import { useEffect, useRef, memo } from "react";
 import { createPortal } from 'react-dom'
-import { Hash, User } from 'lucide-react'
+import { Hash } from "lucide-react";
 
 /**
  * Reusable Mention Dropdown — renders a positioned list of mentionable items.

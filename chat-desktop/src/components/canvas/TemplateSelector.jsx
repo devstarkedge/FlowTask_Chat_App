@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ArrowLeft, Search, FileText } from "lucide-react";
+import { Search, FileText } from "lucide-react";
 import { TEMPLATES, CATEGORIES, buildTemplateContent } from "./templates";
 import TemplateGallery from "./templates/TemplateGallery";
 import CoverSelector from "./templates/CoverSelector";

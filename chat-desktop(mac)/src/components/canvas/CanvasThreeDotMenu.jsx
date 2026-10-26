@@ -1,18 +1,5 @@
-import { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import {
-  Link2,
-  Share2,
-  Info,
-  Bookmark,
-  ImageIcon,
-  MessageSquare,
-  History,
-  Printer,
-  Accessibility,
-  Type,
-  Trash2,
-  ChevronRight,
-} from "lucide-react";
+import { useEffect, useRef, useCallback, useState } from "react";
+import { Link2, Share2, Info, Bookmark, Trash2, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useCanvasUiStore } from "../../stores/canvasUiStore";
@@ -236,7 +223,7 @@ export default function CanvasThreeDotMenu({
   }, [canvasId, deleteCanvas, onClose, onBack]);
 
   // ── Delete is available to all users ────────────────────────────────────
-  const canDelete = true;
+
 
   if (!isOpen) return null;
 

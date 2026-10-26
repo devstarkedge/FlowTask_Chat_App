@@ -10,7 +10,7 @@ import { fetchWorkspacesFn, useWorkspaces } from '../hooks/queries/useWorkspaces
 import { workspaceAPI } from '../services/api';
 import { secureSet, secureGet, secureMultiRemove } from '../utils/secureStorage';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
-import { Check, X, ShieldAlert, AlertTriangle } from 'lucide-react-native';
+import { Check, X, ShieldAlert } from "lucide-react-native";
 
 const InviteProcessingScreen = ({ route, navigation }) => {
   const { inviteCode } = route.params || {};

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useThemeStore } from '../../stores/themeStore';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';

@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Table, Image, Minus, Info, Columns, X } from 'lucide-react-native';
+import { Table, Image, Minus, Info, X } from "lucide-react-native";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 

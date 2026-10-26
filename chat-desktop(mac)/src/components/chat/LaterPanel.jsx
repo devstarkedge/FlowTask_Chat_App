@@ -1,29 +1,12 @@
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useState } from "react";
-import {
-  Clock,
-  Plus,
-  Check,
-  Archive,
-  ListFilter,
-  Inbox,
-  Trash2,
-  CircleDot,
-  FileText,
-} from "lucide-react";
+import { Clock, Plus, Check, Archive, Inbox, Trash2, CircleDot, FileText } from "lucide-react";
 import Loader from "../shared/Loader";
 import { useLaterStore } from "../../stores/laterStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { Avatar } from "../chat/MemberAvatarGroup";
-import {
-  format,
-  isToday,
-  isYesterday,
-  differenceInHours,
-  isPast,
-  formatDistanceToNow,
-} from "date-fns";
+import { format, isToday, isYesterday, formatDistanceToNow } from "date-fns";
 import ReminderModal from "./ReminderModal";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import { sanitizeHtml } from "../../utils/sanitize";

@@ -20,23 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppScreen from '../../components/common/AppScreen';
 import KeyboardAwareContainer from '../../components/common/KeyboardAwareContainer';
-import {
-  Plus,
-  Search,
-  FileText,
-  ArrowLeft,
-  X,
-  ChevronRight,
-  Sparkles,
-  Layers,
-  ChevronLeft,
-  Image as ImageIcon,
-  Copy,
-  Clock,
-  Link as LinkIcon,
-  Upload,
-  Camera,
-} from 'lucide-react-native';
+import { Plus, Search, FileText, ArrowLeft, X, ChevronRight, Sparkles, ChevronLeft, Image as ImageIcon, Copy, Clock, Link as LinkIcon, Upload, Camera } from "lucide-react-native";
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useThemeStore } from '../../stores/themeStore';
 import CanvasCard from '../../components/canvas/CanvasCard';

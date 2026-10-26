@@ -1,36 +1,6 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
-import {
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-  useRef,
-  useLayoutEffect,
-} from "react";
-import {
-  Download,
-  FileText,
-  Image as ImageIcon,
-  Trash2,
-  Video,
-  File as FileIcon,
-  Search,
-  Share2,
-  Calendar,
-  UserRound,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  ZoomIn,
-  Play,
-  Grid3X3,
-  List,
-  Filter,
-  SortAsc,
-  SortDesc,
-  Clock,
-  HardDrive,
-} from "lucide-react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { Download, FileText, Image as ImageIcon, Trash2, Video, File as FileIcon, Search, Share2, UserRound, X, ZoomIn, Play, Grid3X3, List, Clock, HardDrive } from "lucide-react";
 import { fileAPI, resolveFullUrl } from "../../services/api";
 import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
@@ -853,16 +823,7 @@ export default function FilesTab({ channelId, onOpenFilePreview }) {
     }
   };
 
-  const forceDownload = (url, fileName) => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.setAttribute("download", fileName || "download");
-    a.rel = "noopener noreferrer";
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
+
 
   /* ── render ───────────────────────────────────────────────────────────── */
 

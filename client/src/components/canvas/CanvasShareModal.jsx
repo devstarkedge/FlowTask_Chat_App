@@ -98,6 +98,8 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
         destination = idOf(response.data?.data?.channel?._id);
         if (!destination) throw new Error('Could not open the direct conversation.');
       }
+      // Persist the editor snapshot before the server creates attachment grants.
+      if (canvas?.content) await canvasAPI.update(canvasId, { content: canvas.content });
       await messageAPI.send(destination, {
         content: 'I shared a canvas', contentType: 'canvas_share',
         canvasMeta: { canvasId, title: canvas?.title || 'Untitled canvas',

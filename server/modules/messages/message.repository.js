@@ -375,6 +375,12 @@ class MessageRepository {
       .exec();
   }
 
+  /** Atomically advance a receipt without overwriting a concurrent read receipt. */
+  async markDelivered(messageId, workspaceId, deliveredAt) {
+    const filter = injectWorkspaceFilterRequired({ _id: messageId, status: 'sent', isDeleted: false }, workspaceId);
+    return Message.updateOne(filter, { $set: { status: 'delivered', deliveredAt } });
+  }
+
   /**
    * Soft-delete a message.
    * @param {string} messageId

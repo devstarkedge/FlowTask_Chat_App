@@ -9,31 +9,7 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useLaterStore } from '../../stores/laterStore';
 import { useScheduledStore } from '../../stores/scheduledStore';
 import { useFavoritesStore } from '../../stores/favoritesStore';
-import {
-  Hash,
-  Lock,
-  MessageCircle,
-  Users,
-  Bot,
-  Volume2,
-  X,
-  MessageSquareText,
-  Bookmark,
-  Send,
-  Globe,
-  Compass,
-  Radio,
-  AppWindow,
-  BookMarked,
-  Clock,
-  Star,
-  MoreVertical,
-  Folder,
-  FolderPlus,
-  Plus,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
+import { Hash, Lock, MessageCircle, Users, Volume2, X, MessageSquareText, Globe, Compass, AppWindow, BookMarked, Clock, Star, ChevronDown, ChevronRight } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
 import CreateCategoryModal from "../chat/CreateCategoryModal";
@@ -407,17 +383,7 @@ export default function NavigationSidebar({
     onClose?.();
   };
 
-  const handleChatBot = async () => {
-    try {
-      const res = await api.post("/channels/ai-dm");
-      const channelId = res.data?.data?.channelId;
-      if (!channelId) return;
-      setActiveChannel(channelId);
-      navigate(getDMPath(workspaceId, channelId));
-    } catch (err) {
-      console.error("ChatBot error:", err);
-    }
-  };
+
 
   const handleSavedMessages = async () => {
     if (selfChannel) {
@@ -481,14 +447,7 @@ export default function NavigationSidebar({
     }
   };
 
-  const handleRemoveChannelFromCategory = async (channelId) => {
-    try {
-      await api.put(`/channels/${channelId}/category`, { categoryId: null });
-      toast.success("Channel removed from category");
-    } catch (err) {
-      toast.error("Failed to remove channel");
-    }
-  };
+
 
   return (
     <>
@@ -947,6 +906,7 @@ function SavedMessagesItem({
 
   return (
     <SidebarItem
+      className="sidebar-item--conversation"
       icon={
         <div className="relative shrink-0">
           {isLoading ? (
@@ -1008,8 +968,8 @@ function SavedMessagesItem({
         </div>
       }
       label={
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {user?.name || "You"}
+        <span className="sidebar-self-label">
+          <span>{user?.name || "You"}</span>
           <span
             style={{
               fontSize: 9,
@@ -1088,6 +1048,7 @@ function DMListItem({
 
   return (
     <SidebarItem
+      className="sidebar-item--conversation"
       icon={
         <div className="relative shrink-0">
           <Avatar

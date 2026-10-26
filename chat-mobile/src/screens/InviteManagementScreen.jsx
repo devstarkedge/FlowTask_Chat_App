@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -19,21 +19,7 @@ import ENV from "../config/environment";
 import * as Clipboard from "expo-clipboard";
 import Toast from "react-native-toast-message";
 import { HeaderBackButton } from '../components/common';
-import {
-  ArrowLeft,
-  Mail,
-  Plus,
-  X,
-  Check,
-  Copy,
-  ChevronRight,
-  Search,
-  Hash,
-  Globe,
-  UserPlus,
-  Shield,
-  Info,
-} from "lucide-react-native";
+import { X, Check, Copy, ChevronRight, Search, Hash } from "lucide-react-native";
 import logger from "../utils/logger";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { getWorkspaceOrigin, mergeWorkspaceDetails } from '../utils/workspaceSettings';

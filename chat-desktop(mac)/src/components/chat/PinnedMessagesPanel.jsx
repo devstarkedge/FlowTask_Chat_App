@@ -4,7 +4,7 @@ import { extractPlainText } from '../../utils/extractPlainText';
 import { useEffect, useCallback, useState } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
-import { X, Pin, Hash, Search, PinOff } from 'lucide-react';
+import { X, Pin, Search, PinOff } from "lucide-react";
 import Loader from '../shared/Loader';
 import { format } from "date-fns";
 import { Avatar } from "./MemberAvatarGroup";

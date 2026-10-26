@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, FlatList, Alert, Platform } from 'react-native';
 import KeyboardAwareContainer from './common/KeyboardAwareContainer';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';

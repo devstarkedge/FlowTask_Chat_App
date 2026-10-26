@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import HuddleMessage from '../features/huddle/components/HuddleMessage';
 import { View as RNView, Text as RNText, TouchableOpacity as RNTouchableOpacity, Pressable, Platform, Linking, StyleSheet } from 'react-native';
 import { Reply, Pin, Bookmark } from 'lucide-react-native';
 import AppAvatar from './common/AppAvatar';
@@ -47,6 +48,8 @@ const ChatMessageItem = memo(({
 }) => {
   const isMe = item.authorId?._id === user?._id || item.authorId === user?._id;
   const isSystem = item.contentType === "system" && !item.activityMeta;
+
+  if(item.huddleMeta)return <HuddleMessage message={item} colors={colors}/>;
 
   if (isSystem) {
     return (

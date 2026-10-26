@@ -69,22 +69,7 @@ import {
   getNotificationText,
   normalizeNotification,
 } from "../../utils/notificationFormat";
-import {
-  Activity,
-  ArrowLeft,
-  ArrowRight,
-  Bell,
-  ChevronRight,
-  CircleHelp,
-  Download,
-  Info,
-  Search,
-  MessageSquare,
-  Zap,
-  FolderOpen,
-  Eye,
-  ExternalLink,
-} from "lucide-react";
+import { Activity, ArrowLeft, ArrowRight, Bell, ChevronRight, CircleHelp, Download, Info, FolderOpen, Eye, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
 import DownloadsModalWrapper from "../modals/DownloadsModalWrapper";
 import { useDownloadStore } from "../../stores/downloadStore";

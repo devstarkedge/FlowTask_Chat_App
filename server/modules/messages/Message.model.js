@@ -434,6 +434,7 @@ messageSchema.virtual('author', {
 });
 
 messageSchema.virtual('fileReferences', {
+  match: { contextType: { $ne: 'canvas' } },
   ref: 'FileReference',
   localField: '_id',
   foreignField: 'messageId',

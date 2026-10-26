@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
-import { ChevronDown, Plus, Settings, LogIn, Check, MessageCircle, Sparkles, UserPlus } from 'lucide-react';
+import { ChevronDown, Plus, Settings, LogIn, Check, Sparkles, UserPlus } from "lucide-react";
 import Loader from '../shared/Loader';
 import api from "../../services/api";
 

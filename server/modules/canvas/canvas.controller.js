@@ -242,7 +242,13 @@ const togglePublicShare = asyncHandler(async (req, res) => {
   });
 });
 
+const attachFiles = asyncHandler(async (req, res) => {
+  const result = await canvasService.attachFiles(req.params.canvasId, req.body?.fileIds, req.user._id, req.workspaceId);
+  return res.json({ success: true, data: result });
+});
+
 export default {
+  attachFiles,
   getCanvas,
   getTemplates,
   getPublicCanvas,

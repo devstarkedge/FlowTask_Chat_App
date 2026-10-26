@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
-import { Hash, MessageSquare, Briefcase } from 'lucide-react-native';
+import { Hash, MessageSquare } from "lucide-react-native";
 import CreateChannelModal from './CreateChannelModal';
 import CreateWorkspaceModal from './workspace/CreateWorkspaceModal';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';

@@ -14,7 +14,7 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import { CircleChevronLeft, Pin, Video, FileCode, Volume2, FileText } from 'lucide-react-native';
+import { Pin, Video, FileCode, Volume2, FileText } from "lucide-react-native";
 import { useThemeStore } from '../stores/themeStore';
 import { useAuthStore } from '../stores/authStore';
 import { pinsAPI } from '../services/api';

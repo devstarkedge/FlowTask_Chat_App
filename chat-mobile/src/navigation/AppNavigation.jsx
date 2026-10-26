@@ -8,14 +8,7 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useNotificationStore } from "../stores/notificationStore";
 import { useTranslation } from "../utils/i18n";
-import {
-  Hash,
-  MessageSquare,
-  Bell,
-  Home,
-  Search,
-  MoreHorizontal,
-} from "lucide-react-native";
+import { MessageSquare, Bell, Home, Search, MoreHorizontal } from "lucide-react-native";
 import DrawerNavigation from "../components/DrawerNavigation";
 import WorkspaceSwitcher from "../components/WorkspaceSwitcher";
 

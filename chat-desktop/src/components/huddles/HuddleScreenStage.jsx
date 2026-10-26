@@ -27,7 +27,7 @@ export default function HuddleScreenStage({stream,local=false,controlsHost,share
   const controls=(<div className="huddle-screen-controls-footer">
       <div className="huddle-screen-toolbar" role="toolbar" aria-label="Shared screen controls">
 
-        <button onClick={()=>setZoom(1)} aria-pressed={zoom===1}>Fit</button><button onClick={nativeSize} title="Original pixel size">100%</button>
+        <button onClick={()=>setZoom(1)} aria-pressed={zoom===1} aria-label="Fit shared screen" title="Fit shared screen"><span aria-hidden="true">⛶</span></button><button onClick={nativeSize} aria-label="Original pixel size" title="Original pixel size (100%)"><span aria-hidden="true">🔎</span></button>
         <button aria-label="Zoom out shared screen" disabled={zoom<=1} onClick={()=>setZoom(value=>Math.max(1,value-.25))}><Minus size={16}/></button>
         <button aria-label="Zoom in shared screen" disabled={zoom>=12} onClick={()=>setZoom(value=>Math.min(12,value+.25))}><Plus size={16}/></button>
         <button aria-label={fullscreen?'Exit shared screen fullscreen':'View shared screen fullscreen'} onClick={present}>{fullscreen?<Minimize2 size={16}/>:<Maximize2 size={16}/>}</button>

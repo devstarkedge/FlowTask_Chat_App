@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, SafeAreaView } from 'react-native';
 import { CameraView } from 'expo-camera';
 import AppVideo from './common/AppVideo';
-import { X, FlipHorizontal, Zap, ZapOff, Circle, Square, Send, RotateCcw } from 'lucide-react-native';
+import { X, FlipHorizontal, Zap, ZapOff, Send, RotateCcw } from "lucide-react-native";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 const formatDuration = (seconds) => {

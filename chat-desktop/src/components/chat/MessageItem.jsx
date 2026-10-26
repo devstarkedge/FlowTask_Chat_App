@@ -7,37 +7,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { format } from "date-fns";
-import {
-  Smile,
-  MessageSquare,
-  Edit,
-  Trash2,
-  Pin,
-  FileText,
-  Download,
-  Image as ImageIcon,
-  File,
-  FileArchive,
-  FileCode,
-  Film,
-  Music,
-  Check,
-  CheckCheck,
-  CheckSquare,
-  Square,
-  Copy,
-  Bookmark,
-  BookmarkCheck,
-  Forward,
-  Link2,
-  MoreVertical,
-  Info,
-  ChevronDown,
-  X,
-  Save,
-  Clock,
-  AlertCircle,
-} from "lucide-react";
+import { Smile, MessageSquare, Edit, Trash2, Pin, FileText, Download, Image as ImageIcon, File, FileArchive, FileCode, Film, Music, Check, CheckCheck, CheckSquare, Square, Copy, Bookmark, BookmarkCheck, Forward, Link2, MoreVertical, Info, ChevronDown, Save, Clock, AlertCircle } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
 import SlackFileCard from "./SlackFileCard";
 import { ReactionRenderer } from "../shared/EmojiRenderer";

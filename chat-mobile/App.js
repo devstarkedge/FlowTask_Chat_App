@@ -18,6 +18,7 @@ import { initNetworkMonitor, destroyNetworkMonitor } from "./src/services/networ
 import { registerForPushNotifications, setNavigationRef, handlePushNavigationReady } from "./src/services/pushNotificationService";
 import { conversationPresence } from "./src/services/conversationPresence";
 import ErrorBoundary from "./src/components/ErrorBoundary";
+import HuddleOverlay from './src/features/huddle/components/HuddleOverlay';
 import Toast from "react-native-toast-message";
 import { toastConfig } from "./src/config/toastConfig";
 import { GlobalToastProvider } from "./src/components/common/GlobalToastProvider";
@@ -197,6 +198,7 @@ export default function App() {
                   onReady={() => { persistNavigation(navigationRef.getRootState()); handlePushNavigationReady(); }}
                   onStateChange={state => { persistNavigation(state); handlePushNavigationReady(); }}>
                   <AppNavigator />
+                  <HuddleOverlay />
                   <GlobalToastProvider />
                 </NavigationContainer>}
               </KeyboardProvider>  

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, MessageCircle, Check } from "lucide-react";
+import { Eye, EyeOff, Check } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function ResetPasswordPage() {

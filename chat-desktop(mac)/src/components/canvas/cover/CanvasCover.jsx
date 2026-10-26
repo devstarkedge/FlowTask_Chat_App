@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Upload, Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon } from "lucide-react";
 import Loader from "../../shared/Loader";
 import { useCanvasStore } from "../../../stores/canvasStore";
 import { useChannelStore } from "../../../stores/channelStore";

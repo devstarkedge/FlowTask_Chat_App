@@ -1,19 +1,7 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  X,
-  MessageSquare,
-  Headphones,
-  MoreHorizontal,
-  Mail,
-  Building2,
-  Shield,
-  Clock,
-  Copy,
-  ExternalLink,
-  Hash,
-} from "lucide-react";
+import { X, MessageSquare, Headphones, MoreHorizontal, Mail, Building2, Shield, Clock, Copy } from "lucide-react";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";

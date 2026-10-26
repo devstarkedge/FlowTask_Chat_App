@@ -3,21 +3,7 @@ import { useDownloadStore } from "../../stores/downloadStore";
 import { useEffect, useState, useRef } from "react";
 import { fileAPI, messageAPI } from "../../services/api";
 import { getFileUrl } from "../../utils/fileProxy";
-import {
-  X,
-  Download,
-  FileText,
-  Image,
-  Film,
-  Music,
-  Archive,
-  Code,
-  File,
-  Clock,
-  FolderOpen,
-  RefreshCw,
-  Eye,
-} from "lucide-react";
+import { X, Download, FileText, Image, Film, Music, Archive, Code, File, FolderOpen, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   getChannelPath,
@@ -297,11 +283,7 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
 
   if (!isOpen) return null;
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await fetchFiles();
-    setRefreshing(false);
-  };
+
 
   /* ── Open in Chat: navigate to original message and highlight it ── */
   const handleOpenInChat = async (file) => {
@@ -411,69 +393,12 @@ export default function DownloadsModal({ isOpen, onClose, channelId }) {
   };
 
   /* ── Delete: show confirmation dialog then remove ── */
-  const handleDeleteRequest = async (file) => {
-    const isImage = file.type && file.type.startsWith("image/");
 
-    try {
-      removeDownload(file.id);
-      toast.success(`${isImage ? "Image" : "File"} removed from downloads`, {
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("Failed to remove download:", error);
-      toast.error(`Failed to remove ${isImage ? "image" : "file"}`, {
-        duration: 5000,
-      });
-    }
-  };
 
-  const handleOpenFile = (file) => {
-    if (!file) return;
-    const url = getFileUrl(file) || file.blobUrl || file.url || file.secureUrl;
-    if (!url) return;
-    const preview = {
-      url,
-      blobUrl: file.blobUrl || null,
-      remoteUrl: file.url || file.secureUrl || null,
-      originalName: file.name,
-      fileName: file.name,
-      mimeType: file.type,
-      fileSize: file.size,
-      _id: file.assetId || file._id,
-    };
-    const all = downloads
-      .slice()
-      .reverse()
-      .map((f) => ({
-        url: getFileUrl(f) || f.blobUrl || f.url || f.secureUrl,
-        blobUrl: f.blobUrl || null,
-        remoteUrl: f.url || f.secureUrl || null,
-        originalName: f.name,
-        fileName: f.name,
-        mimeType: f.type,
-        fileSize: f.size,
-        _id: f.assetId || f._id,
-      }));
-    openPreview(preview, all);
-  };
+
 
   /* bulk download trigger */
-  const triggerDownload = async (url, name) => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const bUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = bUrl;
-      a.download = name || "file";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(bUrl);
-    } catch {
-      /* silent */
-    }
-  };
+
 
   const totalCount = files.length;
 

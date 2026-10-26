@@ -683,6 +683,7 @@ export default function CanvasPanel({ channelId, workspaceId, intent, onIntentCo
       <CanvasEditor
         key={activeCanvas._id}
         canvas={activeCanvas}
+        conversationChannelId={channelId}
         onSave={handleSave}
         onBack={undefined}
       />

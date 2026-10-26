@@ -14,7 +14,7 @@ import {
   AlarmClock,
   Smile,
 } from "lucide-react";
-import { formatDistanceToNowStrict } from "date-fns";
+
 import { useNotificationStore } from "../../../stores/notificationStore";
 import NotificationSettingsModal from "../../notifications/NotificationSettingsModal";
 import PauseNotificationsDropdown from "../../notifications/PauseNotificationsDropdown";

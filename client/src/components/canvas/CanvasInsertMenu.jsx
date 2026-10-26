@@ -1,30 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  Video,
-  Mic,
-  Minus,
-  LayoutGrid,
-  Calendar,
-  User,
-  MessageSquare,
-  Quote,
-  FileText,
-  Image as ImageIcon,
-  Paperclip,
-  ChevronRight,
-  Table2,
-  List,
-  CheckSquare,
-  Columns3,
-  Search,
-  Code2,
-  Link2,
-  AlertTriangle,
-  Smile,
-  Type,
-  Heading1,
-  ListOrdered,
-} from "lucide-react";
+import { Video, Mic, Minus, LayoutGrid, Calendar, User, MessageSquare, Quote, FileText, Image as ImageIcon, Paperclip, ChevronRight, Table2, List, CheckSquare, Columns3, Search, Code2, Type, Heading1 } from "lucide-react";
 import CanvasInsertSubmenu from "./CanvasInsertSubmenu";
 
 export default function CanvasInsertMenu({

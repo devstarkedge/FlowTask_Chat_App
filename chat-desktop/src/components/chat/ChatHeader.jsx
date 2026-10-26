@@ -2,23 +2,7 @@ import { useHuddleUiStore } from '../../stores/huddleUiStore';
 import HuddleHeaderMenu from '../huddles/HuddleHeaderMenu';
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import {
-  Lock,
-  MessageCircle,
-  Search,
-  Menu,
-  Pin,
-  FileText,
-  Star,
-  Headphones,
-  Info,
-  MoreVertical,
-  ChevronDown,
-  BookCopy,
-  Check,
-  X,
-  Plus,
-} from "lucide-react";
+import { MessageCircle, Search, Menu, Pin, FileText, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus } from "lucide-react";
 import ChannelMemberCount from "./ChannelMemberCount";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -75,11 +59,10 @@ export default function ChatHeader({
     useChatStore((s) => s.pinnedMessagesByChannel[channel?._id]) ?? EMPTY_PINS;
   const updateCanvasMetadata = useCanvasStore((s) => s.updateCanvasMetadata);
   const activeCanvas = useCanvasStore((s) => s.activeCanvas);
-  const activeCanvasIdByChannel = useCanvasStore((s) => s.activeCanvasIdByChannel);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
-  const [showTabsDropdown, setShowTabsDropdown] = useState(false);
   const [narrowTabs, setNarrowTabs] = useState(false);
+  const [compactTabs, setCompactTabs] = useState(false);
 
   const channelId = channel?._id?.toString?.();
   const isStarred = channelId
@@ -96,8 +79,8 @@ export default function ChatHeader({
   const renameInputRef = useRef(null);
 
   const moreMenuRef = useRef(null);
-  const tabsMenuRef = useRef(null);
   const headerRef = useRef(null);
+  const tabsMeasureRef = useRef(null);
   // Ref for the canvas popup container (used for outside-click detection)
   const canvasPopupRef = useRef(null);
   // Ref for the canvas tab button (so we don't close immediately on the open click)
@@ -161,12 +144,18 @@ export default function ChatHeader({
   // Collapse tabs when header is narrow
   useEffect(() => {
     if (!headerRef.current) return;
-    const ro = new ResizeObserver(([entry]) => {
-      setNarrowTabs(entry.contentRect.width < 480);
-    });
+    const measure = () => {
+      const width = headerRef.current?.getBoundingClientRect().width || 0;
+      const required = tabsMeasureRef.current?.getBoundingClientRect().width || 0;
+      setNarrowTabs(width < 480 || required > width - 16);
+      setCompactTabs(width < 480);
+    };
+    const ro = new ResizeObserver(measure);
     ro.observe(headerRef.current);
+    if (tabsMeasureRef.current) ro.observe(tabsMeasureRef.current);
+    measure();
     return () => ro.disconnect();
-  }, []);
+  }, [HEADER_TABS]);
 
   // Close action dropdown on outside click
   useEffect(() => {
@@ -179,16 +168,6 @@ export default function ChatHeader({
     return () => document.removeEventListener("mousedown", fn);
   }, [showMoreActions]);
 
-  // Close tabs dropdown on outside click
-  useEffect(() => {
-    if (!showTabsDropdown) return;
-    const fn = (e) => {
-      if (tabsMenuRef.current && !tabsMenuRef.current.contains(e.target))
-        setShowTabsDropdown(false);
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [showTabsDropdown]);
 
   // Close canvas popup on outside click.
   // We use mousedown so it fires before any click handlers and we can check
@@ -235,8 +214,6 @@ export default function ChatHeader({
   const memberCount = channel.memberCount ?? members.length;
   const pinCount = pinnedMessages.length;
 
-  const activeTabObj = HEADER_TABS.find((t) => t.id === activeTab) || HEADER_TABS[0];
-  const overflowTabs = HEADER_TABS.filter((t) => t.id !== activeTab);
 
   const hPad = 8;
 
@@ -318,7 +295,7 @@ export default function ChatHeader({
     <div
       ref={headerRef}
       className="shrink-0 select-none chat-header"
-      style={{ position: "sticky", top: 0, zIndex: 20 }}
+      style={{ position: "sticky", top: 0, zIndex: 20, minWidth: 0, maxWidth: '100%' }}
     >
       {/* ── Top Row ── */}
       <div
@@ -450,61 +427,42 @@ export default function ChatHeader({
       </div>
 
       {/* ── Tab Bar ── */}
+      <div aria-hidden="true" style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', visibility: 'hidden', pointerEvents: 'none' }}>
+        <div ref={tabsMeasureRef} style={{ display: 'flex', width: 'max-content', gap: 2 }}>
+          {HEADER_TABS.map(tab => <span key={tab.id} className="slim-tab" style={{ flexShrink: 0 }}>
+            <tab.icon size={13} className="slim-tab__icon shrink-0" />
+            <span className="slim-tab__label">{tab.isAdd ? '' : tab.label}</span>
+          </span>)}
+        </div>
+      </div>
       <div style={{ padding: `0 ${hPad}px 8px` }}>
-        <div className="flex items-center" style={{ minHeight: 34, gap: 2 }}>
+        <div className="flex items-center" style={{ minHeight: 34, gap: 2, minWidth: 0 }}>
           {narrowTabs ? (
-            // ── Narrow mode: show active tab + "More" dropdown ──────────────
+            // Keep conversation navigation fixed while canvas tabs scroll.
             <>
-              <SlimTab
-                tab={activeTabObj}
-                isActive={true}
-                onClick={() => {}}
-                onContextMenu={activeTabObj.isCanvas && activeTabObj.isDynamic ? handleCanvasTabRightClick(activeTabObj.canvasMeta?._id || String(activeTabObj.id).split(":")[1]) : undefined}
-                isRenaming={isRenaming}
-                renameValue={renameValue}
-                renameInputRef={renameInputRef}
-                onRenameChange={(v) => setRenameValue(v)}
-                onRenameSubmit={handleRenameSubmit}
-                onRenameKeyDown={handleRenameKeyDown}
-                onRenameCancel={() => { setIsRenaming(false); setRenamingCanvasId(null); }}
-              />
-              <div ref={tabsMenuRef} style={{ position: "relative" }}>
-                <button
-                  onClick={() => setShowTabsDropdown((v) => !v)}
-                  className={`slim-tab${showTabsDropdown ? " slim-tab--active" : ""}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                >
-                  <span className="slim-tab__label">More</span>
-                  <ChevronDown
-                    size={12}
-                    style={{
-                      transform: showTabsDropdown ? "rotate(180deg)" : "rotate(0deg)",
-                      transition: "transform 180ms ease",
-                    }}
-                  />
-                </button>
-                {showTabsDropdown && (
-                  <div
-                    className="chat-header__menu absolute py-1 z-50 animate-fade-in-up"
-                    style={{ top: "calc(100% + 4px)", left: 0, minWidth: 160 }}
-                  >
-                    {overflowTabs.map((tab) => (
-                      <DropItem
-                        key={tab.id}
-                        icon={tab.icon}
-                        label={tab.label}
-                        onClick={() => {
-                          if (tab.id === "canvas") {
-                            handleCanvasTabClick(tab);
-                          } else {
-                            onTabChange?.(tab.id);
-                          }
-                          setShowTabsDropdown(false);
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
+              {BASE_TABS.map(tab => <SlimTab key={tab.id} tab={tab} compact={compactTabs} isActive={activeTab === tab.id} onClick={() => onTabChange?.(tab.id)} />)}
+              <div aria-label="Canvas tabs" style={{ display: "flex", gap: 2, minWidth: 0, maxWidth: "100%", overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
+                {HEADER_TABS.filter(tab => tab.isCanvas && tab.isDynamic).map(tab => <div key={tab.id} style={{ flex: '0 0 auto', maxWidth: 220, minWidth: 0 }}>
+                <SlimTab
+                  tab={tab}
+                  isActive={activeTab === tab.id}
+                  onClick={() => handleCanvasTabClick(tab)}
+                  onContextMenu={handleCanvasTabRightClick(tab.canvasMeta?._id || String(tab.id).split(":")[1])}
+                  isRenaming={isRenaming && renamingCanvasId === (tab.canvasMeta?._id || String(tab.id).split(':')[1])}
+                  renameValue={renameValue}
+                  renameInputRef={renameInputRef}
+                  onRenameChange={(v) => setRenameValue(v)}
+                  onRenameSubmit={handleRenameSubmit}
+                  onRenameKeyDown={handleRenameKeyDown}
+                  onRenameCancel={() => { setIsRenaming(false); setRenamingCanvasId(null); }}
+                />
+                </div>)}
+              </div>
+              <div ref={canvasTabRef} style={{ position: 'relative', flexShrink: 0 }}>
+                <button className="slim-tab" title="Add canvas" aria-label="Add canvas" onClick={() => onOpenAddCanvasModal?.()}><Plus size={14} /></button>
+                {showCanvasPopup && <div ref={canvasPopupRef} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50 }}>
+                  <CanvasMenu onSelect={type => { onCloseCanvasMenu?.(); onCanvasSelect?.(type); }} onDismiss={() => onCloseCanvasMenu?.()} />
+                </div>}
               </div>
             </>
           ) : (
@@ -643,6 +601,7 @@ export default function ChatHeader({
 /* ── SlimTab ─────────────────────────────────────────────────────────────── */
 function SlimTab({
   tab,
+  compact = false,
   isActive,
   onClick,
   onContextMenu,
@@ -660,7 +619,7 @@ function SlimTab({
     return (
       <div
         className="slim-tab slim-tab--active"
-        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 6px" }}
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 6px", minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}
       >
         <Icon size={13} className="slim-tab__icon shrink-0" />
         <input
@@ -677,6 +636,7 @@ function SlimTab({
             outline: "none",
             width: Math.max(60, renameValue.length * 7),
             maxWidth: 160,
+            minWidth: 0,
           }}
         />
         <button
@@ -699,13 +659,15 @@ function SlimTab({
 
   return (
     <button
+      aria-label={tab.label}
       onClick={onClick}
       onContextMenu={onContextMenu}
+      style={{ minWidth: 0, maxWidth: '100%', flexShrink: 1 }}
       className={`slim-tab${isActive ? " slim-tab--active" : ""}`}
-      title={tab.isDynamic ? "Right-click for options" : undefined}
+      title={tab.isDynamic ? `${tab.label || 'Canvas'} — Right-click for options` : tab.label}
     >
       <Icon size={13} className="slim-tab__icon shrink-0" />
-      <span className="slim-tab__label">{tab.label}</span>
+      {!compact && <span className="slim-tab__label" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>}
     </button>
   );
 }

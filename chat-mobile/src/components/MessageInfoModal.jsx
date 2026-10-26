@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { AppAvatar } from './common';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useAuthStore } from '../stores/authStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { Check, CheckCheck, Clock, AlertCircle } from 'lucide-react-native';
+import { CheckCheck } from "lucide-react-native";
 import logger from '../utils/logger';
 import useReceipts from '../chat/hooks/useReceipts';
 import { getMessageAttachments } from '../utils/mediaUtils';

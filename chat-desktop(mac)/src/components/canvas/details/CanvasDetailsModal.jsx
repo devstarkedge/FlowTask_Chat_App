@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, Share2, History, Users, Eye, Lock, Globe } from "lucide-react";
 import { useAuthStore } from "../../../stores/authStore";

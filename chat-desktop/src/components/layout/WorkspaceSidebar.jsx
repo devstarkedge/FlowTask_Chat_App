@@ -1,14 +1,6 @@
 import { memo, useState, useCallback, useRef, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  Home,
-  MessageSquare,
-  Bell,
-  FolderOpen,
-  Bookmark,
-  Wrench,
-  Plus,
-} from "lucide-react";
+import { Home, MessageSquare, Bell, FolderOpen, Bookmark, Wrench } from "lucide-react";
 import { useUIStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useNotificationStore } from "../../stores/notificationStore";

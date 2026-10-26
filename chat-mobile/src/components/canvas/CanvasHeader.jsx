@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
-import { ArrowLeft, MessageSquare, History, Users } from 'lucide-react-native';
+import { ArrowLeft } from "lucide-react-native";
 import Avatar from '../Avatar';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { useThemeStore } from '../../stores/themeStore';

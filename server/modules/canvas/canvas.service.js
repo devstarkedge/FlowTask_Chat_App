@@ -1,4 +1,5 @@
 import canvasRepository from "./canvas.repository.js";
+import { shareCanvasFiles, syncCanvasFiles } from './canvasAttachmentAccess.js';
 import { normalizeCanvasTitle } from './canvasTitle.js';
 import channelRepository from "../channels/channel.repository.js";
 import CanvasBlock from "./canvasBlock.model.js";
@@ -260,6 +261,9 @@ class CanvasService {
       throw new NotFoundError("Canvas not found");
     }
 
+    // Repair old shares only from files this reader can already access.
+    if (userId) await syncCanvasFiles(canvas, userId);
+
     // Track view count (non-blocking)
     if (userId) {
       this.incrementViewCount(canvasId, userId).catch(() => {});
@@ -339,6 +343,17 @@ class CanvasService {
   }
 
   // ── Update Canvas details (Title/Cover)
+  async attachFiles(canvasId, fileIds, userId, workspaceId) {
+    if (!workspaceId) throw new ValidationError('workspaceId is required');
+    if (!Array.isArray(fileIds) || fileIds.length === 0 || fileIds.length > 10) {
+      throw new ValidationError('Provide between 1 and 10 file IDs');
+    }
+    const canvas = await canvasRepository.findById(canvasId, workspaceId);
+    if (!canvas) throw new NotFoundError('Canvas not found');
+    await shareCanvasFiles(canvas, fileIds, userId);
+    return { success: true };
+  }
+
   async updateCanvas(canvasId, updates, userId, workspaceId) {
     if (!workspaceId) {
       throw new ValidationError("workspaceId is required");
@@ -366,6 +381,7 @@ class CanvasService {
     allowedUpdates.updatedAt = new Date();
 
     const updatedCanvas = await canvasRepository.update(canvasId, allowedUpdates);
+    if (allowedUpdates.content) await syncCanvasFiles(updatedCanvas, userId);
 
     // Broadcast canvas update
     emitToChannel(

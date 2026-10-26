@@ -2,21 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useAuthStore } from "../stores/authStore";
-import {
-  MessageSquare,
-  Plus,
-  ArrowRight,
-  LogOut,
-  LogIn,
-  Sparkles,
-  Crown,
-  Users,
-  Zap,
-} from "lucide-react";
+import { MessageSquare, Plus, ArrowRight, LogOut, LogIn, Sparkles, Crown } from "lucide-react";
 import Loader from "../components/shared/Loader";
 import JoinWorkspaceModal from "../components/workspace/JoinWorkspaceModal";
 import toast from "react-hot-toast";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { setWindowControlsColor } from "../services/desktopService";
 import "./custom-css/workspaceSelectorPage.css";
 

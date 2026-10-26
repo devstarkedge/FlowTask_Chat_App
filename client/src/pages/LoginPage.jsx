@@ -2,17 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { useWorkspaceStore, getSavedWorkspaceId } from "../stores/workspaceStore";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import {
-  Eye,
-  EyeOff,
-  MessageCircle,
-  ArrowRight,
-  Zap,
-  Shield,
-  Users,
-  Sparkles,
-  Lock,
-} from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Zap, Shield, Users, Sparkles, Lock } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import "./custom-css/loginPage.css";

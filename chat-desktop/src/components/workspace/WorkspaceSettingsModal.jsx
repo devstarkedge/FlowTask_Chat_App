@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAuthStore } from "../../stores/authStore";
-import { X, Settings, Users, Link2, Copy, RefreshCw, Crown, Shield, UserMinus, ChevronDown, Trash2, Zap, Lock, Bell, Check, Sparkles, AlertTriangle, UserPlus, Globe, Eye, Plus } from 'lucide-react';
+import { X, Settings, Users, Link2, Copy, RefreshCw, Crown, Shield, Trash2, Zap, Lock, Bell, Check, Sparkles, AlertTriangle, UserPlus, Globe, Plus } from "lucide-react";
 import Loader from '../shared/Loader';
 import { Avatar } from "../chat/MemberAvatarGroup";
 import toast from "react-hot-toast";

@@ -1,5 +1,5 @@
 import { useRef, useCallback } from "react";
-import { messageAPI } from "../../../services/api";
+import { messageAPI, canvasAPI } from "../../../services/api";
 import { normalizeUploadResult, detectMediaKind } from "../../../services/mediaService";
 import toast from "react-hot-toast";
 
@@ -152,6 +152,9 @@ export function useCanvasFileUpload(editor, canvas, isViewOnly) {
           throw new Error('Upload completed but file URL is not ready yet');
         }
 
+        if (canvas?._id && normalized.fileId) {
+          await canvasAPI.attachFiles(canvas._id, [normalized.fileId]);
+        }
         return normalized;
       }
 
@@ -161,7 +164,7 @@ export function useCanvasFileUpload(editor, canvas, isViewOnly) {
       console.error("[Canvas Upload] Upload failed:", err);
       return null;
     }
-  }, [canvas?.channelId]);
+  }, [canvas?._id, canvas?.channelId]);
 
   // Helper to update a loading node's attributes after upload
   const updateNodeAfterUpload = useCallback(

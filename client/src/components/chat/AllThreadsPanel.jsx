@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react'
 import { useChatStore } from '../../stores/chatStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useAuthStore } from '../../stores/authStore'
-import { X, MessageSquareText, Hash, Lock, MessagesSquare, Paperclip, File } from 'lucide-react';
+import { X, MessageSquareText, Hash, Lock, MessagesSquare, File } from "lucide-react";
 import Loader from '../shared/Loader';
 import { Avatar } from './MemberAvatarGroup'
 import { sanitizeHtml } from '../../utils/sanitize'

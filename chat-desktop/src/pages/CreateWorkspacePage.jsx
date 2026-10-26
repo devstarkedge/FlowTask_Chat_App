@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { setWindowControlsColor } from "../services/desktopService";

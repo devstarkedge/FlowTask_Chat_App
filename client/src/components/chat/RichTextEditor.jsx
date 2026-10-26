@@ -1,4 +1,4 @@
-import { useEffect, useCallback, forwardRef, useImperativeHandle, memo } from 'react'
+import { useEffect, forwardRef, useImperativeHandle, memo } from "react";
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'

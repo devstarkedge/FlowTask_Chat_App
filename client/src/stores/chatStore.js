@@ -1031,7 +1031,11 @@ export const useChatStore = create((set, get) => ({
       const idSet = new Set(idsToUpdate);
 
       const updatedChannelMessages = existing.map((m) =>
-        idSet.has(m._id) ? { ...m, status, ...timestamps } : m,
+        !idSet.has(m._id) ||
+        ({ sending: 0, sent: 1, delivered: 2, seen: 3 }[status] ?? -1) <
+          ({ sending: 0, sent: 1, delivered: 2, seen: 3 }[m.status] ?? -1)
+          ? m
+          : { ...m, status, ...Object.fromEntries(Object.entries(timestamps).filter(([, value]) => value != null)) },
       );
 
       

@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { useThemeStore } from "../stores/themeStore";
 import { useChannelStore } from "../stores/channelStore";
-import { X, Hash, Lock, Search, Check, Plus } from "lucide-react-native";
+import { X, Hash, Lock } from "lucide-react-native";
 import { directoriesAPI } from "../services/api";
 import { useAuthStore } from "../stores/authStore";
 import { AppAvatar } from "./common";

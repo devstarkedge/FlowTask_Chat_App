@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Search, SlidersHorizontal, X, BrushCleaning } from "lucide-react";
+import { Search, X, BrushCleaning } from "lucide-react";
 import { messageAPI, searchAPI } from "../../services/api";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";

@@ -15,13 +15,7 @@ const toIdString = (id) => {
 };
 
 // Lazy getter to avoid circular deps (channelStore <- chatStore <- authStore)
-const getAuthUser = () => {
-  try {
-    return require('./authStore').useAuthStore.getState().user;
-  } catch {
-    return null;
-  }
-};
+
 
 export const useChannelStore = create(
   persist(

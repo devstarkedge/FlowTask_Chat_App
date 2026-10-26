@@ -8,22 +8,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import {
-  Forward,
-  Bookmark,
-  Clock,
-  Edit2,
-  Link as LinkIcon,
-  Copy,
-  Trash2,
-  SmilePlus,
-  MessageSquare,
-  Star,
-  Pin,
-  PinOff,
-  Info,
-  Download,
-} from 'lucide-react-native';
+import { Forward, Bookmark, Clock, Edit2, Copy, Trash2, SmilePlus, MessageSquare, Pin, PinOff, Info, Download } from "lucide-react-native";
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
 import { usePreferencesStore } from '../stores/preferencesStore';
@@ -141,43 +126,10 @@ const MessageActionSheet = ({
     onClose();
   };
 
-  const handleCopyLink = async () => {
-    if (attachment && (attachment.url || attachment.secureUrl)) {
-      const url = attachment.url || attachment.secureUrl;
-      const kind = getFileKind(attachment.mimeType || attachment.type || '', attachment.name || attachment.fileName || '', url);
-      if (kind === 'image') {
-        try {
-          await FileService.copyImage(attachment);
-        } catch (err) {
-          console.error(err);
-        }
-        onClose();
-        return;
-      } else if (['video', 'file', 'code', 'text', 'csv'].includes(kind)) {
-        await FileClipboardService.copyFile({ ...attachment, url });
-        Toast.show({ type: 'success', text1: 'File copied to clipboard' });
-        onClose();
-        return;
-      }
-      await Clipboard.setStringAsync(url);
-    } else {
-      const textWithoutImages = (message.content || '').replace(MD_IMAGE_REGEX_GLOBAL, '');
-      const url = textWithoutImages.match(URL_REGEX)?.[0] || '';
-      await Clipboard.setStringAsync(url);
-    }
-    Toast.show({ type: 'success', text1: 'Link copied to clipboard' });
-    onClose();
-  };
+
 
   const isStarred = isFavorited('message', message?._id);
-  const handleStarToggle = async () => {
-    try {
-      await toggleFavorite('message', message?._id);
-      Toast.show({ type: 'success', text1: isStarred ? 'Message unstarred' : 'Message starred' });
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Failed to star/unstar message' });
-    }
-  };
+
 
   const handleDownloadAttachment = () => {
     if (!downloadableMedia || pendingDownload.current) return;

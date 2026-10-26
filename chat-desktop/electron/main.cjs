@@ -6,6 +6,8 @@ const { installHuddlePopout } = require('./huddlePopout.cjs');
 const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
+const isUnpackedPreview = app.isPackaged && process.platform === 'win32' &&
+  path.basename(path.dirname(process.execPath)).toLowerCase() === 'win-unpacked';
 // Explicit isolated profile for two-client calling checks. Normal launches
 // keep their existing profile, single-instance lock and notification identity.
 const callingTestProfile = process.argv.find(value=>value.startsWith('--calling-test-profile='))?.split('=')[1];
@@ -19,16 +21,28 @@ if (isDev) {
   // Use a separate user data path for development so it doesn't mix with production builds
   app.setPath('userData', path.join(app.getPath('appData'), `${app.name}-dev`));
 }
+// An unpacked build must not hold the installed app's profile and startup lock.
+if (isUnpackedPreview) app.setPath('userData', path.join(app.getPath('appData'), `${app.name}-preview`));
 if(callingTestProfile)app.setPath('userData',path.join(app.getPath('temp'),`TaskChat-calling-${callingTestProfile}`));
 
 // Set the App ID for all platforms (Windows, Mac, Linux) to ensure OS-level integrations work
-app.setAppUserModelId(callingTestProfile ? `com.taskchat.callingtest.${callingTestProfile}` : isDev ? 'com.taskchat.dev' : 'com.flowtask.chat');
+app.setAppUserModelId(callingTestProfile ? `com.taskchat.callingtest.${callingTestProfile}` : isDev ? 'com.taskchat.dev' : isUnpackedPreview ? 'com.taskchat.preview' : 'com.flowtask.chat');
 
 let mainWindow;
 let tray = null;
 let isQuitting = false;
 const hasTitleBarOverlay = process.platform === 'win32' || process.platform === 'linux';
 const overlayWindows = new WeakSet();
+app.on('before-quit', () => { isQuitting = true; });
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  if (process.platform === 'darwin' && app.dock) app.dock.show();
+  mainWindow.moveTop();
+  mainWindow.focus();
+}
 
 // Ensure single instance behavior — prevent second launch from opening unauthenticated LevelDB locked process
 const gotTheLock = app.requestSingleInstanceLock();
@@ -38,16 +52,7 @@ if (!gotTheLock) {
   // Do not initialize windows, sessions or the tray in the duplicate process.
   return;
 } else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      if (!mainWindow.isVisible()) {
-        mainWindow.show();
-        if (process.platform === 'darwin' && app.dock) app.dock.show();
-      }
-      mainWindow.focus();
-    }
-  });
+  app.on('second-instance', showMainWindow);
 }
 function createWindow() {
   const initialSymbolColor = (nativeTheme && nativeTheme.shouldUseDarkColors) ? '#ffffff' : '#0f172a';
@@ -82,9 +87,7 @@ function createWindow() {
     showWindow:()=>{if(callWindow.isMinimized())callWindow.restore();callWindow.show();if(process.platform==='darwin' && app.dock)app.dock.show();callWindow.focus();}});
 
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
+  mainWindow.once('ready-to-show', showMainWindow);
 
   if (hasTitleBarOverlay) overlayWindows.add(mainWindow);
 

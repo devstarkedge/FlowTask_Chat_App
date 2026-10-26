@@ -15,7 +15,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useWorkspaceMembers } from '../hooks/queries/useWorkspaceMembers';
 import { useChannelStore } from '../stores/channelStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { ExternalLink, MessageSquare, MapPin, Clock, Phone, Mail, Hash, Video, ChevronRight, Check, ChevronLeft, MoreHorizontal, Headphones, UserX, Shield } from 'lucide-react-native';
+import { MessageSquare, Clock, Mail, Headphones, UserX, Shield } from "lucide-react-native";
 import { formatMessageTime } from '../utils/dateUtils';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -144,20 +144,11 @@ const UserProfileScreen = ({ route, navigation }) => {
 
   const imageSize = Math.min(width - scale(32), scale(320));
 
-  const handleCopyHuddle = () => {
-    setShowDropdown(false);
-    Toast.show({ type: 'success', text1: 'Huddle link copied' });
-  };
 
-  const handleCopyDisplayName = () => {
-    setShowDropdown(false);
-    Toast.show({ type: 'success', text1: 'Display name copied' });
-  };
 
-  const handleHideUser = () => {
-    setShowDropdown(false);
-    Toast.show({ type: 'success', text1: `${liveUser.name} hidden` });
-  };
+
+
+
 
   const isOnline = liveOnlineStatus === 'online' || liveUser.onlineStatus === 'online';
   const isAway = liveOnlineStatus === 'away' || liveOnlineStatus === 'dnd' || liveUser.onlineStatus === 'away' || liveUser.onlineStatus === 'dnd';

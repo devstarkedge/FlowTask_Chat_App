@@ -37,7 +37,7 @@ function installSharingIndicator(parent,{BrowserWindow,ipcMain,screen,platform=p
    target.once('ready-to-show',()=>{if(border===target && bounds){show(target);target.setBounds(bounds);}});
    target.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}body{box-sizing:border-box;border:3px solid #36d17d;pointer-events:none}</style>')).catch(()=>{if(border===target){destroy(border);border=null;}});
   }else {border.setBounds(rect);show(border);}
-  if(toolbar && !toolbar.isDestroyed())toolbar.setBounds(toolbarBounds(rect,screen,740,86));
+  if(toolbar && !toolbar.isDestroyed())toolbar.setBounds(toolbarBounds(rect,screen,420,86));
   annotationWindow();if(ink)show(ink);if(toolbar)show(toolbar);sendState();
  };
  const begin=value=>{
@@ -45,7 +45,7 @@ function installSharingIndicator(parent,{BrowserWindow,ipcMain,screen,platform=p
   // Unknown external-window geometry gets a truthful toolbar, never a fake
   // full-monitor green border. Only Electron-owned windows expose their bounds.
   const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  toolbar=new BrowserWindow({...options,...toolbarBounds(display.workArea,screen,740,86),title:'TaskChat Screen Share Controls',focusable:true,movable:true,webPreferences:{...options.webPreferences,preload:path.join(__dirname,'share-toolbar-preload.cjs')}});
+  toolbar=new BrowserWindow({...options,...toolbarBounds(display.workArea,screen,420,86),title:'TaskChat Screen Share Controls',focusable:true,movable:true,webPreferences:{...options.webPreferences,preload:path.join(__dirname,'share-toolbar-preload.cjs')}});
   const target=toolbar;secure(target);protect(target);target.once('ready-to-show',()=>{if(toolbar===target){sendState();show(target);}});
   target.loadFile(path.join(__dirname,'share-toolbar.html')).catch(()=>{if(toolbar!==target)return;const id=current?.id;stop();if(alive())contents.send('huddle-share:action',{sessionId:id,action:'stop',reason:'toolbar_failed'});});
   const shareId=current.id;

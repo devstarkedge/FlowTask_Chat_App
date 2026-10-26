@@ -15,14 +15,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useChannels } from '../hooks/queries/useChannels';
 import { formatRelativeTime } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, EmptyState } from '../components/common';
-import { 
-  Edit3,
-  Hash,
-  MessageSquare,
-  Trash2,
-  Clock,
-  Send,
-} from 'lucide-react-native';
+import { Edit3, MessageSquare, Trash2, Clock, Send } from "lucide-react-native";
 import ScheduleModal from '../components/ScheduleModal';
 import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';

@@ -14,12 +14,7 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { useThemeStore } from '../stores/themeStore';
 import { formatRelativeTime, formatScheduledDate } from '../utils/dateUtils';
 import { ScreenLayout, ScreenHeader, LoadingState, EmptyState } from '../components/common';
-import { 
-  Clock,
-  Trash2,
-  Hash,
-  Lock,
-} from 'lucide-react-native';
+import { Clock } from "lucide-react-native";
 import ScheduledMessageDetailsModal from '../components/ScheduledMessageDetailsModal';
 import { AppAvatar } from '../components/common';
 import { useConversationDetails } from '../hooks/useConversationDetails';

@@ -58,6 +58,8 @@ router.get(
 );
 
 // ── Write routes — all authenticated users can edit ─────────────────────────
+router.post('/attachments/:canvasId', canvasController.attachFiles);
+
 router.post(
   "/duplicate/:canvasId",
   canvasController.duplicateCanvas

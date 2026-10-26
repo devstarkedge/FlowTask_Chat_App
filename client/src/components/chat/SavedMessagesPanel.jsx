@@ -1,7 +1,7 @@
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Bookmark, X, Search, Hash, MessageSquare, Clock, ChevronRight, Filter } from 'lucide-react'
+import { Bookmark, X, Search, Hash, Clock, ChevronRight, Filter } from "lucide-react";
 import Loader from '../shared/Loader'
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns'
 import { Avatar } from './MemberAvatarGroup'

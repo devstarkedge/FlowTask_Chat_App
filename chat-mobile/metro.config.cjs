@@ -5,6 +5,13 @@ const projectRoot = __dirname;
 
 // Get the default config from expo and then ensure projectRoot/watchFolders
 const config = getDefaultConfig(projectRoot);
+// Yjs uses lib0's secure random adapter. Use Expo's maintained native crypto
+// implementation instead of lib0's optional legacy native crypto package.
+const upstreamResolve=config.resolver.resolveRequest;
+config.resolver.resolveRequest=(context,moduleName,platform)=>{
+  if(moduleName==='lib0/webcrypto' && platform!=='web')return {type:'sourceFile',filePath:path.join(projectRoot,'src/features/huddle/services/nativeCrypto.js')};
+  return upstreamResolve?upstreamResolve(context,moduleName,platform):context.resolveRequest(context,moduleName,platform);
+};
 
 config.projectRoot = projectRoot;
 config.watchFolders = [path.resolve(projectRoot)];

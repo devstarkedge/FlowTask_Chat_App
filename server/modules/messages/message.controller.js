@@ -103,23 +103,13 @@ export const sendMessage = asyncHandler(async (req, res) => {
     canvasMeta,
   });
 
-  console.log("Message saved:", message);
-  // 2 Get channel (IMPORTANT: workspaceId pass karo)
-  const channel = await channelRepository.findById(channelId, {
-    workspaceId,
-  });
-
-  // 3 AI response (NON-BLOCKING )
-  if (channel?.isAI && content) {
-    botService
-      .processAIMessage(content, {
-        userId,
-        channelId,
-        workspaceId,
-      })
-      .catch((err) => {
-        console.error("AI error:", err.message);
-      });
+  // Bot eligibility and generation are background work, including the lookup.
+  if (content) {
+    channelRepository.findById(channelId, { workspaceId })
+      .then((channel) => channel?.isAI
+        ? botService.processAIMessage(content, { userId, channelId, workspaceId })
+        : undefined)
+      .catch((err) => logger.error('AI response failed', { channelId, error: err.message }));
   }
 
   // 4 Return response immediately (fast UI)

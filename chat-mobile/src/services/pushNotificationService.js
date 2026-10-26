@@ -10,7 +10,7 @@
  *   - Server sends via expo-server-sdk when platform === 'expo'
  */
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import { isRunningInExpoGo } from 'expo';
 import storage from './storage';
 import { pushAPI } from './api';
@@ -84,6 +84,12 @@ const initNotificationHandler = () => {
     Notifications.setNotificationHandler({
       handleNotification: async (notification) => {
         const data = notification.request?.content?.data || {};
+        if(data.type==='huddle_invitation'){
+          const valid=Number.isFinite(data.expiresAt) && data.expiresAt>Date.now() && Boolean(session().accessToken);
+          const foreground=AppState.currentState==='active';
+          if(valid && foreground){const {useHuddleUiStore}=require('../stores/huddleUiStore');useHuddleUiStore.getState().receiveInvitation(data);}
+          return {shouldPlaySound:valid && !foreground,shouldSetBadge:false,shouldShowBanner:valid && !foreground,shouldShowList:valid && !foreground};
+        }
         const now = Date.now();
         for (const [id, time] of _presented) if (now - time > 60000) _presented.delete(id);
         const id = data.notificationId;
@@ -142,6 +148,15 @@ async function _register(owner, current) {
 
   const Notifications = getNotificationsModule();
   if (!Notifications) return null;
+
+  await Notifications.setNotificationCategoryAsync('HUDDLE_CALL',[
+    {identifier:'JOIN_HUDDLE',buttonTitle:'Join',options:{opensAppToForeground:true}},
+    {identifier:'DISMISS_HUDDLE',buttonTitle:'Dismiss',options:{opensAppToForeground:false}},
+  ]);
+  if(Platform.OS==='android')await Notifications.setNotificationChannelAsync('huddle_calls',{
+    name:'Incoming Huddle calls',importance:Notifications.AndroidImportance.MAX,sound:'huddle_incoming.wav',
+    vibrationPattern:[0,250,250,250],audioAttributes:{usage:Notifications.AndroidAudioUsage.NOTIFICATION_RINGTONE},
+  });
 
   if (!Device.isDevice) {
     logger.info('[Push] Push notifications require a physical device');
@@ -397,6 +412,10 @@ function _queueResponse(response) {
   const request = response.notification?.request;
   const id = `${request?.identifier}:${response.actionIdentifier}`;
   if (_handledResponses.has(id)) return;
+  const data=request?.content?.data || {};
+  if(data.type==='huddle_invitation' && response.actionIdentifier==='DISMISS_HUDDLE'){
+    const {useHuddleUiStore}=require('../stores/huddleUiStore');useHuddleUiStore.getState().receiveInvitation(data);useHuddleUiStore.getState().dismissInvitation(data.id);_handledResponses.add(id);return;
+  }
   _pendingResponse = { id, data: request?.content?.data || {} };
   trace('tap', { notificationId: _pendingResponse.data.notificationId });
   void _flushResponse();
@@ -437,7 +456,12 @@ async function _flushResponse() {
       await switchWorkspace(workspaceId);
     }
     if (generation !== _generation || session().userId !== owner || !nav.isReady()) return;
-    runNavigation();
+    if(response.data.type==='huddle_invitation'){
+      if(response.data.expiresAt>Date.now()){
+        const {openIncomingHuddle}=require('../features/huddle/services/incomingCall.service');
+        await openIncomingHuddle(response.data);
+      }
+    }else runNavigation();
     _handledResponses.add(response.id);
     if (_handledResponses.size > 100) _handledResponses.delete(_handledResponses.values().next().value);
     if (_pendingResponse === response) _pendingResponse = null;

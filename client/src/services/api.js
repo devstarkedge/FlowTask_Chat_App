@@ -550,6 +550,7 @@ export const canvasAPI = {
   getAllForChannel: (channelId) => api.get(`/canvas/channel/all/${channelId}`),
   create: (channelId, data) => api.post(`/canvas/${channelId}`, data),
   update: (canvasId, data) => api.put(`/canvas/update/${canvasId}`, data),
+  attachFiles: (canvasId, fileIds) => api.post(`/canvas/attachments/${canvasId}`, { fileIds }),
   delete: (canvasId) => api.delete(`/canvas/${canvasId}`),
   duplicate: (canvasId) => api.post(`/canvas/duplicate/${canvasId}`),
   getHistory: (canvasId) => api.get(`/canvas/history/${canvasId}`),

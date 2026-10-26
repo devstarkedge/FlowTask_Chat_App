@@ -16,36 +16,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  X,
-  Settings,
-  Users,
-  LogOut,
-  ChevronRight,
-  Mail,
-  Copy,
-  Trash2,
-  Share2,
-  RefreshCw,
-  Check,
-  Shield,
-  Bell,
-  Zap,
-  Link2,
-  Globe,
-  Lock,
-  Clock,
-  Crown,
-  Shield as ShieldIcon,
-  UserMinus,
-  Search,
-  Plus,
-  UserPlus,
-  Eye,
-  AlertTriangle,
-  Smartphone,
-  Upload,
-} from 'lucide-react-native';
+import { X, Settings, Users, LogOut, Mail, Copy, Trash2, Share2, RefreshCw, Check, Bell, Zap, Link2, Lock, Crown, AlertTriangle, Upload } from "lucide-react-native";
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';

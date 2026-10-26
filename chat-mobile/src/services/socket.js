@@ -1,3 +1,5 @@
+import {bindHuddleSocket} from './huddleSocketService';
+import {useHuddleStore} from '../stores/huddleStore';
 import { io } from 'socket.io-client';
 import { AppState } from 'react-native';
 import storage from './storage';
@@ -53,6 +55,7 @@ const queryKeys = {
 };
 
 let socket = null;
+let disposeHuddleSocket = null;
 let isConnecting = false;
 let currentWorkspaceId = null;
 
@@ -103,6 +106,8 @@ export const connectSocket = async () => {
     reconnectionAttempts: 5,
   });
 
+  disposeHuddleSocket?.();
+  disposeHuddleSocket=bindHuddleSocket(socket,()=>currentWorkspaceId);
   socket.on('connect', () => {
     logger.info('[Socket] ✅ Connected to server');
     isConnecting = false;
@@ -913,6 +918,9 @@ export const connectSocket = async () => {
 };
 
 export const disconnectSocket = () => {
+  disposeHuddleSocket?.();
+  disposeHuddleSocket=null;
+  useHuddleStore.getState().reset();
   if (socket) {
     logger.info('[Socket] Manually disconnecting socket');
     socket.removeAllListeners();

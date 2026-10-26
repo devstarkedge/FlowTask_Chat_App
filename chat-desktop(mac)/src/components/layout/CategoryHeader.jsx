@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { FolderPlus, Plus } from "lucide-react";
 
 export default function CategoryHeader({ onCreateCategory }) {

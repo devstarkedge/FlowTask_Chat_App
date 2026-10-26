@@ -1,0 +1,35 @@
+import {renderHook,act,cleanup} from '@testing-library/react';
+import {beforeEach,afterEach,it,expect,vi} from 'vitest';
+const deps=vi.hoisted(()=>({request:vi.fn(),start:vi.fn(),stop:vi.fn(),mute:vi.fn()}));
+vi.mock('../../../services/huddleRequest',()=>({sendHuddleRequest:deps.request}));
+vi.mock('../../../services/huddleAudioService',()=>({startHuddleAudio:deps.start,stopHuddleAudio:deps.stop,toggleHuddleMute:deps.mute,toggleHuddleCamera:vi.fn(),retryHuddleAudio:vi.fn()}));
+import {useHuddle} from './useHuddle';
+import {useHuddleStore} from '../../../stores/huddleStore';
+import {useHuddleAudioStore} from '../../../stores/huddleAudioStore';
+beforeEach(()=>{useHuddleStore.getState().reset();vi.resetAllMocks();useHuddleAudioStore.setState({connection:'idle',error:null,muted:false});});
+afterEach(cleanup);
+it.each(['channel','dm'])('uses the same lifecycle for a %s conversation',async conversationType=>{
+  const snapshot={revision:1,huddle:{_id:'meeting'},participants:[{id:'device',name:'You'}],session:{id:'device',secret:'private'}};
+  deps.request.mockResolvedValue(snapshot);
+  const {result}=renderHook(()=>useHuddle('conversation'));
+  await act(async()=>{await result.current.startHuddle({conversationId:'conversation',conversationType});});
+  expect(deps.request).toHaveBeenCalledWith('start',{channelId:'conversation'});
+  expect(result.current.session.id).toBe('device');expect(result.current.participants).toHaveLength(1);
+  expect(result.current.localParticipant.name).toBe('You');
+  act(()=>useHuddleAudioStore.setState({connection:'waiting',muted:true}));
+  expect(result.current.status).toBe('connected');expect(result.current.isMuted).toBe(true);
+  await act(async()=>{await result.current.toggleMute();});expect(deps.mute).toHaveBeenCalledOnce();
+  act(()=>useHuddleAudioStore.setState({connection:'failed',error:'Peer connection failed'}));
+  expect(result.current.status).toBe('error');expect(result.current.isJoining).toBe(false);expect(result.current.errorCode).toBe('PEER_CONNECTION_FAILED');
+});
+it('exposes admission state and cancels it through its public Leave action',async()=>{
+  let admit;deps.request.mockImplementationOnce(()=>new Promise(resolve=>{admit=resolve;}));
+  const {result}=renderHook(()=>useHuddle('conversation'));let pending;
+  act(()=>{pending=result.current.startHuddle({conversationId:'conversation',conversationType:'dm'});});
+  expect(result.current.status).toBe('starting');expect(result.current.isJoining).toBe(true);
+  await act(async()=>{await result.current.leaveHuddle();});
+  expect(result.current.status).toBe('idle');expect(result.current.session).toBeNull();
+  deps.request.mockResolvedValue({revision:2,huddle:null,participants:[]});
+  await act(async()=>{admit({revision:1,huddle:{_id:'meeting'},participants:[],session:{id:'cancelled'}});await pending;});
+  expect(deps.start).not.toHaveBeenCalled();
+});

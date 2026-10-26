@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { workspaceAPI } from "../../services/api";
 import toast from "react-hot-toast";
 import "./custom-css/InviteMembersModal.css";
-import { X, UserPlus, Mail, Hash, Search, Copy, Check, Send, AlertCircle, Users, Link, Shield, Info, ChevronDown, Eye } from 'lucide-react';
+import { X, UserPlus, Mail, Hash, Search, Copy, Check, Send, AlertCircle, Users, Link, Info, Eye } from "lucide-react";
 import Loader from '../shared/Loader';
 
 /* ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Search, Forward, Hash, MessageCircle, Lock, Check, Paperclip, FileText, Image, Film, Music, Archive, CheckSquare, Square, Users, Send } from 'lucide-react';
+import { X, Search, Forward, Hash, MessageCircle, Lock, Check, Paperclip, FileText, Image, Film, Music, Archive, Users, Send } from "lucide-react";
 import Loader from '../shared/Loader';
 import toast from 'react-hot-toast'
 import { useChannelStore } from '../../stores/channelStore'

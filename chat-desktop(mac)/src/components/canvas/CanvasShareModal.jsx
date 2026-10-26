@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Link2, ChevronDown, Check, User, Users, Settings, Plus, Sparkles } from "lucide-react";
+import { X, Link2, ChevronDown, User, Settings } from "lucide-react";
 import toast from "react-hot-toast";
 import { useChannelStore } from "../../stores/channelStore";
 import { useCanvasStore } from "../../stores/canvasStore";
@@ -192,7 +192,8 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
       // First ensure the permissions are saved
       await handleDone();
       
-      // Send the structured Canvas message
+        if (canvas?.content) await canvasAPI.update(canvasId, { content: canvas.content });
+        // Send the structured Canvas message
       await sendMessage(channelId, "I shared a canvas", {
         contentType: "canvas_share",
         canvasMeta: {
@@ -200,9 +201,9 @@ export default function CanvasShareModal({ canvas, isOpen, onClose, channelId })
           title: canvas?.title || "Untitled canvas",
           publicToken: canvas?.sharing?.isPublic ? canvas.sharing.publicToken : null,
           permission: currentAccessLevel,
-          previewText: canvas?.content 
-            ? canvas.content.replace(/<[^>]*>?/gm, '').substring(0, 200) 
-            : null
+            previewText: typeof canvas?.content === 'string'
+              ? canvas.content.replace(/<[^>]*>?/gm, '').substring(0, 200)
+              : null
         }
       });
       toast.success("Shared to channel");

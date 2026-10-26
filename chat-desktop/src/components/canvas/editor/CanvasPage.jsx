@@ -41,7 +41,7 @@ const COLLAB_TIMEOUT_MS = 4_000;
  * CanvasPage — Slim root orchestrator that composes all extracted modules.
  * Replaces both CanvasPanel and EnterpriseCanvasEditor as the main entry point.
  */
-export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTab = "untitled" }) {
+export default function CanvasPage({ canvas, conversationChannelId, onSave, onBack, tabs = [], activeTab = "untitled" }) {
   const [collabTimedOut, setCollabTimedOut] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
@@ -83,7 +83,7 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
 
   // ── Canvas is always editable for authenticated users ──────────────────
   const isViewOnly = false;
-  const canvasRole = "editor";
+
 
   // ── Toolbar visibility (memoized from editor state) ────────────────────
   const toolbarVisible = useMemo(() => {
@@ -97,7 +97,7 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
     handleFileChange,
     insertMedia,
     fileInputRef,
-  } = useCanvasFileUpload(editor, canvas, isViewOnly);
+  } = useCanvasFileUpload(editor, { ...canvas, channelId: conversationChannelId || canvas?.channelId }, isViewOnly);
 
   const { startRecording, RecorderOverlay } = useCanvasMediaRecorder({
     isViewOnly,
@@ -107,7 +107,7 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
   const { handleMentionFromToolbar, MentionDropdownPortal } = useCanvasMentionDropdown({
     editor,
     isViewOnly,
-    channelId: canvas?.channelId,
+    channelId: conversationChannelId || canvas?.channelId,
   });
 
   const { toggleEmojiPicker, EmojiPicker } = useCanvasEmojiPicker({
@@ -379,10 +379,10 @@ export default function CanvasPage({ canvas, onSave, onBack, tabs = [], activeTa
 
       {showShareModal && (
         <CanvasShareModal
-          canvas={canvas}
+          canvas={{ ...canvas, content: editor?.getJSON() || canvas?.content }}
           isOpen={showShareModal}
           onClose={() => setShowShareModal(false)}
-          channelId={canvas?.channelId}
+          channelId={conversationChannelId || canvas?.channelId}
         />
       )}
     </div>

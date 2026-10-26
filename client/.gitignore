@@ -4,6 +4,7 @@
 # Logs
 logs
 *.log
+*.test.js
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -25,3 +26,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Calling regression checks
+!src/services/*uddle*.test.js
+!src/features/huddle/**/*.test.js
+!src/features/huddle/**/*.test.jsx
+!src/components/huddles/*.test.jsx

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import debounce from "lodash/debounce";
-import { MoreHorizontal, MoreVertical, Image as ImageIcon, Move } from "lucide-react";
+import { MoreVertical, Image as ImageIcon, Move } from "lucide-react";
 import { useCanvasStore } from "../../../stores/canvasStore";
 import CanvasCoverImage from "../cover/CanvasCoverImage";
 import CanvasCoverActions from "../cover/CanvasCoverActions";

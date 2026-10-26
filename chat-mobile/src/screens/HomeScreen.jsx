@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import React, { useMemo, useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -34,21 +34,7 @@ import {
   AddChannelRow,
   DMRow
 } from "../components/HomeComponents";
-import {
-  Hash,
-  MessageSquare,
-  Bookmark,
-  Headphones,
-  Layers,
-  Settings,
-  Edit3,
-  Clock,
-  Star,
-  Folder,
-  ChevronDown,
-  Radio,
-  Filter
-} from "lucide-react-native";
+import { Hash, MessageSquare, Bookmark, Headphones, Edit3, Clock, Star, Folder, Radio, Filter } from "lucide-react-native";
 
 const HomeScreen = ({ navigation }) => {
   if (!navigation) navigation = { navigate: () => {} };

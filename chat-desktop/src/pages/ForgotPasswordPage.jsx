@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "../stores/authStore";
 import { Link } from "react-router-dom";
-import { MessageCircle, ArrowLeft, Mail, Send } from "lucide-react";
+import { ArrowLeft, Mail, Send } from "lucide-react";
 import toast from "react-hot-toast";
 
 /* ─── self-contained styles injected once ─── */

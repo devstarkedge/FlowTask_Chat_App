@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Palette, Sidebar, MessageSquare, ClipboardList, Inbox, AlertTriangle, Trash2 } from 'lucide-react';
+import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Sidebar, MessageSquare, ClipboardList, Inbox, AlertTriangle, Trash2 } from "lucide-react";
 import Loader from '../shared/Loader';
 import { useAuthStore } from '../../stores/authStore'
 import {

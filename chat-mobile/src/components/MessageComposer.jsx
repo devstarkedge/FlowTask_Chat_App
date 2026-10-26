@@ -23,20 +23,7 @@ import {
 } from "react-native";
 import AppVideo from "./common/AppVideo";
 import { sendMediaBatch, prepareMediaFile } from "../utils/mediaSendBatch";
-import {
-  Plus,
-  Clock,
-  X,
-  FileText,
-  CaseSensitive,
-  Loader2,
-  Camera as CameraIcon,
-  Smile,
-  AtSign,
-  Send,
-  Play,
-  File,
-} from "lucide-react-native";
+import { Plus, Clock, X, FileText, CaseSensitive, Loader2, AtSign, Send, Play, File } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
 import { buildReplyToSnapshot, resolveMessageSenderName, getMessagePlainText } from "../utils/replyUtils";

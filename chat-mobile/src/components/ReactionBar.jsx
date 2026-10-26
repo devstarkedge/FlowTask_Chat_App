@@ -16,7 +16,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { SmilePlus, X } from 'lucide-react-native';
+
 import AccessibleModal from './AccessibleModal';
 import AppAvatar from './common/AppAvatar';
 import { reactionAPI } from '../services/api';

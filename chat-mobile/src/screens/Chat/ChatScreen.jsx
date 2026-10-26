@@ -1,3 +1,5 @@
+import {getHuddleTimeline} from '../../features/huddle/utils/huddleTimeline';
+import HuddlePanel from '../../components/HuddlePanel';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import useResponsive from '../../hooks/useResponsive';
@@ -50,38 +52,7 @@ import EmojiPickerModal from "../../components/EmojiPickerModal";
 import ReminderModal from "../../components/ReminderModal";
 import AudioMessagePlayer from "../../components/AudioMessagePlayer";
 import VideoMessagePlayer from "../../components/VideoMessagePlayer";
-import {
-  Send,
-  Hash,
-  MoreVertical,
-  Image as ImageIcon,
-  Smile,
-  Users,
-  Search,
-  Pin,
-  Bell,
-  CircleChevronLeft,
-  Lock,
-  Volume2,
-  Phone,
-  Video,
-  FileText,
-  MessageSquare,
-  Reply,
-  Edit3,
-  Trash2,
-  Folder ,
-  Bookmark,
-  Copy,
-  ExternalLink,
-  X,
-  MoreHorizontal,
-  UserPlus,
-  Star,
-  ChevronRight,
-  Settings,
-  User,
-} from "lucide-react-native";
+import { Hash, MoreVertical, Users, Search, Pin, Lock, Volume2, FileText, Folder } from "lucide-react-native";
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -98,11 +69,7 @@ import Toast from 'react-native-toast-message';
 import { useScheduledStore } from '../../stores/scheduledStore';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const getAuthorId = (msg) => {
-  if (!msg) return null;
-  if (typeof msg.authorId === "string") return msg.authorId;
-  return msg.authorId?._id || msg.senderSnapshot?._id || null;
-};
+
 
 const isSameDay = (d1, d2) => {
   const a = new Date(d1);
@@ -129,14 +96,9 @@ const formatDateSeparator = (dateStr) => {
   });
 };
 
-const formatTime = (dateStr) => {
-  return formatMessageTime(dateStr);
-};
 
-const isImageUrl = (url) => {
-  if (!url) return false;
-  return /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(url);
-};
+
+
 
 
 
@@ -170,7 +132,7 @@ const ChatScreen = ({ route, navigation }) => {
   // pages[0] = latest messages (oldest-to-newest within page).
   // pages[N] are older pages. Reversing the pages array before flattening
   // yields a consistent oldest-to-newest chronological order across all pages.
-  const messages = useMemo(() => messagesFromPages(messagesData?.pages), [messagesData?.pages]);
+  const messages = useMemo(() => getHuddleTimeline(messagesFromPages(messagesData?.pages)).messages, [messagesData?.pages]);
   const { mutateAsync: sendMessage } = useSendMessage();
   const { mutateAsync: editMessage } = useEditMessage();
   const { mutateAsync: deleteMessage } = useDeleteMessage();
@@ -503,14 +465,7 @@ const ChatScreen = ({ route, navigation }) => {
 
   const [isStarred, setIsStarred] = useState(false);
 
-  const getHeaderSubtitle = () => {
-    const tabCount = 1 + (channel?.canvasTabs?.length || 0);
-    const tabStr = tabCount === 1 ? '1 tab' : `${tabCount} tabs`;
-    if (isDM) {
-      return tabStr;
-    }
-    return `${memberCount} members • ${tabStr}`;
-  };
+
 
   const channelNameToShow = useMemo(() => {
     if (isDM && dmUser) return dmUser.name;
@@ -648,9 +603,7 @@ const ChatScreen = ({ route, navigation }) => {
     }
   }, [createScheduledMessage]);
 
-  const handleSend = (content, options) => {
-    sendMessage({ channelId, content, options, tempId: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` });
-  };
+
 
   const scrollToIndex = (index) => {
     if (!flatListRef.current || index == null) return;
@@ -996,6 +949,7 @@ const ChatScreen = ({ route, navigation }) => {
         </>
       )}
 
+        <HuddlePanel channelId={channelId} />
         <KeyboardAwareContainer
           style={{ flex: 1 }}
           {...keyboardProps}
@@ -1103,7 +1057,6 @@ const ChatScreen = ({ route, navigation }) => {
             total={searchResults.length}
           />
         )}
-
         {/* Message Composer */}
         <View>
           <MessageComposer

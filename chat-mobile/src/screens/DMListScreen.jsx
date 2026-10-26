@@ -28,16 +28,7 @@ import { useDirectoryExternal } from '../hooks/queries/useDirectoryExternal';
 import { channelAPI } from '../services/api';
 import { queryClient } from '../queries/queryClient';
 import { queryKeys } from '../queries/queryKeys';
-import {
-  Edit3,
-  Search,
-  X,
-  Plus,
-  MessageSquare,
-  Building2,
-  CheckSquare,
-  Globe,
-} from "lucide-react-native";
+import { MessageSquare, Building2, CheckSquare, Globe } from "lucide-react-native";
 import logger from '../utils/logger';
 import { formatRelativeTime } from '../utils/dateUtils';
 

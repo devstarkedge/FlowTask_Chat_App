@@ -1,27 +1,6 @@
-import {
-  AtSign,
-  Bot,
-  CalendarClock,
-  CheckSquare,
-  Code2,
-  Columns3,
-  File,
-  Heading1,
-  Image,
-  Link,
-  List,
-  ListOrdered,
-  Minus,
-  Quote,
-  Table2,
-  Type,
-  AudioLines,
-  Video,
-  FilePenLine,
-  Pilcrow,
-} from "lucide-react";
+import { AtSign, CheckSquare, Code2, Columns3, Heading1, List, ListOrdered, Minus, Quote, Table2, Pilcrow } from "lucide-react";
 // import MentionDropdown from "../../chat/MentionDropdown";
-import { useCallback } from "react";
+
 
 const RECENT_KEY = "flowtask.canvas.recentCommands";
 

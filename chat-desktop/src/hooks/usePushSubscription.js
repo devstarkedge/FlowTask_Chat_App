@@ -24,6 +24,7 @@ export default function usePushSubscription({ enabled = true } = {}) {
   const subscriptionRef = useRef(null)
   const registrationRef = useRef(null)
   const promptTimerRef = useRef(null)
+  const pushFailureRef = useRef('')
 
   const [permission, setPermission] = useState(getCurrentPermission())
   const [isSupported, setIsSupported] = useState(hasPushSupport())
@@ -31,6 +32,7 @@ export default function usePushSubscription({ enabled = true } = {}) {
   const [prompt, setPrompt] = useState(CLOSED_PROMPT)
 
   const registerServiceWorker = useCallback(async () => {
+    if (usesNativeNotifications()) return null
     if (!('serviceWorker' in navigator)) {
       logger.debug('Service Workers not supported')
       return null
@@ -49,8 +51,10 @@ export default function usePushSubscription({ enabled = true } = {}) {
     }
   }, [])
 
-  const subscribeToPush = useCallback(async (registration) => {
+  const subscribeToPush = useCallback(async (registration, { silent = false } = {}) => {
     if (!registration?.pushManager) return null
+    if (silent && pushFailureRef.current) return null
+    pushFailureRef.current = ''
 
     try {
       let subscription = await registration.pushManager.getSubscription()
@@ -83,7 +87,10 @@ export default function usePushSubscription({ enabled = true } = {}) {
 
       return subscription
     } catch (error) {
-      if (error?.name === 'NotAllowedError') {
+      if (error?.name === 'AbortError' && /push service not available/i.test(error.message || '')) {
+        pushFailureRef.current = 'This browser could not connect to its push service. Check browser push settings and network access, then try again. In-app notifications still work.'
+        logger.debug('Browser push service is unavailable; in-app notifications remain active')
+      } else if (error?.name === 'NotAllowedError') {
         logger.debug('Push notification permission denied')
       } else {
         logger.error('Push subscription failed:', error)
@@ -108,6 +115,7 @@ export default function usePushSubscription({ enabled = true } = {}) {
   }, [])
 
   const requestPermissionAndSubscribe = useCallback(async ({ silent = false } = {}) => {
+    if (usesNativeNotifications()) return { success: false, reason: 'native_notifications' }
     if (!hasPushSupport()) {
       if (!silent) {
         openPromptState(setPrompt, 'unsupported')
@@ -191,14 +199,14 @@ export default function usePushSubscription({ enabled = true } = {}) {
       return { success: false, reason: 'service_worker_failed' }
     }
 
-    const subscription = await subscribeToPush(registration)
+    const subscription = await subscribeToPush(registration, { silent })
     if (!subscription) {
       if (!silent) {
         setPrompt({
           isOpen: true,
           mode: 'error',
           isBusy: false,
-          error: 'We could not register this browser for push notifications yet.',
+          error: pushFailureRef.current || 'We could not register this browser for push notifications yet.',
         })
       }
       return { success: false, reason: 'subscription_failed' }
@@ -306,6 +314,8 @@ export default function usePushSubscription({ enabled = true } = {}) {
       const nextSupport = hasPushSupport()
       setIsSupported(nextSupport)
       setPermission(getCurrentPermission())
+
+      if (usesNativeNotifications()) return
 
       if (!nextSupport) {
         if (!shouldSuppressPrompt(deviceStatus)) {
@@ -434,8 +444,14 @@ export default function usePushSubscription({ enabled = true } = {}) {
   }
 }
 
+function usesNativeNotifications() {
+  return typeof window !== 'undefined'
+    && (Boolean(window.electronAPI) || /Electron\//i.test(navigator.userAgent || ''))
+}
+
 function hasPushSupport() {
   return typeof window !== 'undefined'
+    && !usesNativeNotifications()
     && 'Notification' in window
     && 'serviceWorker' in navigator
     && 'PushManager' in window

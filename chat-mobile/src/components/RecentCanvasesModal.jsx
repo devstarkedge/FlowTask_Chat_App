@@ -8,7 +8,7 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
-import { X, Layers, FileText } from 'lucide-react-native';
+import { X, Layers } from "lucide-react-native";
 import { canvasAPI } from '../services/api';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 

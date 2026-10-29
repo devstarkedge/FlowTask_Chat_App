@@ -195,15 +195,17 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   }, [pendingFiles]);
 
   // ─── Draft Auto Save Hook ─────────────────────────────────────────
+  const handleDiscard = useCallback(() => {
+    setHasContent(false);
+    setPendingFiles([]);
+  }, []);
+
   const {
     saveDraftDebounced,
     restoreDraft,
     saveDraftLocal,
     cancelPendingDraft,
-  } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef, () => {
-    setHasContent(false);
-    setPendingFiles([]);
-  });
+  } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef, handleDiscard);
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 

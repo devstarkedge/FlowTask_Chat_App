@@ -176,11 +176,19 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     handleMentionKeyDown,
   } = useMentions({ channelId, editorRef })
 
-  // ─── Draft Auto Save Hook ─────────────────────────────────────────
-  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef, () => {
+  const handleDiscard = useCallback(() => {
     setHasContent(false)
     setPendingFiles([])
-  })
+  }, [])
+
+  // ─── Draft Auto Save Hook ─────────────────────────────────────────
+  const { saveDraftDebounced, restoreDraft, saveDraftLocal } = useDraftAutoSave(
+    channelId,
+    threadId,
+    editorRef,
+    pendingFilesRef,
+    handleDiscard
+  )
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 

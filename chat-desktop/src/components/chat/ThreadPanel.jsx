@@ -1,3 +1,5 @@
+import useMentions from '../../hooks/useMentions';
+import MentionDropdown from './MentionDropdown';
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
@@ -54,16 +56,18 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
     /* ── Inline Editor ── */
     .tp-inline-editor-wrap {
       width: 100%;
+      box-sizing: border-box;
+      height: auto;
       border-radius: 10px;
       overflow: hidden;
       border: 1.5px solid var(--accent-primary, #1264a3);
       background: var(--bg-primary, #1a1d21);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-      animation: tpInlineEditorIn 140ms cubic-bezier(0.2, 0, 0.13, 1.3) both;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+      animation: tpInlineEditorIn 120ms ease both;
     }
     @keyframes tpInlineEditorIn {
-      from { opacity: 0; transform: scaleY(0.94); transform-origin: top; }
-      to   { opacity: 1; transform: scaleY(1); }
+      from { opacity: 0; }
+      to   { opacity: 1; }
     }
 
     .tp-inline-editor-toolbar {
@@ -77,18 +81,21 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
     }
 
     .tp-inline-editor-content {
-      min-height: 60px;
-      max-height: 200px;
+      min-height: 40px;
+      max-height: 240px;
+      height: auto;
       overflow-y: auto;
     }
 
+    /* Override TipTap editor padding inside the inline editor */
     .tp-inline-editor-content .ProseMirror {
-      padding: 10px 14px;
+      padding: 8px 12px;
       font-size: 14px;
       line-height: 1.5;
       color: var(--text-primary, #d1d2d3);
       outline: none;
-      min-height: 60px;
+      min-height: 36px;
+      height: auto;
     }
     .tp-inline-editor-content .ProseMirror p.is-editor-empty:first-child::before {
       content: attr(data-placeholder);
@@ -191,9 +198,23 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
  * Uses RichTextEditor (TipTap) + shared FormattingToolbar.
  * Calls onSave(html, text) so the store can persist both htmlContent and content.
  */
-function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
+function InlineEditor({ initialHtml, initialText, channelId, onSave, onCancel }) {
   const editorRef = useRef(null);
   const wrapRef = useRef(null);
+
+  const safeChannelId = typeof channelId === "object" ? channelId?._id : channelId;
+
+  const {
+    mentionType,
+    mentionPos,
+    items: mentionItems,
+    activeIndex: mentionActiveIndex,
+    detectMention,
+    selectMention,
+    closeMentions,
+    handleMentionKeyDown,
+    setActiveIndex: setMentionActiveIndex,
+  } = useMentions({ channelId: safeChannelId, editorRef });
 
   const [formatState, setFormatState] = useState({
     bold: false,
@@ -246,14 +267,17 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
     return () => clearTimeout(timer);
   }, [initialHtml, initialText, syncFormatState]);
 
-  // Escape key cancels edit
+  // Escape key cancels edit, or closes mention dropdown
   useEffect(() => {
     const onKey = (e) => {
+      if (mentionType) {
+        if (handleMentionKeyDown(e)) return;
+      }
       if (e.key === "Escape") onCancel?.();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, [onCancel, mentionType, handleMentionKeyDown]);
 
   const handleSave = useCallback(() => {
     const ed = editorRef.current;
@@ -265,7 +289,8 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
 
   const handleEditorInput = useCallback(() => {
     syncFormatState();
-  }, [syncFormatState]);
+    detectMention();
+  }, [syncFormatState, detectMention]);
 
   return (
     <div className="tp-inline-editor-wrap">
@@ -286,7 +311,25 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
           placeholder="Edit message…"
           onInput={handleEditorInput}
           onSubmit={handleSave}
+          onKeyDown={(e) => {
+            if (mentionType) {
+              return handleMentionKeyDown(e);
+            }
+            return false;
+          }}
         />
+
+        {/* Mention Dropdown */}
+        {mentionType && (
+          <MentionDropdown
+            items={mentionItems}
+            activeIndex={mentionActiveIndex}
+            position={mentionPos}
+            onSelect={selectMention}
+            onClose={closeMentions}
+            setActiveIndex={setMentionActiveIndex}
+          />
+        )}
       </div>
 
       {/* Footer */}
@@ -636,6 +679,7 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
             <InlineEditor
               initialHtml={message.htmlContent || ""}
               initialText={message.content}
+              channelId={message.channelId || channelId}
               onSave={handleEdit}
               onCancel={clearEditingMessageId}
             />

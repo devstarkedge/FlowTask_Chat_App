@@ -1,3 +1,5 @@
+import useMentions from '../../hooks/useMentions';
+import MentionDropdown from './MentionDropdown';
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import HuddleSummary from '../huddles/HuddleSummary';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
@@ -49,17 +51,19 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
     /* ── Inline Editor ── */
     .inline-editor-wrap {
       width: 100%;
+      box-sizing: border-box;
+      height: auto;
       border-radius: 10px;
       overflow: hidden;
       border: 1.5px solid var(--accent-primary, #1264a3);
       background: var(--bg-primary, #1a1d21);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-      animation: inlineEditorIn 140ms cubic-bezier(0.2, 0, 0.13, 1.3) both;
-      margin-bottom: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+      animation: inlineEditorIn 120ms ease both;
+      margin-bottom: 4px;
     }
     @keyframes inlineEditorIn {
-      from { opacity: 0; transform: scaleY(0.94); transform-origin: top; }
-      to   { opacity: 1; transform: scaleY(1); }
+      from { opacity: 0; }
+      to   { opacity: 1; }
     }
 
     .inline-editor-toolbar {
@@ -73,19 +77,21 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
     }
 
     .inline-editor-content {
-      min-height: 60px;
-      max-height: 200px;
+      min-height: 40px;
+      max-height: 240px;
+      height: auto;
       overflow-y: auto;
     }
 
     /* Override TipTap editor padding inside the inline editor */
     .inline-editor-content .ProseMirror {
-      padding: 10px 14px;
+      padding: 8px 12px;
       font-size: 14px;
       line-height: 1.5;
       color: var(--text-primary, #d1d2d3);
       outline: none;
-      min-height: 60px;
+      min-height: 36px;
+      height: auto;
     }
     .inline-editor-content .ProseMirror p.is-editor-empty:first-child::before {
       content: attr(data-placeholder);
@@ -242,9 +248,23 @@ const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
  * FormattingToolbar. Formatting is preserved because we pass `html` (TipTap
  * HTML output) to `onSave`, which the store stores as `htmlContent`.
  */
-function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
+function InlineEditor({ initialHtml, initialText, channelId, onSave, onCancel }) {
   const editorRef = useRef(null);
   const wrapRef = useRef(null);
+
+  const safeChannelId = typeof channelId === "object" ? channelId?._id : channelId;
+
+  const {
+    mentionType,
+    mentionPos,
+    items: mentionItems,
+    activeIndex: mentionActiveIndex,
+    detectMention,
+    selectMention,
+    closeMentions,
+    handleMentionKeyDown,
+    setActiveIndex: setMentionActiveIndex,
+  } = useMentions({ channelId: safeChannelId, editorRef });
 
   const [formatState, setFormatState] = useState({
     bold: false,
@@ -287,22 +307,30 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
         ed.setContent(initialText);
       }
 
-      ed.focus("end", { scrollIntoView: false });
+      ed.focus("end");
       syncFormatState();
 
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      });
     }, 50);
 
     return () => clearTimeout(timer);
   }, [initialHtml, initialText, syncFormatState]);
 
-  // Escape key cancels edit
+  // Escape key cancels edit, or closes mention dropdown
   useEffect(() => {
     const onKey = (e) => {
+      if (mentionType) {
+        if (handleMentionKeyDown(e)) return;
+      }
       if (e.key === "Escape") onCancel?.();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, [onCancel, mentionType, handleMentionKeyDown]);
 
   const handleSave = useCallback(() => {
     const ed = editorRef.current;
@@ -317,11 +345,10 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
     onSave(html, text);
   }, [onSave]);
 
-  // onInput from RichTextEditor receives { html, text, isEmpty } — we only need
-  // to re-sync the active-mark state so toolbar buttons update correctly.
   const handleEditorInput = useCallback(() => {
     syncFormatState();
-  }, [syncFormatState]);
+    detectMention();
+  }, [syncFormatState, detectMention]);
 
   return (
     <div className="inline-editor-wrap" ref={wrapRef}>
@@ -342,7 +369,25 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
           placeholder="Edit message…"
           onInput={handleEditorInput}
           onSubmit={handleSave}
+          onKeyDown={(e) => {
+            if (mentionType) {
+              return handleMentionKeyDown(e);
+            }
+            return false;
+          }}
         />
+
+        {/* Mention Dropdown */}
+        {mentionType && (
+          <MentionDropdown
+            items={mentionItems}
+            activeIndex={mentionActiveIndex}
+            position={mentionPos}
+            onSelect={selectMention}
+            onClose={closeMentions}
+            setActiveIndex={setMentionActiveIndex}
+          />
+        )}
       </div>
 
       {/* Footer */}
@@ -435,6 +480,21 @@ const MessageItem = memo(
     
     // Derive edit state from global store (single source of truth)
     const isEditing = editingMessageId === message._id;
+
+    useEffect(() => {
+      if (isEditing) {
+        const t1 = setTimeout(() => {
+          messageRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 100);
+        const t2 = setTimeout(() => {
+          messageRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 260);
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+        };
+      }
+    }, [isEditing]);
 
     const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
 
@@ -725,53 +785,6 @@ const MessageItem = memo(
             ? "last"
             : "middle";
 
-    // ── Full-width editing layout ─────────────────────────────────────────────
-    if (isEditing) {
-      return (
-        <div
-          id={`msg-${message._id}`}
-          ref={messageRef}
-          style={{ marginTop: compact ? 2 : 12, padding: "4px 16px 16px" }}
-        >
-          {/* Name row */}
-          {!compact && (
-            <div
-              className={`flex items-baseline gap-1.5 mb-2 px-1 ${isOwn ? "justify-end" : ""}`}
-            >
-              <span
-                className="font-semibold text-[13px] cursor-pointer hover:underline"
-                style={{ color: "var(--text-white)" }}
-                onClick={() => onOpenProfile?.(authorData)}
-              >
-                {authorName}
-              </span>
-              <span
-                className="text-[11px] message-timestamp"
-                style={{ color: "var(--text-timestamp)" }}
-              >
-                {time}
-              </span>
-              {message.isEdited && (
-                <span
-                  className="text-[10px]"
-                  style={{ color: "var(--text-timestamp)" }}
-                >
-                  (edited)
-                </span>
-              )}
-            </div>
-          )}
-          {/* Full-width editor */}
-          <InlineEditor
-            initialHtml={message.htmlContent || ""}
-            initialText={message.content}
-            onSave={handleEdit}
-            onCancel={clearEditingMessageId}
-          />
-        </div>
-      );
-    }
-
     // ── Message content renderer ──────────────────────────────────────────────
     /**
      * Render priority:
@@ -921,7 +934,7 @@ const MessageItem = memo(
           paddingTop: compact ? 2 : 12,
         }}
         onMouseEnter={() => {
-          if (!isDeleted) setShowActions(true);
+          if (!isDeleted && !isEditing) setShowActions(true);
         }}
         onMouseLeave={() => {
           if (!showReactionPicker && !showMoreMenu) setShowActions(false);
@@ -981,9 +994,14 @@ const MessageItem = memo(
           {/* Column: name + bubble */}
           <div
             className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
-            style={{ maxWidth: "min(72%, 620px)", minWidth: 0 }}
+            style={{
+              width: isEditing ? "100%" : undefined,
+              maxWidth: isEditing ? "100%" : "min(72%, 620px)",
+              minWidth: 0,
+              flex: isEditing ? 1 : undefined,
+            }}
           >
-            {!compact && !isDMChannel && (
+            {(!compact || isEditing) && (!isDMChannel || isEditing) && (
               <div
                 className={`flex items-baseline gap-1.5 mb-1 px-1 ${isOwn ? "flex-row-reverse" : ""}`}
               >
@@ -1031,8 +1049,19 @@ const MessageItem = memo(
             )}
 
             {/* Bubble */}
-            <div
-              className={`message-bubble ${isOwn ? "sent" : "received"} ${groupPos}`}
+            {isEditing ? (
+              <div className="w-full" style={{ width: "100%", maxWidth: "100%", marginTop: 2 }}>
+                <InlineEditor
+                  initialHtml={message.htmlContent || ""}
+                  initialText={message.content}
+                  channelId={message.channelId || channelId}
+                  onSave={handleEdit}
+                  onCancel={clearEditingMessageId}
+                />
+              </div>
+            ) : (
+              <div
+                className={`message-bubble ${isOwn ? "sent" : "received"} ${groupPos}`}
               style={{
                 opacity: message.isOptimistic ? 0.7 : 1,
                 transition: "opacity 200ms ease",
@@ -1167,6 +1196,7 @@ const MessageItem = memo(
               {renderBubbleStatusRow()}
 
             </div>
+            )}
 
             {/* Reactions */}
             {message.reactions?.length > 0 && (
@@ -1199,7 +1229,7 @@ const MessageItem = memo(
             )}
 
             {/* Thread preview — outside bubble */}
-            {message.replyCount > 0 && (
+            {!isEditing && message.replyCount > 0 && (
               <ThreadPreview
                 message={message}
                 onOpenThread={onOpenThread}
@@ -1216,8 +1246,8 @@ const MessageItem = memo(
               <div
                 className="absolute top-0 right-5 flex items-center gap-1.5 px-2 py-1 rounded-lg z-10"
                 style={{
-                  visibility: showActions || showReactionPicker || showMoreMenu ? "visible" : "hidden",
-                  pointerEvents: showActions || showReactionPicker || showMoreMenu ? "auto" : "none",
+                  visibility: !isEditing && (showActions || showReactionPicker || showMoreMenu) ? "visible" : "hidden",
+                  pointerEvents: !isEditing && (showActions || showReactionPicker || showMoreMenu) ? "auto" : "none",
                   background: "var(--bg-secondary)",
                   border: "1px solid var(--border-primary)",
                   boxShadow: "var(--shadow-md)",

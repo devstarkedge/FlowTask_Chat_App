@@ -1,3 +1,6 @@
+import { useUserProfileStore } from '../../stores/userProfileStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { useChannelStore } from '../../stores/channelStore';
 import { useEffect, forwardRef, useImperativeHandle, memo } from "react";
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -13,6 +16,36 @@ const lowlight = createLowlight(common)
 // ─── Mention Node (lightweight custom node instead of full @tiptap/extension-mention) ─
 import { Node, mergeAttributes } from '@tiptap/core'
 
+const resolveFallbackLabel = (id, mentionType) => {
+  if (!id) return ''
+  try {
+    if (mentionType === 'channel') {
+      const channel = useChannelStore?.getState?.()?.channels?.find?.((c) => String(c._id) === String(id))
+      if (channel?.name) return channel.name
+    } else {
+      const profilesByWs = useUserProfileStore?.getState?.()?.profilesByWorkspace || {}
+      for (const wsProfiles of Object.values(profilesByWs)) {
+        if (wsProfiles?.[id]?.name) return wsProfiles[id].name
+      }
+      const wsMembers = useWorkspaceStore?.getState?.()?.members || []
+      const foundWsMember = wsMembers.find((m) => String(m._id || m.userId?._id || m.userId) === String(id))
+      if (foundWsMember?.name || foundWsMember?.userId?.name) {
+        return foundWsMember.name || foundWsMember.userId.name
+      }
+      const membersByCh = useChannelStore?.getState?.()?.membersByChannel || {}
+      for (const mList of Object.values(membersByCh)) {
+        if (Array.isArray(mList)) {
+          const m = mList.find((x) => String(x._id || x.userId?._id || x.userId) === String(id))
+          if (m?.name || m?.userId?.name) return m.name || m.userId.name
+        }
+      }
+    }
+  } catch {
+    // fallback safe
+  }
+  return ''
+}
+
 const MentionNode = Node.create({
   name: 'mention',
   group: 'inline',
@@ -22,32 +55,74 @@ const MentionNode = Node.create({
 
   addAttributes() {
     return {
-      id: { default: null },
-      label: { default: null },
-      mentionType: { default: 'user' }, // 'user' | 'channel'
+      id: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-mention-id') || element.getAttribute('data-id') || element.getAttribute('data-user-id'),
+        renderHTML: (attributes) => ({
+          'data-mention-id': attributes.id,
+        }),
+      },
+      label: {
+        default: null,
+        parseHTML: (element) => {
+          const attr = element.getAttribute('data-label') || element.getAttribute('data-mention-label')
+          if (attr && attr !== 'null' && attr !== 'undefined') return attr
+          const rawText = element.textContent?.trim() || ''
+          const cleaned = rawText.replace(/^[@#]/, '').trim()
+          if (cleaned && cleaned !== 'null' && cleaned !== 'undefined') return cleaned
+          const id = element.getAttribute('data-mention-id') || element.getAttribute('data-id') || element.getAttribute('data-user-id')
+          const mentionType = element.getAttribute('data-mention-type') || 'user'
+          return resolveFallbackLabel(id, mentionType) || null
+        },
+        renderHTML: (attributes) => ({
+          'data-label': attributes.label,
+        }),
+      },
+      mentionType: {
+        default: 'user',
+        parseHTML: (element) => element.getAttribute('data-mention-type') || 'user',
+        renderHTML: (attributes) => ({
+          'data-mention-type': attributes.mentionType,
+        }),
+      },
     }
   },
 
   parseHTML() {
-    return [{ tag: 'span[data-mention-id]' }]
+    return [
+      { tag: 'span[data-mention-id]' },
+      { tag: 'span[data-mention-type]' },
+      { tag: 'span[data-type="mention"]' },
+      { tag: 'span.mention-tag' },
+      { tag: 'span.mention' },
+    ]
   },
 
   renderText({ node }) {
     const prefix = node.attrs.mentionType === 'channel' ? '#' : '@'
-    return `${prefix}${node.attrs.label || ''}`
+    let label = node.attrs.label
+    if (!label || label === 'null' || label === 'undefined') {
+      label = resolveFallbackLabel(node.attrs.id, node.attrs.mentionType) || 'User'
+    }
+    return `${prefix}${label}`
   },
 
   renderHTML({ node, HTMLAttributes }) {
     const prefix = node.attrs.mentionType === 'channel' ? '#' : '@'
+    let label = node.attrs.label
+    if (!label || label === 'null' || label === 'undefined') {
+      label = resolveFallbackLabel(node.attrs.id, node.attrs.mentionType) || 'User'
+    }
     return [
       'span',
       mergeAttributes(HTMLAttributes, {
         class: 'mention-tag',
         'data-mention-id': node.attrs.id,
         'data-mention-type': node.attrs.mentionType,
+        'data-label': label,
         contenteditable: 'false',
       }),
-      `${prefix}${node.attrs.label}`,
+      `${prefix}${label}`,
     ]
   },
 })
@@ -204,18 +279,64 @@ const RichTextEditor = forwardRef(function RichTextEditor(
         editor?.commands.insertContent(emoji)
       },
       /** Insert a mention node */
-      insertMention(id, label, mentionType = 'user') {
+      insertMention(id, label, mentionType = 'user', range = null) {
+        if (!editor) return
+        const safeLabel = (label && label !== 'null' && label !== 'undefined')
+          ? label
+          : (resolveFallbackLabel(id, mentionType) || 'User')
+
+        const content = [
+          {
+            type: 'mention',
+            attrs: { id, label: safeLabel, mentionType },
+          },
+          { type: 'text', text: ' ' },
+        ]
+
+        if (range && typeof range.from === 'number' && typeof range.to === 'number') {
+          editor
+            .chain()
+            .focus()
+            .insertContentAt(range, content)
+            .run()
+        } else {
+          editor
+            .chain()
+            .focus()
+            .insertContent(content)
+            .run()
+        }
+
+        // Calculate cursor position after mention node (size 1) + space (size 1)
+        const targetPos = range && typeof range.from === 'number'
+          ? range.from + 2
+          : editor.state.selection.to
+
+        const safePos = Math.min(targetPos, editor.state.doc.content.size)
+
         editor
-          ?.chain()
+          .chain()
           .focus()
-          .insertContent([
-            {
-              type: 'mention',
-              attrs: { id, label, mentionType },
-            },
-            { type: 'text', text: ' ' },
-          ])
+          .setTextSelection(safePos)
           .run()
+
+        // Sync browser DOM selection to ensure caret is rendered after the space
+        try {
+          const domView = editor.view?.dom?.ownerDocument?.defaultView || window
+          const domSelection = domView?.getSelection?.()
+          if (domSelection) {
+            const anchor = editor.view.domAtPos(safePos)
+            if (anchor && anchor.node) {
+              const domRange = domView.document.createRange()
+              domRange.setStart(anchor.node, anchor.offset)
+              domRange.collapse(true)
+              domSelection.removeAllRanges()
+              domSelection.addRange(domRange)
+            }
+          }
+        } catch {
+          // safe fallback
+        }
       },
       /** Insert a link */
       insertLink(url, text) {

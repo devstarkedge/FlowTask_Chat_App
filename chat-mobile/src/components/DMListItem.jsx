@@ -4,7 +4,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { AppAvatar } from './common';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Archive, Bell, BellOff, CheckCircle, Clock } from 'lucide-react-native';
 import { useChannelStore } from '../stores/channelStore';
 import { useNotificationPrefStore } from '../stores/notificationPrefStore';
@@ -143,8 +143,11 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
       ref={swipeableRef}
       renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
-      onSwipeableLeftOpen={() => handleSwipeAction(swipeDmLeft)}
-      onSwipeableRightOpen={() => handleSwipeAction(swipeDmRight)}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'left') handleSwipeAction(swipeDmLeft);
+        else if (direction === 'right') handleSwipeAction(swipeDmRight);
+      }}
+
     >
       <TouchableOpacity
         style={[styles.row, containerStyle, { backgroundColor: colors.background }]}

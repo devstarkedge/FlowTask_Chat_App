@@ -29,7 +29,7 @@ const FILTERS = [
 ];
 
 
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { CheckCircle, Clock, Trash2 } from "lucide-react-native";
 import Toast from 'react-native-toast-message';
 import { usePreferencesStore } from "../../stores/preferencesStore";
@@ -181,8 +181,11 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
       ref={swipeableRef}
       renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
-      onSwipeableLeftOpen={() => handleSwipeAction(swipeActivityLeft)}
-      onSwipeableRightOpen={() => handleSwipeAction(swipeActivityRight)}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'left') handleSwipeAction(swipeActivityLeft);
+        else if (direction === 'right') handleSwipeAction(swipeActivityRight);
+      }}
+
     >
       <TouchableOpacity 
         onPress={handlePress} 

@@ -26,7 +26,7 @@ export default function NotificationToast({ notification, onClick, onDismiss, pl
     if (playSound) {
       try {
         const audio = new Audio('/notification.mp3')
-        audio.volume = 0.3
+        audio.volume = 1
         audio.play().catch(() => {})
       } catch {
         // Audio not available

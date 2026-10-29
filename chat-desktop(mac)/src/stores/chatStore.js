@@ -1675,7 +1675,29 @@ export const useChatStore = create((set, get) => ({
     set((state) => ({
       notifications: [normalized, ...state.notifications].slice(0, 50),
     }));
-    if (normalized.type === "mention") {
+    // DM notification toast — fires whenever a DM arrives and user isn't viewing that channel
+    if (normalized.type === "dm") {
+      toast.custom(
+        (t) => createElement(NotificationToast, {
+          notification: normalized,
+          onClick: () => {
+            const channelId = normalized.channelId?._id || normalized.channelId || normalized.conversationId;
+            const wsId = normalized.workspaceId;
+            if (channelId && wsId) {
+              if (typeof window !== 'undefined' && window.electronAPI) {
+                window.location.hash = `/workspace/${wsId}/dm/${channelId}`;
+              } else {
+                window.location.href = `/workspace/${wsId}/dm/${channelId}`;
+              }
+            }
+            toast.dismiss(t.id);
+          },
+          onDismiss: () => toast.dismiss(t.id),
+          playSound: true,
+        }),
+        { duration: 5000 },
+      );
+    } else if (normalized.type === "mention") {
       toast.custom(
         () => createElement(MentionToast, { notification: normalized }),
         {

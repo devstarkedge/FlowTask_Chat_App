@@ -35,7 +35,7 @@ function MessageListHeader({ context }) {
 }
 
 function MessageListFooter() {
-  return <div style={{ height: 16 }} />;
+  return <div style={{ height: 12 }} />;
 }
 
 const LIST_COMPONENTS = { Header: MessageListHeader, Footer: MessageListFooter };
@@ -58,6 +58,7 @@ export default function MessageList({
   const setHighlightMessageId = useChatStore((s) => s.setHighlightMessageId);
   const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
   const setScrollToMessageId = useChatStore((s) => s.setScrollToMessageId);
+  const editingMessageId = useChatStore((s) => s.editingMessageId);
   const messageAppendVersion = useChatStore(
     (s) => s.messageAppendVersionByChannel?.[channelId] || 0,
   );
@@ -346,6 +347,34 @@ export default function MessageList({
     return nextTracker.firstItemIndex;
   }, [channelId, firstMessageId, flattenedItems]);
 
+  // ─── Auto-scroll to message when editing begins ─────────────────────────────
+  useEffect(() => {
+    if (!editingMessageId || !virtuosoRef.current) return;
+    const index = flattenedItems.findIndex((item) => item._id === editingMessageId);
+    if (index === -1) return;
+
+    const t1 = setTimeout(() => {
+      virtuosoRef.current?.scrollToIndex({
+        index,
+        align: "end",
+        behavior: "smooth",
+      });
+    }, 80);
+
+    const t2 = setTimeout(() => {
+      virtuosoRef.current?.scrollToIndex({
+        index,
+        align: "end",
+        behavior: "smooth",
+      });
+    }, 240);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [editingMessageId, flattenedItems]);
+
   // ─── Auto-scroll to message from deep-link (DownloadsModal folder navigation) ──
   // All explicit message navigation shares one scroll path. A highlight or
   // reaction rerender cannot replay an already consumed navigation request.
@@ -616,7 +645,7 @@ export default function MessageList({
       )}
 
       {/* ── Scroll-to-bottom FAB ─────────────────────────────────────── */}
-      {showScrollBtn && (
+      {showScrollBtn && !editingMessageId && (
         <button
           aria-label="Scroll to latest message"
           title="Jump to latest"

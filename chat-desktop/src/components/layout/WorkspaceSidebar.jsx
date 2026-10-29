@@ -35,6 +35,13 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const unreadNotifications = useNotificationStore((s) => s.unreadCount);
   const isPaused = useNotificationStore((s) => s.isPaused);
   const presenceMap = usePresenceStore((s) => s.presence);
+  const unreads = useChannelStore((s) => s.unreads);
+  const allChannels = useChannelStore((s) => s.channels);
+  // Total unread DM count — badge on the DMs nav icon
+  const dmUnreadCount = Object.entries(unreads).reduce((sum, [channelId, count]) => {
+    const ch = allChannels.find((c) => c._id === channelId);
+    return ch?.type === 'dm' ? sum + (count || 0) : sum;
+  }, 0);
   const savedCount = useLaterStore((s) => s.savedMessages.filter(m => m.status === 'in_progress' && !(m.type === "standalone" && m.canvasRef)).length);
   const savedCanvasCount = useCanvasStore((s) => s.savedCanvases.filter(c => c.savedForLaterStatus === 'in_progress').length);
   
@@ -184,6 +191,22 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
             data-tooltip={item.label}
           >
             <item.icon size={20} />
+            {item.id === "dms" && dmUnreadCount > 0 && (
+              <span
+                className="absolute shadow-[0_0_0_2px_var(--bg-workspace-sidebar)] flex items-center justify-center rounded-full text-[10px] font-bold"
+                style={{
+                  top: "-4px",
+                  right: "-4px",
+                  minWidth: "16px",
+                  height: "16px",
+                  padding: "0 4px",
+                  background: "var(--accent-primary)",
+                  color: "white",
+                }}
+              >
+                {dmUnreadCount > 99 ? "99+" : dmUnreadCount}
+              </span>
+            )}
             {item.id === "activity" && unreadNotifications > 0 && (
               <span
                 className="absolute shadow-[0_0_0_2px_var(--bg-workspace-sidebar)] flex items-center justify-center rounded-full text-[10px] font-bold"

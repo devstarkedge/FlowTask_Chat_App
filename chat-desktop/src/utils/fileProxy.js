@@ -1,16 +1,23 @@
 import { messageAPI, resolveFullUrl } from "../services/api";
 
 /**
- * Converts a Cloudinary URL to a server proxy URL to bypass 401 errors.
- * If the URL is not from Cloudinary or lacks an assetId, returns the original URL.
+ * Converts a Cloudinary URL to a server proxy URL to bypass 401 errors for non-image assets.
+ * Images are loaded directly from Cloudinary CDN to allow native browser <img> caching and rendering.
  * 
  * @param {string} url - The original file URL (secureUrl or url)
  * @param {string} assetId - The MongoDB asset ID (_id or fileId)
- * @returns {string} - Proxy URL if Cloudinary, otherwise original URL
+ * @param {string} [mimeType] - MIME type of the file
+ * @returns {string} - Direct CDN URL for images, Proxy URL for protected assets, otherwise original URL
  */
-export function getSafeFileUrl(url, assetId) {
+export function getSafeFileUrl(url, assetId, mimeType) {
   if (!url) return url;
   
+  // Images can and should always be loaded directly from Cloudinary CDN.
+  // Proxying images causes <img> tags to fail with 401 because <img> tags cannot send Bearer authorization headers.
+  if (mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|bmp|ico)(\?.*)?$/i.test(url)) {
+    return resolveFullUrl(url);
+  }
+
   // Only proxy Cloudinary CDN URLs
   const isCloudinaryUrl = url.includes('res.cloudinary.com') || url.includes('cloudinary.com');
   
@@ -53,5 +60,6 @@ export function getFileUrl(file) {
   if (!file) return '';
   const url = file.secureUrl || file.url || '';
   const assetId = getFileAssetId(file);
-  return getSafeFileUrl(url, assetId);
+  const mimeType = file.mimeType || file.type || '';
+  return getSafeFileUrl(url, assetId, mimeType);
 }

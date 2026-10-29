@@ -15,6 +15,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { handleDownload } from '../../utils/handleDownload'
+import { copyImageToClipboard } from '../../utils/clipboardUtils'
 import FilePreviewRenderer, {
   FilePreviewKindIcon,
   getFileDisplayName,
@@ -66,6 +67,8 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const [canCopyText, setCanCopyText] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
+  const [copiedImage, setCopiedImage] = useState(false)
+
   const containerRef = useRef(null)
 
   const isDesktop = useMemo(() => {
@@ -108,6 +111,17 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
   const currentFile = files[currentIndex] || file
   const info = useMemo(() => getFilePreviewInfo(currentFile), [currentFile])
   const fileName = getFileDisplayName(currentFile)
+
+  const handleCopyImage = useCallback(async () => {
+    if (!currentFile) return
+    const url = currentFile.secureUrl || currentFile.url || currentFile.thumbnailUrl
+    const ok = await copyImageToClipboard(url)
+    if (ok) {
+      setCopiedImage(true)
+      setTimeout(() => setCopiedImage(false), 2000)
+    }
+  }, [currentFile])
+
 
   const resetView = useCallback(() => {
     setZoom(1)
@@ -218,6 +232,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
                 </span>
                 <ToolbarBtn title="Zoom in" icon={ZoomIn} onClick={() => setZoom((z) => Math.min(z + 0.25, 3))} />
                 <ToolbarBtn title="Rotate" icon={RotateCw} onClick={() => setRotation((r) => r + 90)} />
+                <ToolbarBtn title={copiedImage ? "Copied!" : "Copy image"} icon={copiedImage ? Check : Copy} onClick={handleCopyImage} />
                 <div className="file-preview-divider" />
               </>
             )}

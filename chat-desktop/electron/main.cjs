@@ -3,7 +3,7 @@ const { createIncomingCallWindow } = require('./incomingCallWindow.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
 const { installHuddlePopout } = require('./huddlePopout.cjs');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen, clipboard } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 const isUnpackedPreview = app.isPackaged && process.platform === 'win32' &&
@@ -110,6 +110,37 @@ function createWindow() {
   mainWindow.on('unmaximize', () => {
     mainWindow.webContents.send('window-maximized-change', false);
   });
+
+  // Context menu on right-click (Copy Image, Copy Image Address, Copy, Paste, etc.)
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    const menuTemplate = [];
+    if (params.mediaType === 'image') {
+      menuTemplate.push({
+        label: 'Copy Image',
+        click: () => mainWindow.webContents.copyImageAt(params.x, params.y),
+      });
+      if (params.srcURL) {
+        menuTemplate.push({
+          label: 'Copy Image Address',
+          click: () => clipboard.writeText(params.srcURL),
+        });
+      }
+      menuTemplate.push({ type: 'separator' });
+    }
+    if (params.selectionText) {
+      menuTemplate.push({ role: 'copy' });
+    }
+    if (params.isEditable) {
+      menuTemplate.push({ role: 'cut' });
+      menuTemplate.push({ role: 'paste' });
+      menuTemplate.push({ role: 'selectAll' });
+    }
+    if (menuTemplate.length > 0) {
+      const contextMenu = Menu.buildFromTemplate(menuTemplate);
+      contextMenu.popup({ window: mainWindow });
+    }
+  });
+
 
   // Open external links in default browser instead of the Electron app
 

@@ -105,19 +105,35 @@ class MessageService {
     // Process structured mentions or fallback to extracting from HTML
     let processedMentions = [];
     if (mentions && Array.isArray(mentions) && mentions.length > 0) {
-      processedMentions = mentions.map(m => ({
-        targetId: m.userId,
-        name: m.username || 'Unknown',
-        type: m.type || MENTION_TYPES.USER
-      }));
+      processedMentions = mentions.map(m => {
+        const isChannel = m.userId === 'channel' || m.targetId === 'channel' || m.username === 'channel' || m.type === 'channel';
+        return {
+          targetId: isChannel ? 'channel' : (m.userId || m.targetId),
+          name: isChannel ? 'channel' : (m.username || m.name || 'Unknown'),
+          type: isChannel ? MENTION_TYPES.CHANNEL : (m.type || MENTION_TYPES.USER),
+        };
+      });
     } else {
       // Fallback for older clients
       const extracted = extractMentions(sanitizedContent);
-      processedMentions = extracted.map(m => ({
-        targetId: m.id,
-        name: m.name,
-        type: m.type || MENTION_TYPES.USER
-      }));
+      processedMentions = extracted.map(m => {
+        const isChannel = m.id === 'channel' || m.targetId === 'channel' || m.name === 'channel' || m.type === 'channel';
+        return {
+          targetId: isChannel ? 'channel' : (m.id || m.targetId),
+          name: isChannel ? 'channel' : m.name,
+          type: isChannel ? MENTION_TYPES.CHANNEL : (m.type || MENTION_TYPES.USER),
+        };
+      });
+    }
+
+    // Check for @channel in content if not already in processedMentions
+    const combinedContent = `${sanitizedContent || ''} ${sanitizedHtml || ''}`;
+    if (/\b@channel\b/i.test(combinedContent) && !processedMentions.some(m => m.targetId === 'channel' || m.name === 'channel')) {
+      processedMentions.push({
+        targetId: 'channel',
+        name: 'channel',
+        type: MENTION_TYPES.CHANNEL,
+      });
     }
 
     // Fetch sender data for snapshot denormalization
@@ -1123,10 +1139,10 @@ class MessageService {
             );
             if (!allowed) continue;
           }
-          // Check channel mute preference
-          const preferences = chatUser.preferences || {};
-          const channelMutes = preferences.channelMutes || {};
-          if (channelMutes[channel._id.toString()]) continue;
+          // Channel mute does NOT suppress direct @mentions (notifications still delivered)
+          // const preferences = chatUser.preferences || {};
+          // const channelMutes = preferences.channelMutes || {};
+          // if (channelMutes[channel._id.toString()]) continue;
 
           // Persist notification
           await notificationService.createMentionNotification({

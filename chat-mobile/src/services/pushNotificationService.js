@@ -43,6 +43,12 @@ const trace = (stage, details = {}) => logger.info('[Push]', { stage, platform: 
 export { IOS_NOTIFICATION_SOUND as FLOWTASK_NOTIFICATION_SOUND } from '../constants/notificationSounds';
 let _navigationRef = null;
 export const setNavigationRef = (ref) => { _navigationRef = ref; };
+export const getNavigationRef = () => _navigationRef;
+export const navigateApp = (screen, params) => {
+  if (_navigationRef && _navigationRef.isReady()) {
+    _navigationRef.navigate(screen, params);
+  }
+};
 export const handlePushNavigationReady = () => { void _flushResponse(); };
 
 // Helper to check if running inside Expo Go app
@@ -90,6 +96,25 @@ const initNotificationHandler = () => {
           if(valid && foreground){const {useHuddleUiStore}=require('../stores/huddleUiStore');useHuddleUiStore.getState().receiveInvitation(data);}
           return {shouldPlaySound:valid && !foreground,shouldSetBadge:false,shouldShowBanner:valid && !foreground,shouldShowList:valid && !foreground};
         }
+        const notifChannelId = data.channelId || data.conversationId;
+        const senderId = data.senderId;
+        try {
+          const { useNotificationPrefStore } = require('../stores/notificationPrefStore');
+          const mutedMap = useNotificationPrefStore.getState().mutedChannels || {};
+          const isMuted = Boolean(
+            (notifChannelId && mutedMap[String(notifChannelId)]) ||
+            (senderId && mutedMap[String(senderId)])
+          );
+          if (isMuted) {
+            return {
+              shouldPlaySound: false,
+              shouldSetBadge: false,
+              shouldShowBanner: false,
+              shouldShowList: false,
+            };
+          }
+        } catch (_) {}
+
         const now = Date.now();
         for (const [id, time] of _presented) if (now - time > 60000) _presented.delete(id);
         const id = data.notificationId;

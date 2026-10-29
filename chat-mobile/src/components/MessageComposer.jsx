@@ -420,13 +420,17 @@ const MessageComposer = React.memo(function MessageComposer({
 
   const handleMentionSelect = useCallback(
     (member) => {
+      const mentionId = member._id || member.id;
+      const mentionName = member.name || member.username;
+      const mentionType = member.isSpecial ? 'channel' : (member.type || 'user');
       editorRef.current?.insertMention({
-        id: member._id,
-        label: member.name || member.username,
+        id: mentionId,
+        label: mentionName,
+        type: mentionType,
       });
       setPendingMentions((prev) => [
         ...prev,
-        { userId: member._id, username: member.name || member.username, type: 'user' },
+        { userId: mentionId, username: mentionName, type: mentionType },
       ]);
       setMentionVisible(false);
       setMentionQuery('');

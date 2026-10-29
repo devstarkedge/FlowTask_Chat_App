@@ -9,6 +9,9 @@ import AudioMessagePlayer from './AudioMessagePlayer';
 import VideoMessagePlayer from './VideoMessagePlayer';
 import GifRenderer from './GifRenderer';
 import RichText from './RichText';
+import CanvasDocumentCard from './chat/CanvasDocumentCard';
+import HuddleLinkCard from './chat/HuddleLinkCard';
+import { extractCanvasInfo, extractHuddleLinks } from '../utils/chatLinkCards';
 import { stripFileMarkers, hasFileMarkers } from '../utils/composerAttachments';
 import MobileFileCard from './common/MobileFileCard';
 import MessageStatusTicks from './MessageStatusTicks';
@@ -156,31 +159,60 @@ const ChatMessageItem = memo(({
     return resolveReplyToSenderName(item.replyTo, null, channelMembers || []);
   })();
 
+  const canvasData = React.useMemo(() => extractCanvasInfo(item), [item]);
+  const huddleLinks = React.useMemo(() => extractHuddleLinks(item, channelId), [item, channelId]);
+
+  const isOnlyCardLink =
+    (canvasData && canvasData.isOnlyLink) ||
+    (huddleLinks.length > 0 && huddleLinks.every((l) => l.isOnlyLink));
+
+  const resolvedText = isOnlyCardLink
+    ? ''
+    : canvasData?.cleanText ?? (huddleLinks[0]?.cleanText ?? visibleText);
+
+  const shouldShowText =
+    !isOnlyCardLink &&
+    (!!resolvedText.trim() || !!visibleHtml.replace(/<[^>]*>/g, '').trim());
+
   const showReplyQuote = hasValidReplyTo(item.replyTo, item.parentMessageId);
   const separateAttachmentCards = !isDeleted && attachments.length > 1
     && !['audio', 'gif'].includes(item.contentType) && item.type !== 'audio';
   const hasBody = !!visibleText.trim() || !!visibleHtml.replace(/<[^>]*>/g, '').trim()
-    || showReplyQuote || item.forwardMeta?.isForwarded;
+    || showReplyQuote || item.forwardMeta?.isForwarded || Boolean(canvasData) || huddleLinks.length > 0;
+  const isCardOnly =
+    isOnlyCardLink &&
+    !showReplyQuote &&
+    !item.forwardMeta?.isForwarded &&
+    attachments.length === 0;
+
   const bubblePresentation = [
-              styles.bubble,
-              bubbleRadiusStyle,
-              {
-                backgroundColor: isMe
-                  ? colors.messageBubbleSent
-                  : colors.messageBubbleReceived,
-                alignSelf: isMe ? 'flex-end' : 'flex-start',
-                borderWidth: isMe ? 0 : StyleSheet.hairlineWidth,
-                borderColor: isMe ? 'transparent' : colors.border,
-              },
-              isReplyTarget && {
-                borderWidth: 2,
-                borderColor: colors.primary,
-              },
-              isHighlighted && !isReplyTarget && {
-                borderWidth: 2,
-                borderColor: colors.primary,
-              },
-            ];
+    styles.bubble,
+    bubbleRadiusStyle,
+    isCardOnly
+      ? {
+          backgroundColor: 'transparent',
+          borderWidth: 0,
+          paddingHorizontal: 0,
+          paddingVertical: 0,
+          alignSelf: isMe ? 'flex-end' : 'flex-start',
+        }
+      : {
+          backgroundColor: isMe
+            ? colors.messageBubbleSent
+            : colors.messageBubbleReceived,
+          alignSelf: isMe ? 'flex-end' : 'flex-start',
+          borderWidth: isMe ? 0 : StyleSheet.hairlineWidth,
+          borderColor: isMe ? 'transparent' : colors.border,
+        },
+    isReplyTarget && {
+      borderWidth: 2,
+      borderColor: colors.primary,
+    },
+    isHighlighted && !isReplyTarget && {
+      borderWidth: 2,
+      borderColor: colors.primary,
+    },
+  ];
   const attachmentPresentation = [styles.bubble, {
     backgroundColor: isMe ? colors.messageBubbleSent : colors.messageBubbleReceived,
     alignSelf: isMe ? 'flex-end' : 'flex-start',
@@ -300,6 +332,8 @@ const ChatMessageItem = memo(({
                     text={visibleText}
                     mentions={item.mentions}
                     searchQuery={searchQuery}
+                    navigation={navigation}
+                    channelId={channelId}
                     onMentionPress={(userId) => {
                       const userObj = (channelMembers || []).find((m) => m._id === userId) || { _id: userId };
                       navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
@@ -335,25 +369,49 @@ const ChatMessageItem = memo(({
               />
             ) : item.contentType === 'gif' && item.gifMeta ? (
               <GifRenderer item={item} contentColor={contentColor} styles={styles} />
-            ) : (visibleHtml || visibleText) ? (
-              <RichText
-                html={visibleHtml}
-                text={visibleText}
-                mentions={item.mentions}
-                searchQuery={searchQuery}
-                onMentionPress={(userId) => {
-                  const userObj = (channelMembers || []).find((m) => m._id === userId) || { _id: userId };
-                  navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
-                }}
-                colors={{
-                  ...colors,
-                  textPrimary: contentColor,
-                  codeBackground: isMe ? colors.surfaceOverlayLight : colors.codeBackground,
-                  codeBlockBackground: isMe ? colors.shadowMd : colors.codeBlockBackground,
-                  codeBlockText: isMe ? colors.textOnPrimary : colors.codeBlockText,
-                }}
-                baseStyle={{ color: contentColor, fontSize: moderateScale(15), lineHeight: 22 }}
-              />
+            ) : (shouldShowText || canvasData || huddleLinks.length > 0) ? (
+              <RNView>
+                {shouldShowText && (
+                  <RichText
+                    html={visibleHtml}
+                    text={resolvedText}
+                    mentions={item.mentions}
+                    searchQuery={searchQuery}
+                    navigation={navigation}
+                    channelId={channelId}
+                    onMentionPress={(userId) => {
+                      const userObj = (channelMembers || []).find((m) => m._id === userId) || { _id: userId };
+                      navigation.navigate("UserProfile", { user: userObj, channelId, messageId: item._id });
+                    }}
+                    colors={{
+                      ...colors,
+                      textPrimary: contentColor,
+                      codeBackground: isMe ? colors.surfaceOverlayLight : colors.codeBackground,
+                      codeBlockBackground: isMe ? colors.shadowMd : colors.codeBlockBackground,
+                      codeBlockText: isMe ? colors.textOnPrimary : colors.codeBlockText,
+                    }}
+                    baseStyle={{ color: contentColor, fontSize: moderateScale(15), lineHeight: 22 }}
+                  />
+                )}
+                {canvasData && (
+                  <CanvasDocumentCard
+                    canvasData={canvasData}
+                    channelId={channelId}
+                    navigation={navigation}
+                    colors={colors}
+                  />
+                )}
+                {huddleLinks.length > 0 &&
+                  huddleLinks.map((link, idx) => (
+                    <HuddleLinkCard
+                      key={`${link.workspaceId || 'ws'}:${link.channelId || idx}`}
+                      link={link}
+                      channelId={channelId}
+                      channelName={channelName}
+                      colors={colors}
+                    />
+                  ))}
+              </RNView>
             ) : null}
 
             </Pressable>
@@ -380,11 +438,11 @@ const ChatMessageItem = memo(({
             )}
 
             <Pressable onLongPress={() => !isDeleted && showMessageActions(item)} delayLongPress={350}>
-            <RNView style={styles.timestampRow}>
+            <RNView style={[styles.timestampRow, isCardOnly && { justifyContent: isMe ? 'flex-end' : 'flex-start', marginTop: 2, paddingHorizontal: 4 }]}>
               <RNText
                 style={[
                   styles.timestamp,
-                  { color: isMe && !separateAttachmentCards ? colors.messageTextSent : colors.textTertiary, opacity: 0.7 },
+                  { color: isCardOnly ? colors.textTertiary : (isMe && !separateAttachmentCards ? colors.messageTextSent : colors.textTertiary), opacity: 0.7 },
                 ]}
               >
                 {formatTime(item.createdAt)}

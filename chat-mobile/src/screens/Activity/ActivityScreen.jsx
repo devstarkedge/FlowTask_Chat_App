@@ -7,6 +7,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Pressable,
   RefreshControl,
   ActivityIndicator,
   Alert,
@@ -29,7 +30,7 @@ const FILTERS = [
 ];
 
 
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { CheckCircle, Clock, Trash2 } from "lucide-react-native";
 import Toast from 'react-native-toast-message';
 import { usePreferencesStore } from "../../stores/preferencesStore";
@@ -178,19 +179,24 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
 
   return (
     <Swipeable
+      containerStyle={{ backgroundColor: colors.background }}
+      childrenContainerStyle={{ backgroundColor: colors.background }}
       ref={swipeableRef}
       renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
-      onSwipeableLeftOpen={() => handleSwipeAction(swipeActivityLeft)}
-      onSwipeableRightOpen={() => handleSwipeAction(swipeActivityRight)}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'right') handleSwipeAction(swipeActivityLeft);
+        else if (direction === 'left') handleSwipeAction(swipeActivityRight);
+      }}
+
     >
-      <TouchableOpacity 
+      <Pressable
         onPress={handlePress} 
         style={[
           arStyles.container, 
           { backgroundColor: (!item.isRead && !item.read) ? (colors.backgroundSecondary || (colors.primary + '08')) : colors.background }
         ]} 
-        activeOpacity={0.7}
+
       >
         <View style={arStyles.avatarContainer}>
           <AppAvatar user={sender} size={40} showStatus={false} />
@@ -232,7 +238,7 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
             </Text>
           ) : null}
         </View>
-      </TouchableOpacity>
+      </Pressable>
     </Swipeable>
   );
 });

@@ -4,7 +4,7 @@ import { useUserProfileStore } from '../stores/userProfileStore'
 import { projectUserProfiles } from '../utils/userProfiles'
 
 const DB_NAME = 'chatapp-offline-cache'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const CHANNEL_STORE = 'channelMessages'
 const MAX_MESSAGES_PER_CHANNEL = 1200
 

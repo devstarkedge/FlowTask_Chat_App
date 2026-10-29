@@ -22,9 +22,10 @@ import {
   Send,
 } from "lucide-react";
 import { handleDownload } from "../../utils/handleDownload";
-import { messageAPI } from "../../services/api";
+import { messageAPI, resolveFullUrl } from "../../services/api";
 import logger from "../../utils/logger";
 import FilePreviewRenderer from "./FilePreviewRenderer";
+import { getSafeFileUrl, getFileAssetId, getFileUrl } from "../../utils/fileProxy";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ function getKindColor(kind) {
 
 // ─── Hover Actions Bar (shared across all card types) ─────────────────────────
 
-function HoverActionsBar({ file, onOpen, onForward, onShowDetails }) {
+function HoverActionsBar({ file, onOpen, onForward, onShowDetails, style }) {
   return (
     <div
       className="sfc-hover-actions"
@@ -120,6 +121,7 @@ function HoverActionsBar({ file, onOpen, onForward, onShowDetails }) {
         background: "var(--bg-secondary, #222529)",
         border: "1px solid var(--border-primary, rgba(255,255,255,0.1))",
         borderRadius: 8, padding: "3px 4px", zIndex: 2,
+        ...style,
       }}
     >
       <button
@@ -448,6 +450,372 @@ function FileCardGeneric({ file, onOpen, onForward, kind }) {
         </button>
       </div>
       {showDetails && <FileDetailsModal file={file} onClose={() => setShowDetails(false)} onForward={onForward} />}
+
+      {cardContextMenu && (
+        <div
+          style={{
+            position: "fixed",
+            left: cardContextMenu.x,
+            top: cardContextMenu.y,
+            zIndex: 10050,
+            background: "var(--bg-secondary, #222529)",
+            border: "1px solid var(--border-primary, rgba(255, 255, 255, 0.15))",
+            borderRadius: 8,
+            padding: "4px",
+            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.65)",
+            minWidth: 165,
+            backdropFilter: "blur(8px)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "7px 10px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 6,
+              color: "var(--text-primary, #ffffff)",
+              fontSize: 13,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            onClick={async () => {
+              setCardContextMenu(null);
+              await copyImageToClipboard(imageUrl);
+            }}
+          >
+            <Copy size={15} />
+            <span>Copy Image</span>
+          </button>
+          <button
+            type="button"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "7px 10px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 6,
+              color: "var(--text-primary, #ffffff)",
+              fontSize: 13,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            onClick={() => {
+              setCardContextMenu(null);
+              if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(imageUrl);
+                toast.success("Image link copied to clipboard");
+              }
+            }}
+          >
+            <ExternalLink size={15} />
+            <span>Copy Link</span>
+          </button>
+          <div style={{ height: 1, background: "var(--border-subtle, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
+          <button
+            type="button"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "7px 10px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 6,
+              color: "var(--text-primary, #ffffff)",
+              fontSize: 13,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            onClick={() => {
+              setCardContextMenu(null);
+              handleDownload(file);
+            }}
+          >
+            <Download size={15} />
+            <span>Download</span>
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Thumbnail & Preview Cards ────────────────────────────────────────────────
+
+function getImageSource(file) {
+  if (!file) return "";
+  // Direct Cloudinary or HTTP image URL - ALWAYS prefer direct CDN URL for <img> tags
+  const direct =
+    (file.thumbnailUrl && !file.thumbnailUrl.includes('/proxy') ? file.thumbnailUrl : null) ||
+    (file.secureUrl && !file.secureUrl.includes('/proxy') ? file.secureUrl : null) ||
+    (file.url && !file.url.includes('/proxy') ? file.url : null) ||
+    file.preview ||
+    file.localPreviewUri ||
+    file.thumbnailUrl ||
+    file.secureUrl ||
+    file.url ||
+    "";
+  if (!direct) return "";
+  return resolveFullUrl(direct);
+}
+
+function ImageThumbnailCard({ file, onOpen, onForward }) {
+  const [imageError, setImageError] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [cardContextMenu, setCardContextMenu] = useState(null);
+
+  useEffect(() => {
+    if (!cardContextMenu) return;
+    const handleClose = () => setCardContextMenu(null);
+    window.addEventListener("click", handleClose);
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") handleClose(); });
+    return () => {
+      window.removeEventListener("click", handleClose);
+      window.removeEventListener("keydown", handleClose);
+    };
+  }, [cardContextMenu]);
+
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 175;
+    const menuHeight = 150;
+    const x = e.clientX + menuWidth > window.innerWidth ? Math.max(8, window.innerWidth - menuWidth - 8) : e.clientX;
+    const y = e.clientY + menuHeight > window.innerHeight ? Math.max(8, window.innerHeight - menuHeight - 8) : e.clientY;
+    setCardContextMenu({ x, y });
+  }, []);
+  const name = file.originalName || file.fileName || file.name || "Image";
+  const size = file.fileSize || file.size || file.fileSizeBytes;
+  const imageUrl = getImageSource(file);
+
+  const handleCardClick = useCallback(() => {
+    onOpen?.(file);
+  }, [onOpen, file]);
+
+  const handleInfoClick = useCallback(() => {
+    setShowDetails(true);
+  }, []);
+
+  if (imageError || !imageUrl) {
+    return <FileCardGeneric file={file} onOpen={onOpen} onForward={onForward} kind="image" />;
+  }
+
+  return (
+    <>
+      <div
+        className="sfc-image-card group"
+        onClick={handleCardClick}
+        onContextMenu={handleContextMenu}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter") handleCardClick(); }}
+        style={{
+          position: "relative",
+          cursor: "pointer",
+          borderRadius: "var(--radius-lg, 12px)",
+          overflow: "hidden",
+          border: "1px solid var(--border-secondary, rgba(255,255,255,0.1))",
+          maxWidth: "340px",
+          maxHeight: "260px",
+          minWidth: "140px",
+          minHeight: "100px",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "var(--bg-secondary, #1a1d21)",
+          transition: "border-color 130ms ease",
+        }}
+      >
+        <img
+          src={imageUrl}
+          alt={name}
+          onError={(e) => {
+            logger.warn("[SlackFileCard] Image failed to load:", imageUrl);
+            setImageError(true);
+          }}
+          style={{
+            maxWidth: "100%",
+            maxHeight: "260px",
+            width: "auto",
+            height: "auto",
+            objectFit: "contain",
+            display: "block",
+            borderRadius: "var(--radius-lg, 12px)",
+          }}
+          loading="lazy"
+        />
+
+        {/* Hover overlay with actions and info */}
+        <div
+          className="sfc-image-overlay"
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.6) 100%)",
+            opacity: 0,
+            transition: "opacity 150ms ease",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            padding: "8px",
+            pointerEvents: "none",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "flex-end", pointerEvents: "auto" }}>
+            <HoverActionsBar file={file} onForward={onForward} onShowDetails={handleInfoClick} style={{ position: "static", transform: "none", opacity: 1 }} />
+          </div>
+          <div style={{
+            fontSize: 11,
+            fontWeight: 500,
+            color: "#fff",
+            textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            pointerEvents: "none",
+          }}>
+            {name} {size > 0 && `• ${formatFileSize(size)}`}
+          </div>
+        </div>
+      </div>
+      {showDetails && <FileDetailsModal file={file} onClose={() => setShowDetails(false)} onForward={onForward} />}
+    </>
+  );
+}
+
+function VideoThumbnailCard({ file, onOpen, onForward }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const name = file.originalName || file.fileName || file.name || "Video";
+  const size = file.fileSize || file.size || file.fileSizeBytes;
+  const rawUrl =
+    (file.secureUrl && !file.secureUrl.includes('/proxy') ? file.secureUrl : null) ||
+    (file.url && !file.url.includes('/proxy') ? file.url : null) ||
+    file.preview ||
+    file.secureUrl ||
+    file.url ||
+    "";
+  const videoUrl = resolveFullUrl(rawUrl);
+  const posterUrl = file.thumbnailUrl && !file.thumbnailUrl.includes('/proxy') ? resolveFullUrl(file.thumbnailUrl) : undefined;
+
+  const handleCardClick = useCallback(() => {
+    onOpen?.(file);
+  }, [onOpen, file]);
+
+  const handleInfoClick = useCallback(() => {
+    setShowDetails(true);
+  }, []);
+
+  return (
+    <>
+      <div
+        className="sfc-video-card group"
+        onClick={handleCardClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter") handleCardClick(); }}
+        style={{
+          position: "relative",
+          cursor: "pointer",
+          borderRadius: "var(--radius-lg, 12px)",
+          overflow: "hidden",
+          border: "1px solid var(--border-secondary, rgba(255,255,255,0.1))",
+          maxWidth: "340px",
+          width: "280px",
+          height: "190px",
+          backgroundColor: "#000",
+          display: "inline-block",
+          transition: "border-color 130ms ease",
+        }}
+      >
+        {posterUrl ? (
+          <img
+            src={posterUrl}
+            alt={name}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <video
+            src={videoUrl}
+            preload="metadata"
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        )}
+
+        {/* Center Play Button Overlay */}
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            background: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+          }}>
+            <Film size={22} />
+          </div>
+        </div>
+
+        {/* Hover overlay with actions and info */}
+        <div
+          className="sfc-video-overlay"
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.6) 100%)",
+            opacity: 0,
+            transition: "opacity 150ms ease",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            padding: "8px",
+            pointerEvents: "none",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "flex-end", pointerEvents: "auto" }}>
+            <HoverActionsBar file={file} onForward={onForward} onShowDetails={handleInfoClick} style={{ position: "static", transform: "none", opacity: 1 }} />
+          </div>
+          <div style={{
+            fontSize: 11,
+            fontWeight: 500,
+            color: "#fff",
+            textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            pointerEvents: "none",
+          }}>
+            {name} {size > 0 && `• ${formatFileSize(size)}`}
+          </div>
+        </div>
+      </div>
+      {showDetails && <FileDetailsModal file={file} onClose={() => setShowDetails(false)} onForward={onForward} />}
     </>
   );
 }
@@ -467,6 +835,14 @@ export default function SlackFileCard({ file, onOpen, onDownload, onForward, com
   // All file types render as attachment cards only.
   // Card click → onOpen (FilePreviewModal)
   // Info button → FileDetailsModal (metadata + previews)
+  if (kind === "image") {
+    return <ImageThumbnailCard file={file} onOpen={onOpen} onForward={onForward} />;
+  }
+
+  if (kind === "video") {
+    return <VideoThumbnailCard file={file} onOpen={onOpen} onForward={onForward} />;
+  }
+
   return <FileCardGeneric file={file} onOpen={onOpen} onForward={onForward} kind={kind} />;
 }
 

@@ -147,10 +147,26 @@ const DMListScreen = ({ navigation }) => {
     { status: 'active' }
   );
 
+  const currentUserId = currentUser?._id || currentUser?.id;
+  const isSelfDM = useCallback((c) => {
+    if (!c || !currentUserId) return false;
+    const rId = c.dmRecipientId?._id || c.dmRecipientId;
+    const currentIdStr = String(currentUserId);
+    return Boolean(
+      c.isSelfDM ||
+      c.isSelf ||
+      (rId && String(rId) === currentIdStr) ||
+      (c.name && c.name.toLowerCase() === 'you') ||
+      (Array.isArray(c.dmParticipants) &&
+        (c.dmParticipants.length === 1 && String(c.dmParticipants[0]?._id || c.dmParticipants[0]) === currentIdStr ||
+         (c.dmParticipants.length > 0 && c.dmParticipants.every(p => String(p?._id || p) === currentIdStr))))
+    );
+  }, [currentUserId]);
+
   const dmChannels = useMemo(() => {
     // Only show DMs that have at least one message — matches web app behaviour
     let dms = channels.filter(
-      (c) => c.type === "dm" && !!(c.lastMessageAt || c.lastMessage?.createdAt)
+      (c) => c.type === "dm" && (isSelfDM(c) || !!(c.lastMessageAt || c.lastMessage?.createdAt))
     );
 
     if (activeFilter === "unreads") {
@@ -166,13 +182,17 @@ const DMListScreen = ({ navigation }) => {
     }
 
     dms.sort((a, b) => {
+      const aIsSelf = isSelfDM(a);
+      const bIsSelf = isSelfDM(b);
+      if (aIsSelf && !bIsSelf) return -1;
+      if (!aIsSelf && bIsSelf) return 1;
       const aTime = new Date(a.lastMessageAt || a.lastMessage?.createdAt || 0).getTime();
       const bTime = new Date(b.lastMessageAt || b.lastMessage?.createdAt || 0).getTime();
       return bTime - aTime;
     });
 
     return dms;
-  }, [channels, filterQuery, activeFilter, unreads]);
+  }, [channels, filterQuery, activeFilter, unreads, isSelfDM]);
 
   const filteredExternalUsers = useMemo(() => {
     if (!filterQuery.trim()) return externalUsers;
@@ -210,15 +230,15 @@ const DMListScreen = ({ navigation }) => {
 
   const renderItem = useCallback(
     ({ item }) => {
-      const isSelf = item.dmRecipientId === currentUser?._id;
+      const isSelf = isSelfDM(item);
       return <DMItem channel={item} onPress={handlePress} isSelf={isSelf} />;
     },
-    [handlePress, currentUser]
+    [handlePress, isSelfDM]
   );
 
   const renderRecentItem = useCallback(
     ({ item }) => {
-      const isSelf = item.dmRecipientId === currentUser?._id;
+      const isSelf = isSelfDM(item);
       let displayName = item.dmRecipientName || item.name || "User";
       const liveMember = members.find(m => m._id === item.dmRecipientId || m.userId?._id === item.dmRecipientId);
       const liveOnlineStatus = liveMember?.onlineStatus || liveMember?.userId?.onlineStatus || item.onlineStatus || 'offline';
@@ -241,7 +261,7 @@ const DMListScreen = ({ navigation }) => {
         </TouchableOpacity>
       );
     },
-    [handlePress, currentUser, colors.textPrimary]
+    [handlePress, isSelfDM, colors.textPrimary]
   );
 
   return (

@@ -1,3 +1,5 @@
+import useMentions from '../../hooks/useMentions';
+import MentionDropdown from './MentionDropdown';
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
@@ -31,6 +33,7 @@ import { extractPlainText } from "../../utils/extractPlainText";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import SlackFileCard from "./SlackFileCard";
 import { handleDownload } from "../../utils/handleDownload";
+import { getFileUrl } from "../../utils/fileProxy";
 import { openPreview } from "../../services/previewService";
 import EmojiPicker from "./EmojiPicker";
 import EmojiPickerPortal from "./EmojiPickerPortal";
@@ -54,16 +57,18 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
     /* ── Inline Editor ── */
     .tp-inline-editor-wrap {
       width: 100%;
+      box-sizing: border-box;
+      height: auto;
       border-radius: 10px;
       overflow: hidden;
       border: 1.5px solid var(--accent-primary, #1264a3);
       background: var(--bg-primary, #1a1d21);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-      animation: tpInlineEditorIn 140ms cubic-bezier(0.2, 0, 0.13, 1.3) both;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+      animation: tpInlineEditorIn 120ms ease both;
     }
     @keyframes tpInlineEditorIn {
-      from { opacity: 0; transform: scaleY(0.94); transform-origin: top; }
-      to   { opacity: 1; transform: scaleY(1); }
+      from { opacity: 0; }
+      to   { opacity: 1; }
     }
 
     .tp-inline-editor-toolbar {
@@ -76,19 +81,77 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
       flex-wrap: wrap;
     }
 
+
+    .tp-inline-editor-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 4px 12px 10px;
+      align-items: center;
+    }
+    .tp-inline-editor-attachment-item {
+      display: inline-flex;
+      align-items: center;
+    }
+    .tp-inline-editor-thumb-box {
+      width: 58px;
+      height: 58px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.15));
+      background: var(--bg-secondary, #222529);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+      flex-shrink: 0;
+      transition: transform 120ms ease, border-color 120ms ease;
+    }
+    .tp-inline-editor-thumb-box:hover {
+      border-color: var(--accent-primary, #1264a3);
+      transform: scale(1.03);
+    }
+    .tp-inline-editor-thumb-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 7px;
+    }
+    .tp-inline-editor-file-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.15));
+      background: var(--bg-secondary, #222529);
+      font-size: 12px;
+      color: var(--text-primary);
+      max-width: 220px;
+    }
+    .tp-inline-editor-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .tp-inline-editor-content {
-      min-height: 60px;
-      max-height: 200px;
+      min-height: 40px;
+      max-height: 240px;
+      height: auto;
       overflow-y: auto;
     }
 
+    /* Override TipTap editor padding inside the inline editor */
     .tp-inline-editor-content .ProseMirror {
-      padding: 10px 14px;
+      padding: 8px 12px;
       font-size: 14px;
       line-height: 1.5;
       color: var(--text-primary, #d1d2d3);
       outline: none;
-      min-height: 60px;
+      min-height: 36px;
+      height: auto;
     }
     .tp-inline-editor-content .ProseMirror p.is-editor-empty:first-child::before {
       content: attr(data-placeholder);
@@ -191,9 +254,39 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
  * Uses RichTextEditor (TipTap) + shared FormattingToolbar.
  * Calls onSave(html, text) so the store can persist both htmlContent and content.
  */
-function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
+function isImageAttachment(file) {
+  if (!file) return false;
+  const mime = (file.mimeType || file.type || '').toLowerCase();
+  if (mime.startsWith('image/')) return true;
+  const name = file.originalName || file.fileName || file.name || '';
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+}
+
+function getAttachmentThumb(file) {
+  if (!file) return '';
+  const direct = file.thumbnailUrl || file.preview || file.secureUrl || file.url || '';
+  if (direct) return getFileUrl({ ...file, url: direct });
+  return getFileUrl(file) || '';
+}
+
+function InlineEditor({ initialHtml, initialText, channelId, attachments = [], onSave, onCancel }) {
   const editorRef = useRef(null);
   const wrapRef = useRef(null);
+
+  const safeChannelId = typeof channelId === "object" ? channelId?._id : channelId;
+
+  const {
+    mentionType,
+    mentionPos,
+    items: mentionItems,
+    activeIndex: mentionActiveIndex,
+    detectMention,
+    selectMention,
+    closeMentions,
+    handleMentionKeyDown,
+    setActiveIndex: setMentionActiveIndex,
+  } = useMentions({ channelId: safeChannelId, editorRef });
 
   const [formatState, setFormatState] = useState({
     bold: false,
@@ -246,26 +339,31 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
     return () => clearTimeout(timer);
   }, [initialHtml, initialText, syncFormatState]);
 
-  // Escape key cancels edit
+  // Escape key cancels edit, or closes mention dropdown
   useEffect(() => {
     const onKey = (e) => {
+      if (mentionType) {
+        if (handleMentionKeyDown(e)) return;
+      }
       if (e.key === "Escape") onCancel?.();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, [onCancel, mentionType, handleMentionKeyDown]);
 
   const handleSave = useCallback(() => {
     const ed = editorRef.current;
     if (!ed) return;
     const { html, text } = ed.getContent();
-    if (!text?.trim()) return;
+    const hasAttachments = attachments && attachments.length > 0;
+    if (!hasAttachments && !text?.trim()) return;
     onSave(html, text);
-  }, [onSave]);
+  }, [onSave, attachments]);
 
   const handleEditorInput = useCallback(() => {
     syncFormatState();
-  }, [syncFormatState]);
+    detectMention();
+  }, [syncFormatState, detectMention]);
 
   return (
     <div className="tp-inline-editor-wrap">
@@ -283,10 +381,58 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
       <div className="tp-inline-editor-content">
         <RichTextEditor
           ref={editorRef}
-          placeholder="Edit message…"
+          placeholder={initialText || initialHtml ? "Edit message…" : "Add message"}
           onInput={handleEditorInput}
           onSubmit={handleSave}
+          onKeyDown={(e) => {
+            if (mentionType) {
+              return handleMentionKeyDown(e);
+            }
+            return false;
+          }}
         />
+
+
+        {/* Attachment Previews in Edit Mode */}
+        {attachments && attachments.length > 0 && (
+          <div className="tp-inline-editor-attachments">
+            {attachments.map((file, idx) => {
+              const isImg = isImageAttachment(file);
+              const thumbSrc = getAttachmentThumb(file);
+              const name = file.originalName || file.fileName || file.name || "Attachment";
+              return (
+                <div
+                  key={file._id || file.fileId || idx}
+                  className="tp-inline-editor-attachment-item"
+                  title={name}
+                >
+                  {isImg && thumbSrc ? (
+                    <div className="tp-inline-editor-thumb-box">
+                      <img src={thumbSrc} alt={name} loading="lazy" />
+                    </div>
+                  ) : (
+                    <div className="tp-inline-editor-file-box">
+                      <FileText size={18} style={{ color: "var(--accent-primary, #1264a3)", flexShrink: 0 }} />
+                      <span className="tp-inline-editor-file-name">{name}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Mention Dropdown */}
+        {mentionType && (
+          <MentionDropdown
+            items={mentionItems}
+            activeIndex={mentionActiveIndex}
+            position={mentionPos}
+            onSelect={selectMention}
+            onClose={closeMentions}
+            setActiveIndex={setMentionActiveIndex}
+          />
+        )}
       </div>
 
       {/* Footer */}
@@ -512,12 +658,13 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
    */
   const handleEdit = useCallback(
     (html, text) => {
-      if (text?.trim()) {
-        editThreadReply(message._id, { content: text, htmlContent: html });
+      const hasAttachments = derivedAttachments && derivedAttachments.length > 0;
+      if (text?.trim() || hasAttachments) {
+        editThreadReply(message._id, { content: text || "", htmlContent: html || "" });
       }
       clearEditingMessageId();
     },
-    [editThreadReply, message._id, clearEditingMessageId],
+    [editThreadReply, message._id, clearEditingMessageId, derivedAttachments],
   );
 
   const handleReaction = (emoji) => {
@@ -636,6 +783,8 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
             <InlineEditor
               initialHtml={message.htmlContent || ""}
               initialText={message.content}
+              channelId={message.channelId || channelId}
+              attachments={derivedAttachments}
               onSave={handleEdit}
               onCancel={clearEditingMessageId}
             />

@@ -588,6 +588,7 @@ export const notificationPrefAPI = {
 export const canvasAPI = {
   getTemplates: () => api.get(`/canvas/templates`),
   getById: (canvasId) => api.get(`/canvas/by-id/${canvasId}`),
+  getPublic: (token) => api.get(`/canvas/public/${token}`),
   getAllForChannel: (channelId) => api.get(`/canvas/channel/all/${channelId}`),
   getMy: () => api.get(`/canvas/my/all`),
   create: (channelId, data) => api.post(`/canvas/${channelId}`, data),

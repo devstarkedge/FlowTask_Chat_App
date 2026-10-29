@@ -9,11 +9,15 @@ import {
   Music,
   RotateCw,
   Table2,
+  Copy,
+  Link as LinkIcon,
 } from 'lucide-react'
 import { messageAPI, resolveFullUrl } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { handleDownload as defaultHandleDownload } from '../../utils/handleDownload'
+import toast from 'react-hot-toast'
+import { copyImageToClipboard } from '../../utils/clipboardUtils'
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
@@ -700,6 +704,30 @@ export default function FilePreviewRenderer({
   const [imageError, setImageError] = useState(null)
   const imageUrlRef = useRef(null)
 
+  const [contextMenu, setContextMenu] = useState(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const handleClose = () => setContextMenu(null)
+    window.addEventListener('click', handleClose)
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') handleClose() })
+    return () => {
+      window.removeEventListener('click', handleClose)
+      window.removeEventListener('keydown', handleClose)
+    }
+  }, [contextMenu])
+
+  const handleImageContextMenu = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const menuWidth = 180
+    const menuHeight = 150
+    const x = e.clientX + menuWidth > window.innerWidth ? Math.max(8, window.innerWidth - menuWidth - 8) : e.clientX
+    const y = e.clientY + menuHeight > window.innerHeight ? Math.max(8, window.innerHeight - menuHeight - 8) : e.clientY
+    setContextMenu({ x, y })
+  }
+
+
   const [svgContent, setSvgContent] = useState(null)
   const [svgLoading, setSvgLoading] = useState(false)
   const [svgError, setSvgError] = useState(null)
@@ -954,17 +982,17 @@ export default function FilePreviewRenderer({
                   filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.5));
                 }
               `}</style>
-              <div className="svg-preview-container" dangerouslySetInnerHTML={{ __html: normalizeSvgString(svgContent) }} />
+              <div className="svg-preview-container" onContextMenu={handleImageContextMenu} dangerouslySetInnerHTML={{ __html: normalizeSvgString(svgContent) }} />
             </div>
           ) : imageBlobUrl ? (
-            <img src={imageBlobUrl} alt={fileName} style={{ maxWidth: 'min(90vw, 1100px)', maxHeight: 'min(80vh, 760px)', minWidth: 220, minHeight: 220, objectFit: 'contain', transform, transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)', borderRadius: 8, boxShadow: '0 20px 60px rgba(0, 0, 0, 0.65)' }} draggable={false} />
+            <img src={imageBlobUrl} alt={fileName} onContextMenu={handleImageContextMenu} style={{ maxWidth: 'min(90vw, 1100px)', maxHeight: 'min(80vh, 760px)', minWidth: 220, minHeight: 220, objectFit: 'contain', transform, transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)', borderRadius: 8, boxShadow: '0 20px 60px rgba(0, 0, 0, 0.65)' }} draggable={false} />
           ) : null
         ) : imageLoading ? (
           <LoadingState label="Loading image..." />
         ) : imageError ? (
           <ErrorState title="Failed to load image" message={imageError} file={file} onDownload={onDownload} />
         ) : imageBlobUrl ? (
-          <img src={imageBlobUrl} alt={fileName} style={{ maxWidth: 'min(90vw, 1100px)', maxHeight: 'min(80vh, 760px)', minWidth: 220, minHeight: 220, objectFit: 'contain', transform, transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)', borderRadius: 8, boxShadow: '0 20px 60px rgba(0, 0, 0, 0.65)' }} draggable={false} />
+          <img src={imageBlobUrl} alt={fileName} onContextMenu={handleImageContextMenu} style={{ maxWidth: 'min(90vw, 1100px)', maxHeight: 'min(80vh, 760px)', minWidth: 220, minHeight: 220, objectFit: 'contain', transform, transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)', borderRadius: 8, boxShadow: '0 20px 60px rgba(0, 0, 0, 0.65)' }} draggable={false} />
         ) : null
       )}
 
@@ -1044,6 +1072,117 @@ export default function FilePreviewRenderer({
 
       {!info.isSupported && (
         <UnsupportedState file={file} onDownload={onDownload} />
+      )}
+      {contextMenu && (
+        <div
+          className="file-preview-context-menu"
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            zIndex: 10050,
+            background: 'var(--bg-secondary, #222529)',
+            border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.15))',
+            borderRadius: 8,
+            padding: '4px',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.65)',
+            minWidth: 170,
+            backdropFilter: 'blur(8px)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '7px 10px',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 6,
+              color: 'var(--text-primary, #ffffff)',
+              fontSize: 13,
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 120ms ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover, rgba(255, 255, 255, 0.1))')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            onClick={async () => {
+              setContextMenu(null)
+              const targetUrl = imageBlobUrl || getSourceUrl(file)
+              await copyImageToClipboard(targetUrl)
+            }}
+          >
+            <Copy size={15} />
+            <span>Copy Image</span>
+          </button>
+          <button
+            type="button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '7px 10px',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 6,
+              color: 'var(--text-primary, #ffffff)',
+              fontSize: 13,
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 120ms ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover, rgba(255, 255, 255, 0.1))')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            onClick={() => {
+              setContextMenu(null)
+              const targetUrl = getSourceUrl(file)
+              if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(targetUrl)
+                toast.success('Image link copied to clipboard')
+              }
+            }}
+          >
+            <LinkIcon size={15} />
+            <span>Copy Image Address</span>
+          </button>
+          <div style={{ height: 1, background: 'var(--border-subtle, rgba(255, 255, 255, 0.1))', margin: '4px 0' }} />
+          <button
+            type="button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '7px 10px',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 6,
+              color: 'var(--text-primary, #ffffff)',
+              fontSize: 13,
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 120ms ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover, rgba(255, 255, 255, 0.1))')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            onClick={() => {
+              setContextMenu(null)
+              if (onDownload) {
+                onDownload(file)
+              } else {
+                defaultHandleDownload(file)
+              }
+            }}
+          >
+            <Download size={15} />
+            <span>Download</span>
+          </button>
+        </div>
       )}
     </div>
   )

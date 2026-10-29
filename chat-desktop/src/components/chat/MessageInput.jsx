@@ -195,15 +195,17 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
   }, [pendingFiles]);
 
   // ─── Draft Auto Save Hook ─────────────────────────────────────────
+  const handleDiscard = useCallback(() => {
+    setHasContent(false);
+    setPendingFiles([]);
+  }, []);
+
   const {
     saveDraftDebounced,
     restoreDraft,
     saveDraftLocal,
     cancelPendingDraft,
-  } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef, () => {
-    setHasContent(false);
-    setPendingFiles([]);
-  });
+  } = useDraftAutoSave(channelId, threadId, editorRef, pendingFilesRef, handleDiscard);
 
   // ─── Format State Sync ───────────────────────────────────────────────────
 
@@ -490,10 +492,10 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     const submitHtml = html || undefined;
     const submitText = text.trim() || " ";
     const submitMentions = mentions || [];
-    const submitFileReferences = pendingFiles.map((f) => f._id);
+    const filesToSend = [...pendingFiles];
 
     // Cancel any pending debounced draft saves immediately
-    cancelPendingDraft();
+    cancelPendingDraft?.();
 
     // Revoke any local previews to prevent memory leaks
     pendingFiles.forEach((f) => {
@@ -511,13 +513,40 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
     requestAnimationFrame(() => editorRef.current?.focus());
 
     try {
-      await sendMessage(submitChannelId, submitText, {
-        threadId: submitThreadId,
-        htmlContent: submitHtml,
-        fileReferences:
-          submitFileReferences.length > 0 ? submitFileReferences : undefined,
-        mentions: submitMentions.length > 0 ? submitMentions : undefined,
-      });
+      if (filesToSend.length > 1) {
+        // Multiple media/files: send separately like chat-mobile
+        if (text.trim()) {
+          await sendMessage(submitChannelId, text.trim(), {
+            threadId: submitThreadId,
+            htmlContent: submitHtml,
+            mentions: submitMentions.length > 0 ? submitMentions : undefined,
+          });
+        }
+        for (const file of filesToSend) {
+          const fileId = file._id || file.id;
+          await sendMessage(submitChannelId, " ", {
+            threadId: submitThreadId,
+            fileReferences: fileId ? [fileId] : undefined,
+            attachments: [file],
+          });
+        }
+      } else if (filesToSend.length === 1) {
+        const file = filesToSend[0];
+        const fileId = file._id || file.id;
+        await sendMessage(submitChannelId, submitText, {
+          threadId: submitThreadId,
+          htmlContent: submitHtml,
+          fileReferences: fileId ? [fileId] : undefined,
+          attachments: [file],
+          mentions: submitMentions.length > 0 ? submitMentions : undefined,
+        });
+      } else {
+        await sendMessage(submitChannelId, submitText, {
+          threadId: submitThreadId,
+          htmlContent: submitHtml,
+          mentions: submitMentions.length > 0 ? submitMentions : undefined,
+        });
+      }
     } catch {
       // Error handled in store
     }

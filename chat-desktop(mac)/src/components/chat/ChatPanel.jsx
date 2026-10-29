@@ -354,7 +354,7 @@ export default function ChatPanel({
             onSaveMessage={onSaveMessage}
           />
           <TypingIndicator channelId={channelId} />
-          <div style={{ flexShrink: 0, ...(isEditingInChannel ? { visibility: "hidden", pointerEvents: "none" } : {}) }}>
+          <div style={{ flexShrink: 0 }}>
             <MessageInput channelId={channelId} />
           </div>
         </>

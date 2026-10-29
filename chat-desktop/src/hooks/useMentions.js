@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useChannelStore } from '../stores/channelStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
+import { useUserProfileStore } from '../stores/userProfileStore'
 import { useLiveProfileData } from './useLiveProfileData'
+
+const EMPTY_ARRAY = []
+const EMPTY_PROFILES = {}
 
 /**
  * Centralized mention system hook.
@@ -22,12 +27,14 @@ import { useLiveProfileData } from './useLiveProfileData'
  *   - Any future composer
  *
  * @param {object} options
- * @param {string} options.channelId - Current channel ID
+ * @param {string|object} options.channelId - Current channel ID
  * @param {React.RefObject} options.editorRef - Ref to RichTextEditor imperative handle
  * @param {object} [options.options] - Additional config
  * @returns {object} Mention state + handlers
  */
 export function useMentions({ channelId, editorRef }) {
+  const safeChannelId = typeof channelId === 'object' ? channelId?._id : channelId
+
   // ─── State ────────────────────────────────────────────────────────────────
   const [mentionType, setMentionType] = useState(null) // 'user' | 'channel' | null
   const [mentionQuery, setMentionQuery] = useState('')
@@ -46,39 +53,122 @@ export function useMentions({ channelId, editorRef }) {
 
   // ─── Members from store ───────────────────────────────────────────────────
   const storedMembers = useChannelStore(
-    useCallback((s) => s.membersByChannel[channelId], [channelId])
-  ) ?? []
+    useCallback((s) => (safeChannelId && s.membersByChannel?.[safeChannelId]) ? s.membersByChannel[safeChannelId] : EMPTY_ARRAY, [safeChannelId])
+  )
   const members = useLiveProfileData(storedMembers)
 
-  const channels = useChannelStore((s) => s.channels) ?? []
+  const channels = useChannelStore((s) => s.channels || EMPTY_ARRAY)
+  const workspaceMembers = useWorkspaceStore((s) => s.members || EMPTY_ARRAY)
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const workspaceProfiles = useUserProfileStore(
+    useCallback((s) => (activeWorkspaceId && s.profilesByWorkspace?.[activeWorkspaceId]) ? s.profilesByWorkspace[activeWorkspaceId] : EMPTY_PROFILES, [activeWorkspaceId])
+  )
 
   // ─── Fetch members when channel changes ───────────────────────────────────
   const fetchMembers = useChannelStore((s) => s.fetchMembers)
+  const fetchWorkspaceMembers = useWorkspaceStore((s) => s.fetchMembers)
+
   useEffect(() => {
-    if (channelId) {
-      fetchMembers(channelId)
+    if (safeChannelId) {
+      fetchMembers(safeChannelId)
     }
-  }, [channelId, fetchMembers])
+  }, [safeChannelId, fetchMembers])
+
+  const hasFetchedWorkspaceMembersRef = useRef(false)
+  useEffect(() => {
+    hasFetchedWorkspaceMembersRef.current = false
+  }, [activeWorkspaceId])
+
+  useEffect(() => {
+    if (activeWorkspaceId && !hasFetchedWorkspaceMembersRef.current && (!workspaceMembers || workspaceMembers.length === 0)) {
+      hasFetchedWorkspaceMembersRef.current = true
+      fetchWorkspaceMembers(activeWorkspaceId)?.catch?.(() => {})
+    }
+  }, [activeWorkspaceId, fetchWorkspaceMembers])
 
   // ─── Memoized filtered items ──────────────────────────────────────────────
   const items = useMemo(() => {
     if (mentionType === 'user') {
-      if (!members || members.length === 0) return []
       const q = mentionQuery.toLowerCase()
-      return members
+      const candidateMap = new Map()
+
+      // Special broadcast mention: @channel
+      const specialItems = []
+      if (!q || 'channel'.includes(q) || 'everyone'.includes(q)) {
+        specialItems.push({
+          id: 'channel',
+          name: 'channel',
+          displayName: 'channel',
+          description: 'Notify everyone in this channel',
+          type: 'channel',
+          isSpecial: true,
+        })
+      }
+
+      // 1. Channel members (highest priority)
+      if (Array.isArray(members) && members.length > 0) {
+        members.forEach((m) => {
+          const u = m.userId && typeof m.userId === 'object' ? m.userId : (m.user && typeof m.user === 'object' ? m.user : m)
+          const id = String(u._id || u.id || m._id || m.userId || '')
+          const rawName = u.name || m.name || u.displayName || u.username || m.username || (u.email ? u.email.split('@')[0] : '') || ''
+          const name = rawName && rawName !== 'null' && rawName !== 'undefined' ? rawName : (u.email ? u.email.split('@')[0] : 'User')
+          if (id && name && name !== 'null') {
+            candidateMap.set(id, {
+              id,
+              name,
+              avatar: u.avatar || m.avatar,
+              email: u.email || m.email || '',
+              type: 'user',
+            })
+          }
+        })
+      }
+
+      // 2. Workspace members (supplement/fallback)
+      if (Array.isArray(workspaceMembers) && workspaceMembers.length > 0) {
+        workspaceMembers.forEach((m) => {
+          const u = m.userId && typeof m.userId === 'object' ? m.userId : (m.user && typeof m.user === 'object' ? m.user : m)
+          const id = String(u._id || u.id || m._id || m.userId || '')
+          const rawName = u.name || m.name || u.displayName || u.username || m.username || (u.email ? u.email.split('@')[0] : '') || ''
+          const name = rawName && rawName !== 'null' && rawName !== 'undefined' ? rawName : (u.email ? u.email.split('@')[0] : 'User')
+          if (id && name && name !== 'null' && !candidateMap.has(id)) {
+            candidateMap.set(id, {
+              id,
+              name,
+              avatar: u.avatar || m.avatar,
+              email: u.email || m.email || '',
+              type: 'user',
+            })
+          }
+        })
+      }
+
+      // 3. Workspace profiles fallback
+      if (workspaceProfiles && Object.keys(workspaceProfiles).length > 0) {
+        Object.values(workspaceProfiles).forEach((p) => {
+          const id = String(p._id || p.id || '')
+          const rawName = p.name || p.displayName || p.username || (p.email ? p.email.split('@')[0] : '') || ''
+          const name = rawName && rawName !== 'null' && rawName !== 'undefined' ? rawName : (p.email ? p.email.split('@')[0] : 'User')
+          if (id && name && name !== 'null' && !candidateMap.has(id)) {
+            candidateMap.set(id, {
+              id,
+              name,
+              avatar: p.avatar,
+              email: p.email || '',
+              type: 'user',
+            })
+          }
+        })
+      }
+
+      const filtered = Array.from(candidateMap.values())
         .filter((m) => {
           if (!q) return true
-          const name = (m.name || m.userId?.name || '').toLowerCase()
-          const email = (m.email || m.userId?.email || '').toLowerCase()
-          return name.includes(q) || email.includes(q)
+          return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
         })
         .slice(0, 8)
-        .map((m) => ({
-          id: m._id || m.userId?._id || m.userId,
-          name: m.name || m.userId?.name || 'Unknown',
-          avatar: m.avatar || m.userId?.avatar,
-          type: 'user',
-        }))
+
+      return [...specialItems, ...filtered]
     }
 
     if (mentionType === 'channel') {
@@ -98,7 +188,7 @@ export function useMentions({ channelId, editorRef }) {
     }
 
     return []
-  }, [mentionType, mentionQuery, members, channels])
+  }, [mentionType, mentionQuery, members, workspaceMembers, workspaceProfiles, channels])
 
   // ─── Close mention dropdown ───────────────────────────────────────────────
   const closeMentions = useCallback(() => {
@@ -157,24 +247,19 @@ export function useMentions({ channelId, editorRef }) {
       const tiptap = ed.getEditor()
       if (!tiptap) return
 
-      // Delete the trigger character + query text
+      // Find the trigger character + query text to replace
       const textBefore = ed.getTextBeforeCursor()
       const match = textBefore.match(/([@#])([^\s@#]*)$/)
-      if (match) {
-        const deleteCount = match[0].length
-        const { from } = tiptap.state.selection
-        tiptap
-          .chain()
-          .focus()
-          .deleteRange({ from: from - deleteCount, to: from })
-          .run()
-      }
+      const deleteCount = match ? match[0].length : 0
+      const { from } = tiptap.state.selection
+      const startPos = Math.max(0, from - deleteCount)
 
-      // Insert mention node
+      // Insert mention node and replace the trigger query atomically
       ed.insertMention(
         item.id,
         item.name,
-        item.type === 'user' ? 'user' : 'channel',
+        item.isSpecial ? 'channel' : (item.type === 'user' ? 'user' : 'channel'),
+        deleteCount > 0 ? { from: startPos, to: from } : null,
       )
       closeMentions()
     },

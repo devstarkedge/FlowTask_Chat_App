@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, ActivityIndicator } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -224,7 +224,20 @@ export default function AppNavigation() {
   const activeWorkspaceId = useWorkspaceStore((s) => s?.activeWorkspaceId ?? null);
   const { colors, isInitialized: themeInitialized } = useThemeStore();
 
-  if (!isInitialized || !themeInitialized) return null;
+  if (!isInitialized || !themeInitialized) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors?.background || '#ffffff', alignItems: 'center', justifyContent: 'center' }}>
+        <Image
+          source={require('../../assets/Vector.png')}
+          style={{ width: 96, height: 96, resizeMode: 'contain' }}
+        />
+        <Text style={{ fontSize: 24, fontWeight: '800', color: colors?.textPrimary || '#0f172a', marginTop: 16, letterSpacing: -0.6 }}>
+          TaskChat
+        </Text>
+        <ActivityIndicator size="small" color={colors?.primary || '#6366f1'} style={{ marginTop: 28 }} />
+      </View>
+    );
+  }
 
   return (
     <Stack.Navigator

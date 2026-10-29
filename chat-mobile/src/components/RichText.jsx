@@ -13,6 +13,8 @@
  */
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Linking, Image } from 'react-native';
+import { useHuddleUiStore } from '../stores/huddleUiStore';
+import { navigateApp } from '../services/pushNotificationService';
 import { pellToTipTap } from '../utils/formatConverter';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { normalizeMediaUrl } from '../utils/mediaUtils';
@@ -117,6 +119,45 @@ const HEADING_SIZES = {
 
 let keyCounter = 0;
 
+
+function handleSmartUrlPress(url, ctx) {
+  if (!url) return;
+
+  if (url.includes('huddle=1')) {
+    const match = url.match(/\/channel\/([a-zA-Z0-9_-]+)/);
+    const channelId = match ? match[1] : ctx?.channelId;
+    useHuddleUiStore.getState().openPanel({ channelId, label: 'Huddle' });
+    return;
+  }
+
+  // Check for canvas links: /canvas/:id or /public/canvas/:token
+  const canvasMatch = url.match(/(?:\/|^)(public\/)?canvas\/([a-zA-Z0-9_-]+)/);
+  if (canvasMatch) {
+    const isPublic = Boolean(canvasMatch[1]);
+    const targetId = canvasMatch[2];
+    const targetParams = {
+      canvasId: isPublic ? null : targetId,
+      token: isPublic ? targetId : null,
+      channelId: ctx?.channelId,
+    };
+    if (ctx?.navigation?.navigate) {
+      ctx.navigation.navigate('CanvasEditor', targetParams);
+      return;
+    }
+    navigateApp('CanvasEditor', targetParams);
+    return;
+  }
+
+  if (ctx?.onUrlPress) {
+    ctx.onUrlPress(url);
+    return;
+  }
+
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:')) {
+    Linking.openURL(url).catch(() => {});
+  }
+}
+
 function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
   const { colors, mentions, onMentionPress, searchQuery } = ctx;
   const parts = [];
@@ -124,6 +165,9 @@ function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
   let match;
   
   const mentionNames = (mentions || []).map(m => (m.username || m.name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean);
+  if (!mentionNames.some(n => n.toLowerCase() === 'channel')) {
+    mentionNames.push('channel');
+  }
   const regexStr = `(https?:\\/\\/[^\\s]+)|(www\\.[^\\s]+)` + (mentionNames.length > 0 ? `|(@(?:${mentionNames.join('|')}))` : '');
   const combinedRegex = new RegExp(regexStr, 'gi');
 
@@ -164,14 +208,16 @@ function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
         <Text 
           key={`${baseKey}-l${i++}`} 
           style={[parentStyles, { color: colors.info, textDecorationLine: 'underline' }]}
-          onPress={() => Linking.openURL(href).catch(() => {})}
+          onPress={() => handleSmartUrlPress(href, ctx)}
         >
           {matchedText}
         </Text>
       );
     } else if (matchedText.startsWith('@')) {
       const nameMatch = matchedText.slice(1).toLowerCase();
-      const mentionObj = (mentions || []).find(m => (m.username || m.name || '').toLowerCase() === nameMatch);
+      const isChannelMention = nameMatch === 'channel';
+      const mentionObj = (mentions || []).find(m => (m.username || m.name || '').toLowerCase() === nameMatch)
+        || (isChannelMention ? { userId: 'channel', username: 'channel', type: 'channel' } : null);
       if (mentionObj) {
         parts.push(
           <Text 
@@ -188,7 +234,11 @@ function renderTextWithLinksAndMentions(text, baseKey, parentStyles, ctx) {
                 overflow: 'hidden',
               }
             ]}
-            onPress={() => onMentionPress && onMentionPress(mentionObj.userId || mentionObj._id)}
+            onPress={() => {
+              if (onMentionPress && mentionObj.userId !== 'channel') {
+                onMentionPress(mentionObj.userId || mentionObj._id);
+              }
+            }}
           >
             {matchedText}
           </Text>
@@ -467,10 +517,10 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
       return (
         <Text
           key={key}
-          style={[parentStyles, { color: colors.info, textDecorationLine: 'underline' }]}
-          onPress={() => { if (href) Linking.openURL(href).catch(() => {}); }}
+          style={[parentStyles, { color: colors.info || '#3b82f6', textDecorationLine: 'underline' }]}
+          onPress={() => handleSmartUrlPress(href, ctx)}
         >
-          {node.children.map((c, i) => renderNode(c, ctx, { ...parentStyles, color: colors.info, textDecorationLine: 'underline' }, depth))}
+          {node.children.map((c, i) => renderNode(c, ctx, { ...parentStyles, color: colors.info || '#3b82f6', textDecorationLine: 'underline' }, depth))}
         </Text>
       );
     }
@@ -497,7 +547,7 @@ function renderNode(node, ctx, parentStyles = {}, depth = 0) {
                 overflow: 'hidden',
               }
             ]}
-            onPress={() => onMentionPress && onMentionPress(userId)}
+            onPress={() => { if (onMentionPress && userId !== 'channel') { onMentionPress(userId); } }}
           >
             {text}
           </Text>
@@ -647,12 +697,12 @@ function shouldFormatAsMarkdown(value) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-const RichText = React.memo(function RichText({ html, text, colors, baseStyle, mentions = [], onMentionPress, searchQuery }) {
+const RichText = React.memo(function RichText({ html, text, colors, baseStyle, mentions = [], onMentionPress, searchQuery, navigation, channelId, onUrlPress }) {
   const elements = useMemo(() => {
     keyCounter = 0; // reset key counter per render
     if (!html && !text) return null;
 
-    const ctx = { colors: colors || {}, mentions, onMentionPress, searchQuery };
+    const ctx = { colors: colors || {}, mentions, onMentionPress, searchQuery, navigation, channelId, onUrlPress };
     const textStyle = [styles.paragraphText, baseStyle || {}];
 
     const htmlValue = String(html || '').trim();

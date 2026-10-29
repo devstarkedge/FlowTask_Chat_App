@@ -1,10 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useThemeStore } from '../stores/themeStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { AppAvatar } from './common';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Archive, Bell, BellOff, CheckCircle, Clock } from 'lucide-react-native';
 import { useChannelStore } from '../stores/channelStore';
 import { useNotificationPrefStore } from '../stores/notificationPrefStore';
@@ -15,7 +15,8 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
   const { colors } = useThemeStore();
   const { swipeDmLeft, swipeDmRight } = usePreferencesStore();
   const markAsRead = useChannelStore(s => s.markAsRead);
-  const isMuted = useNotificationPrefStore(s => !!s.mutedChannels?.[channel._id]);
+  const channelIdStr = String(channel._id);
+  const isMuted = useNotificationPrefStore(s => !!s.mutedChannels?.[channelIdStr]);
   const toggleChannelMute = useNotificationPrefStore(s => s.toggleChannelMute);
   const swipeableRef = React.useRef(null);
 
@@ -123,7 +124,7 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
       case 'Mute/Unmute':
         try {
           const newMuteState = !isMuted;
-          await toggleChannelMute(channel._id, newMuteState);
+          await toggleChannelMute(channelIdStr, newMuteState, 'dms');
           Toast.show({ type: 'success', text1: newMuteState ? 'Muted conversation' : 'Unmuted conversation' });
         } catch (e) {
           Toast.show({ type: 'error', text1: 'Failed to update mute state' });
@@ -140,19 +141,29 @@ const DMListItem = React.memo(({ channel, onPress, unreadCount = 0, containerSty
 
   return (
     <Swipeable
+      containerStyle={{ backgroundColor: colors.background }}
+      childrenContainerStyle={{ backgroundColor: colors.background }}
       ref={swipeableRef}
       renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
-      onSwipeableLeftOpen={() => handleSwipeAction(swipeDmLeft)}
-      onSwipeableRightOpen={() => handleSwipeAction(swipeDmRight)}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'right') handleSwipeAction(swipeDmLeft);
+        else if (direction === 'left') handleSwipeAction(swipeDmRight);
+      }}
+
     >
-      <TouchableOpacity
-        style={[styles.row, containerStyle, { backgroundColor: colors.background }]}
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          containerStyle,
+          { backgroundColor: pressed ? (colors.backgroundSecondary || '#f1f5f9') : colors.background },
+        ]}
+
         onPress={() => onPress?.(channel)}
-        activeOpacity={0.6}
+
       >
         {content}
-      </TouchableOpacity>
+      </Pressable>
     </Swipeable>
   );
 });

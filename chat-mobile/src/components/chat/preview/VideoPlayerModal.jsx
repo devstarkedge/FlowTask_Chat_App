@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  StatusBar,
 } from 'react-native';
 import AppVideo from '../../common/AppVideo';
 import { ChevronLeft, Volume2, VolumeX } from 'lucide-react-native';
@@ -35,7 +36,8 @@ export default function VideoPlayerModal({
 
   const insets = useSafeAreaInsets();
   // Derive top padding purely from device safe-area insets — no hardcoded values.
-  const headerTopPadding = insets.top;
+  const androidStatusBar = StatusBar.currentHeight || 24;
+  const headerTopPadding = Platform.OS === 'android' ? Math.max(insets.top, androidStatusBar) + verticalScale(8) : Math.max(insets.top, 44);
   const footerPaddingBottom = Math.max(insets.bottom, verticalScale(20));
 
   useEffect(() => {

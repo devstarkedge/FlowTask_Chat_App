@@ -20,7 +20,9 @@ import { isContentEmpty } from '../utils/draftUtils'
  */
 export default function useDraftAutoSave(conversationId, threadId, editorRef, pendingFilesRef, onDiscard) {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
-  const { setDraft, getDraft, clearDraft } = useDraftStore()
+  const setDraft = useDraftStore((s) => s.setDraft)
+  const getDraft = useDraftStore((s) => s.getDraft)
+  const clearDraft = useDraftStore((s) => s.clearDraft)
 
   const draftTimerRef = useRef(null)
   const lastConversationRef = useRef(conversationId)

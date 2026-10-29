@@ -2590,8 +2590,15 @@ body {
 .sfc-video-card:hover .sfc-hover-actions,
 .sfc-audio-card:hover .sfc-hover-actions,
 .sfc-code-card:hover .sfc-hover-actions,
-.sfc-csv-card:hover .sfc-hover-actions {
+.sfc-csv-card:hover .sfc-hover-actions,
+.sfc-image-card:hover .sfc-image-overlay,
+.sfc-video-card:hover .sfc-video-overlay {
   opacity: 1 !important;
+}
+
+.sfc-image-card:hover,
+.sfc-video-card:hover {
+  border-color: var(--border-focus) !important;
 }
 
 .sfc-mini-action:hover {

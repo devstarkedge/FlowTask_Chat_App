@@ -12,6 +12,8 @@ import {getNativeVideoView,setHuddleSpeaker,getIOSScreenPicker,setIOSScreenPicke
 import {openIncomingHuddle} from '../services/incomingCall.service';
 import {getSharedNotesSession} from '../services/sharedNotes.service';
 import {sendHuddleRequest} from '../../../services/huddleRequest';
+import * as Clipboard from 'expo-clipboard';
+import Toast from 'react-native-toast-message';
 import ENV from '../../../config/environment';
 import HuddleReactions from './HuddleReactions';
 
@@ -105,7 +107,12 @@ export default function HuddleOverlay(){
           <View style={styles.row}>{['👍','❤️','😂','🎉','👏','🙌'].map(emoji=><Button key={emoji} onPress={()=>action('reaction',{emoji})}>{emoji}</Button>)}</View>
           <View style={styles.row}>
             <Button onPress={()=>sendHuddleRequest('invite',{channelId:session.channelId}).then(data=>setInviteError(data.invitation?.error || `Invited ${data.invitation?.sent || 0} participants`)).catch(e=>setInviteError(e.message))}>Invite participants</Button>
-            <Button onPress={()=>Share.share({message:`${ENV.CLIENT_URL}/workspace/${useWorkspaceStore.getState().activeWorkspaceId}/channel/${session.channelId}?huddle=1`}).catch(e=>setInviteError(e.message))}>Meeting link</Button>
+            <Button onPress={async()=>{
+              const workspaceId=useWorkspaceStore.getState().activeWorkspaceId;
+              const url=`${ENV.CLIENT_URL}/workspace/${workspaceId}/channel/${session.channelId}?huddle=1`;
+              try{await Clipboard.setStringAsync(url);Toast.show({type:'success',text1:'Huddle link copied to clipboard'});}catch(e){}
+              Share.share({message:url}).catch(e=>setInviteError(e.message));
+            }}>Meeting link</Button>
           </View>
           <View style={styles.row}><Button danger onPress={()=>useHuddleStore.getState().act('leave',session.channelId)}>Leave Huddle</Button>
             {String(state?.huddle?.startedBy)===String(user._id) && <Button onPress={()=>useHuddleStore.getState().act('end',session.channelId)}>End for everyone</Button>}

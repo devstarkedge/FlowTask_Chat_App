@@ -1,3 +1,5 @@
+import useMentions from '../../hooks/useMentions';
+import MentionDropdown from './MentionDropdown';
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
@@ -8,7 +10,7 @@ import { useChannelStore } from "../../stores/channelStore";
 import { format } from "date-fns";
 import { Smile, MessageSquare, Edit, Trash2, Pin, FileText, Download, Image as ImageIcon, File, FileArchive, FileCode, Film, Music, Check, CheckCheck, CheckSquare, Square, Copy, Bookmark, BookmarkCheck, Forward, Link2, MoreVertical, Info, ChevronDown, Save, Clock, AlertCircle } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
-import SlackFileCard from "./SlackFileCard";
+import SlackFileCard, { getFileKind } from "./SlackFileCard";
 import { ReactionRenderer } from "../shared/EmojiRenderer";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
@@ -48,17 +50,19 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
     /* ── Inline Editor ── */
     .inline-editor-wrap {
       width: 100%;
+      box-sizing: border-box;
+      height: auto;
       border-radius: 10px;
       overflow: hidden;
       border: 1.5px solid var(--accent-primary, #1264a3);
       background: var(--bg-primary, #1a1d21);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-      animation: inlineEditorIn 140ms cubic-bezier(0.2, 0, 0.13, 1.3) both;
-      margin-bottom: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+      animation: inlineEditorIn 120ms ease both;
+      margin-bottom: 4px;
     }
     @keyframes inlineEditorIn {
-      from { opacity: 0; transform: scaleY(0.94); transform-origin: top; }
-      to   { opacity: 1; transform: scaleY(1); }
+      from { opacity: 0; }
+      to   { opacity: 1; }
     }
 
     .inline-editor-toolbar {
@@ -71,20 +75,77 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
       flex-wrap: wrap;
     }
 
+
+    .inline-editor-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 4px 12px 10px;
+      align-items: center;
+    }
+    .inline-editor-attachment-item {
+      display: inline-flex;
+      align-items: center;
+    }
+    .inline-editor-thumb-box {
+      width: 58px;
+      height: 58px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.15));
+      background: var(--bg-secondary, #222529);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+      flex-shrink: 0;
+      transition: transform 120ms ease, border-color 120ms ease;
+    }
+    .inline-editor-thumb-box:hover {
+      border-color: var(--accent-primary, #1264a3);
+      transform: scale(1.03);
+    }
+    .inline-editor-thumb-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 7px;
+    }
+    .inline-editor-file-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.15));
+      background: var(--bg-secondary, #222529);
+      font-size: 12px;
+      color: var(--text-primary);
+      max-width: 220px;
+    }
+    .inline-editor-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .inline-editor-content {
-      min-height: 60px;
-      max-height: 200px;
+      min-height: 40px;
+      max-height: 240px;
+      height: auto;
       overflow-y: auto;
     }
 
     /* Override TipTap editor padding inside the inline editor */
     .inline-editor-content .ProseMirror {
-      padding: 10px 14px;
+      padding: 8px 12px;
       font-size: 14px;
       line-height: 1.5;
       color: var(--text-primary, #d1d2d3);
       outline: none;
-      min-height: 60px;
+      min-height: 36px;
+      height: auto;
     }
     .inline-editor-content .ProseMirror p.is-editor-empty:first-child::before {
       content: attr(data-placeholder);
@@ -234,16 +295,46 @@ function fileIcon(mimeType) {
 
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
 
-// ─── InlineEditor ─────────────────────────────────────────────────────────────
+// ─── InlineEditor ───────────────────────────────────────────────────────────
+function isImageAttachment(file) {
+  if (!file) return false;
+  const mime = (file.mimeType || file.type || '').toLowerCase();
+  if (mime.startsWith('image/')) return true;
+  const name = file.originalName || file.fileName || file.name || '';
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+}
+
+function getAttachmentThumb(file) {
+  if (!file) return '';
+  const direct = file.thumbnailUrl || file.preview || file.secureUrl || file.url || '';
+  if (direct) return getFileUrl({ ...file, url: direct });
+  return getFileUrl(file) || '';
+}
+
 
 /**
  * Inline message editor — uses RichTextEditor (TipTap) and the shared
  * FormattingToolbar. Formatting is preserved because we pass `html` (TipTap
  * HTML output) to `onSave`, which the store stores as `htmlContent`.
  */
-function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
+function InlineEditor({ initialHtml, initialText, channelId, attachments = [], onSave, onCancel }) {
   const editorRef = useRef(null);
   const wrapRef = useRef(null);
+
+  const safeChannelId = typeof channelId === "object" ? channelId?._id : channelId;
+
+  const {
+    mentionType,
+    mentionPos,
+    items: mentionItems,
+    activeIndex: mentionActiveIndex,
+    detectMention,
+    selectMention,
+    closeMentions,
+    handleMentionKeyDown,
+    setActiveIndex: setMentionActiveIndex,
+  } = useMentions({ channelId: safeChannelId, editorRef });
 
   const [formatState, setFormatState] = useState({
     bold: false,
@@ -286,22 +377,30 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
         ed.setContent(initialText);
       }
 
-      ed.focus("end", { scrollIntoView: false });
+      ed.focus("end");
       syncFormatState();
 
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      });
     }, 50);
 
     return () => clearTimeout(timer);
   }, [initialHtml, initialText, syncFormatState]);
 
-  // Escape key cancels edit
+  // Escape key cancels edit, or closes mention dropdown
   useEffect(() => {
     const onKey = (e) => {
+      if (mentionType) {
+        if (handleMentionKeyDown(e)) return;
+      }
       if (e.key === "Escape") onCancel?.();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, [onCancel, mentionType, handleMentionKeyDown]);
 
   const handleSave = useCallback(() => {
     const ed = editorRef.current;
@@ -309,18 +408,17 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
 
     const { html, text } = ed.getContent();
 
-    // Require at least some non-whitespace text content
-    if (!text?.trim()) return;
+    const hasAttachments = attachments && attachments.length > 0;
+    if (!hasAttachments && !text?.trim()) return;
 
     // Pass both HTML (for rich rendering) and plain text (for search/preview)
     onSave(html, text);
-  }, [onSave]);
+  }, [onSave, attachments]);
 
-  // onInput from RichTextEditor receives { html, text, isEmpty } — we only need
-  // to re-sync the active-mark state so toolbar buttons update correctly.
   const handleEditorInput = useCallback(() => {
     syncFormatState();
-  }, [syncFormatState]);
+    detectMention();
+  }, [syncFormatState, detectMention]);
 
   return (
     <div className="inline-editor-wrap" ref={wrapRef}>
@@ -338,10 +436,58 @@ function InlineEditor({ initialHtml, initialText, onSave, onCancel }) {
       <div className="inline-editor-content">
         <RichTextEditor
           ref={editorRef}
-          placeholder="Edit message…"
+          placeholder={initialText || initialHtml ? "Edit message…" : "Add message"}
           onInput={handleEditorInput}
           onSubmit={handleSave}
+          onKeyDown={(e) => {
+            if (mentionType) {
+              return handleMentionKeyDown(e);
+            }
+            return false;
+          }}
         />
+
+
+        {/* Attachment Previews in Edit Mode */}
+        {attachments && attachments.length > 0 && (
+          <div className="inline-editor-attachments">
+            {attachments.map((file, idx) => {
+              const isImg = isImageAttachment(file);
+              const thumbSrc = getAttachmentThumb(file);
+              const name = file.originalName || file.fileName || file.name || "Attachment";
+              return (
+                <div
+                  key={file._id || file.fileId || idx}
+                  className="inline-editor-attachment-item"
+                  title={name}
+                >
+                  {isImg && thumbSrc ? (
+                    <div className="inline-editor-thumb-box">
+                      <img src={thumbSrc} alt={name} loading="lazy" />
+                    </div>
+                  ) : (
+                    <div className="inline-editor-file-box">
+                      <FileText size={18} style={{ color: "var(--accent-primary, #1264a3)", flexShrink: 0 }} />
+                      <span className="inline-editor-file-name">{name}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Mention Dropdown */}
+        {mentionType && (
+          <MentionDropdown
+            items={mentionItems}
+            activeIndex={mentionActiveIndex}
+            position={mentionPos}
+            onSelect={selectMention}
+            onClose={closeMentions}
+            setActiveIndex={setMentionActiveIndex}
+          />
+        )}
       </div>
 
       {/* Footer */}
@@ -434,6 +580,21 @@ const MessageItem = memo(
     
     // Derive edit state from global store (single source of truth)
     const isEditing = editingMessageId === message._id;
+
+    useEffect(() => {
+      if (isEditing) {
+        const t1 = setTimeout(() => {
+          messageRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 100);
+        const t2 = setTimeout(() => {
+          messageRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 260);
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+        };
+      }
+    }, [isEditing]);
 
     const isSaved = useLaterStore((s) => s.savedMessageIds.has(message._id));
 
@@ -567,38 +728,7 @@ const MessageItem = memo(
       ? "var(--text-muted)"
       : "var(--text-secondary)";
 
-    /**
-     * Called by InlineEditor when the user saves.
-     * `html`  — TipTap HTML (bold, lists, code, etc.) — stored as htmlContent
-     * `text`  — plain-text equivalent              — stored as content
-     */
-    const handleEdit = useCallback(
-      (html, text) => {
-        if (text?.trim()) {
-          editMessage(message._id, {
-            content: text,
-            htmlContent: html,
-          });
-        }
-        clearEditingMessageId();
-      },
-      [editMessage, message._id, clearEditingMessageId],
-    );
-
-    const handleReaction = (emoji) => {
-      const currentUserId = String(user?._id || "");
-      const existing = message.reactions?.find(
-        (r) =>
-          r.emoji === emoji &&
-          (r.users?.some((id) => String(id?._id || id) === currentUserId) ||
-            r.userIds?.some((id) => String(id) === currentUserId)),
-      );
-      if (existing) removeReaction(message._id, emoji, message.channelId);
-      else addReaction(message._id, emoji, message.channelId);
-      setShowReactionPicker(false);
-    };
-
-    let derivedAttachments = [];
+let derivedAttachments = [];
     if (message.fileReferences?.length > 0) {
       derivedAttachments = message.fileReferences
         .map((ref) => {
@@ -624,6 +754,40 @@ const MessageItem = memo(
     if (derivedAttachments.length === 0 && message.attachments?.length > 0) {
       derivedAttachments = message.attachments;
     }
+
+    /**
+     * Called by InlineEditor when the user saves.
+     * `html`  — TipTap HTML (bold, lists, code, etc.) — stored as htmlContent
+     * `text`  — plain-text equivalent              — stored as content
+     */
+    const handleEdit = useCallback(
+      (html, text) => {
+        const hasAttachments = derivedAttachments && derivedAttachments.length > 0;
+        if (text?.trim() || hasAttachments) {
+          editMessage(message._id, {
+            content: text || "",
+            htmlContent: html || "",
+          });
+        }
+        clearEditingMessageId();
+      },
+      [editMessage, message._id, clearEditingMessageId, derivedAttachments],
+    );
+
+    const handleReaction = (emoji) => {
+      const currentUserId = String(user?._id || "");
+      const existing = message.reactions?.find(
+        (r) =>
+          r.emoji === emoji &&
+          (r.users?.some((id) => String(id?._id || id) === currentUserId) ||
+            r.userIds?.some((id) => String(id) === currentUserId)),
+      );
+      if (existing) removeReaction(message._id, emoji, message.channelId);
+      else addReaction(message._id, emoji, message.channelId);
+      setShowReactionPicker(false);
+    };
+
+    
 
     // System messages
     if (isSystem) {
@@ -723,53 +887,6 @@ const MessageItem = memo(
           : isLastInGroup
             ? "last"
             : "middle";
-
-    // ── Full-width editing layout ─────────────────────────────────────────────
-    if (isEditing) {
-      return (
-        <div
-          id={`msg-${message._id}`}
-          ref={messageRef}
-          style={{ marginTop: compact ? 2 : 12, padding: "4px 16px 16px" }}
-        >
-          {/* Name row */}
-          {!compact && (
-            <div
-              className={`flex items-baseline gap-1.5 mb-2 px-1 ${isOwn ? "justify-end" : ""}`}
-            >
-              <span
-                className="font-semibold text-[13px] cursor-pointer hover:underline"
-                style={{ color: "var(--text-white)" }}
-                onClick={() => onOpenProfile?.(authorData)}
-              >
-                {authorName}
-              </span>
-              <span
-                className="text-[11px]"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {time}
-              </span>
-              {message.isEdited && (
-                <span
-                  className="text-[10px]"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  (edited)
-                </span>
-              )}
-            </div>
-          )}
-          {/* Full-width editor */}
-          <InlineEditor
-            initialHtml={message.htmlContent || ""}
-            initialText={message.content}
-            onSave={handleEdit}
-            onCancel={clearEditingMessageId}
-          />
-        </div>
-      );
-    }
 
     // ── Message content renderer ──────────────────────────────────────────────
     /**
@@ -920,7 +1037,7 @@ const MessageItem = memo(
           paddingTop: compact ? 2 : 12,
         }}
         onMouseEnter={() => {
-          if (!isDeleted) setShowActions(true);
+          if (!isDeleted && !isEditing) setShowActions(true);
         }}
         onMouseLeave={() => {
           if (!showReactionPicker && !showMoreMenu) setShowActions(false);
@@ -980,9 +1097,14 @@ const MessageItem = memo(
           {/* Column: name + bubble */}
           <div
             className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
-            style={{ maxWidth: "min(72%, 620px)", minWidth: 0 }}
+            style={{
+              width: isEditing ? "100%" : undefined,
+              maxWidth: isEditing ? "100%" : "min(72%, 620px)",
+              minWidth: 0,
+              flex: isEditing ? 1 : undefined,
+            }}
           >
-            {!compact && !isDMChannel && (
+            {(!compact || isEditing) && (!isDMChannel || isEditing) && (
               <div
                 className={`flex items-baseline gap-1.5 mb-1 px-1 ${isOwn ? "flex-row-reverse" : ""}`}
               >
@@ -1030,8 +1152,20 @@ const MessageItem = memo(
             )}
 
             {/* Bubble */}
-            <div
-              className={`message-bubble ${isOwn ? "sent" : "received"} ${groupPos}`}
+            {isEditing ? (
+              <div className="w-full" style={{ width: "100%", maxWidth: "100%", marginTop: 2 }}>
+                <InlineEditor
+                  initialHtml={message.htmlContent || ""}
+                  initialText={message.content}
+                  channelId={message.channelId || channelId}
+                  attachments={derivedAttachments}
+                  onSave={handleEdit}
+                  onCancel={clearEditingMessageId}
+                />
+              </div>
+            ) : (
+              <div
+                className={`message-bubble ${isOwn ? "sent" : "received"} ${groupPos}`}
               style={{
                 opacity: message.isOptimistic ? 0.7 : 1,
                 transition: "opacity 200ms ease",
@@ -1132,18 +1266,20 @@ const MessageItem = memo(
                       </span>
                     </div>
                   ) : (
-                    <div
-                      className="flex items-center gap-1 text-[13px] font-medium mb-1"
-                      style={{ color: "inherit", opacity: 0.85 }}
-                    >
-                      <span className="cursor-pointer flex items-center gap-1 hover:underline">
-                        {derivedAttachments[0].originalName ||
-                          derivedAttachments[0].fileName ||
-                          derivedAttachments[0].name ||
-                          "File"}{" "}
-                        <ChevronDown size={14} style={{ opacity: 0.7 }} />
-                      </span>
-                    </div>
+                    !["image", "video"].includes(getFileKind(derivedAttachments[0]?.mimeType || derivedAttachments[0]?.type, derivedAttachments[0]?.originalName || derivedAttachments[0]?.fileName || derivedAttachments[0]?.name)) && (
+                      <div
+                        className="flex items-center gap-1 text-[13px] font-medium mb-1"
+                        style={{ color: "inherit", opacity: 0.85 }}
+                      >
+                        <span className="cursor-pointer flex items-center gap-1 hover:underline">
+                          {derivedAttachments[0].originalName ||
+                            derivedAttachments[0].fileName ||
+                            derivedAttachments[0].name ||
+                            "File"}{" "}
+                          <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                        </span>
+                      </div>
+                    )
                   )}
                   <div className="flex flex-wrap gap-2">
                     {derivedAttachments.map((att, idx) => (
@@ -1166,6 +1302,7 @@ const MessageItem = memo(
               {renderBubbleStatusRow()}
 
             </div>
+            )}
 
             {/* Reactions */}
             {message.reactions?.length > 0 && (
@@ -1198,7 +1335,7 @@ const MessageItem = memo(
             )}
 
             {/* Thread preview — outside bubble */}
-            {message.replyCount > 0 && (
+            {!isEditing && message.replyCount > 0 && (
               <ThreadPreview
                 message={message}
                 onOpenThread={onOpenThread}
@@ -1215,8 +1352,8 @@ const MessageItem = memo(
               <div
                 className="absolute top-0 right-5 flex items-center gap-1.5 px-2 py-1 rounded-lg z-10"
                 style={{
-                  visibility: showActions || showReactionPicker || showMoreMenu ? "visible" : "hidden",
-                  pointerEvents: showActions || showReactionPicker || showMoreMenu ? "auto" : "none",
+                  visibility: !isEditing && (showActions || showReactionPicker || showMoreMenu) ? "visible" : "hidden",
+                  pointerEvents: !isEditing && (showActions || showReactionPicker || showMoreMenu) ? "auto" : "none",
                   background: "var(--bg-secondary)",
                   border: "1px solid var(--border-primary)",
                   boxShadow: "var(--shadow-md)",

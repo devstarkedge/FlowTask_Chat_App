@@ -30,10 +30,12 @@ export async function protect(req, res, next) {
 
     let token;
 
-    // Extract Bearer token from Authorization header
+    // Extract Bearer token from Authorization header or query parameter
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer')) {
       token = authHeader.split(' ')[1];
+    } else if (req.query?.token) {
+      token = req.query.token;
     }
 
     if (!token) {

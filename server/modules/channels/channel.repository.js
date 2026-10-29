@@ -1,3 +1,4 @@
+import { encryptPreview, decryptPreview } from '../../services/encryption/messageEncryption.service.js';
 import mongoose from 'mongoose';
 import Channel from './Channel.model.js';
 import ChannelMember from './ChannelMember.model.js';
@@ -436,11 +437,12 @@ class ChannelRepository {
 
   async updateLastMessage(channelId, preview, timestamp, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: channelId }, workspaceId);
+    const encryptedPreview = preview ? encryptPreview(preview, workspaceId) : '';
     await Channel.updateOne(
       filter,
       {
         $set: {
-          lastMessagePreview: preview,
+          lastMessagePreview: encryptedPreview,
           lastMessageAt: timestamp,
         }
       },

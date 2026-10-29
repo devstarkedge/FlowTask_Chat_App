@@ -173,7 +173,7 @@ const channelSchema = new Schema(
     },
     lastMessagePreview: {
       type: String,
-      maxlength: 200,
+      maxlength: 2000,
       default: "",
     },
     pinnedMessageIds: [

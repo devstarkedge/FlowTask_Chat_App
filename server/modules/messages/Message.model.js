@@ -382,6 +382,24 @@ const messageSchema = new Schema({
     originalChannelType: { type: String, default: null },
     customMessage: { type: String, default: null },
   },
+
+  // Cryptographic Security & Search (SaaS Enterprise Level)
+  isEncrypted: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  encryptionVersion: {
+    type: Number,
+    default: null,
+  },
+  searchTokens: [{
+    type: String,
+  }],
+  hasLink: {
+    type: Boolean,
+    default: false,
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -390,6 +408,8 @@ const messageSchema = new Schema({
 
 // ─── Indexes (all workspace-scoped) ──────────────────────────────────────────
 // Primary query: channel messages ordered by time (cursor-based pagination)
+messageSchema.index({ workspaceId: 1, searchTokens: 1 }, { sparse: true });
+messageSchema.index({ workspaceId: 1, isEncrypted: 1 }, { sparse: true });
 messageSchema.index({ workspaceId: 1, 'replyTo.authorId': 1 });
 messageSchema.index({ workspaceId: 1, 'activityMeta.actorId': 1 });
 messageSchema.index({ workspaceId: 1, 'activityMeta.actorFlowTaskUserId': 1 });

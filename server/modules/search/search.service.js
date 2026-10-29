@@ -1,3 +1,5 @@
+import { decryptMessages } from '../../services/encryption/messageEncryption.service.js';
+import { generateSearchQueryToken } from '../../services/encryption/crypto.service.js';
 import mongoose from 'mongoose';
 import Channel from '../channels/Channel.model.js';
 import ChannelMember from '../channels/ChannelMember.model.js';
@@ -428,16 +430,32 @@ async function searchMessages(query, regex, workspaceId, userId, channelIds, cha
         { 'activityMeta.taskTitle': regex },
         { 'activityMeta.projectName': regex },
         { 'activityMeta.fileName': regex },
+        ...(generateSearchQueryToken(cleanQuery(options.query || ''), workspaceId)
+          ? [{ searchTokens: generateSearchQueryToken(cleanQuery(options.query || ''), workspaceId) }]
+          : []),
+        { isEncrypted: true },
       ],
     }],
   })
     .sort({ createdAt: -1, _id: -1 })
-    .limit(limit + 1)
+    .limit((limit + 1) * 3)
     .populate('authorId', 'name email avatar flowTaskProfileUpdatedAt')
     .populate('channelId', 'name slug type')
     .lean();
 
-  const windowedMessages = messages.slice(0, limit);
+  const decryptedMessages = decryptMessages(messages, workspaceId);
+  const matchingMessages = decryptedMessages.filter((m) => {
+    return regex.test(m.content || '') ||
+      regex.test(m.htmlContent || '') ||
+      regex.test(m.senderSnapshot?.name || '') ||
+      regex.test(m.authorId?.name || '') ||
+      (m.mentions || []).some((men) => regex.test(men.name || '')) ||
+      regex.test(m.activityMeta?.taskTitle || '') ||
+      regex.test(m.activityMeta?.projectName || '') ||
+      regex.test(m.activityMeta?.fileName || '');
+  });
+
+  const windowedMessages = matchingMessages.slice(0, limit);
 
   const ranked = sortByRank(windowedMessages.map((message) => ({
     id: message._id.toString(),
@@ -569,7 +587,10 @@ async function searchLinks(query, regex, workspaceId, userId, channelIds, channe
     workspaceId,
     channelId: { $in: channelIds },
     isDeleted: false,
-    content: /https?:\/\//i,
+    $or: [
+      { content: /https?:\/\//i },
+      { hasLink: true },
+    ],
     $or: [
       { visibleTo: { $exists: false } },
       { visibleTo: { $size: 0 } },
@@ -581,7 +602,8 @@ async function searchLinks(query, regex, workspaceId, userId, channelIds, channe
     .populate('channelId', 'name slug type')
     .lean();
 
-  const ranked = sortByRank(messages
+  const decryptedMessages = decryptMessages(messages, workspaceId);
+  const ranked = sortByRank(decryptedMessages
     .map((message) => {
       const url = extractFirstUrl(message.content || message.htmlContent || '');
       if (!url) return null;

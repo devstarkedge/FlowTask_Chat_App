@@ -1,3 +1,4 @@
+import { decryptPreview } from '../../services/encryption/messageEncryption.service.js';
 import Channel from "./Channel.model.js";
 import crypto from "crypto";
 import ChannelMember from "./ChannelMember.model.js";
@@ -1206,7 +1207,7 @@ class ChannelService {
       
       const actuallyHasMessage = latestMessagesMap.has(raw._id.toString());
       
-      let safePreview = raw.lastMessagePreview;
+      let safePreview = decryptPreview(raw.lastMessagePreview, workspaceId || raw.workspaceId);
       let safeTimestamp = raw.lastMessageAt;
       
       // If the channel has NO valid messages left in the database,

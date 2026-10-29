@@ -1,3 +1,4 @@
+import { decryptPreview } from '../../services/encryption/messageEncryption.service.js';
 import asyncHandler from "../../middleware/asyncHandler.js";
 import { getMessageInfo as getMessageInfoService, markAsRead } from "./readReceipt.service.js";
 import ReadReceipt from "./readReceipt.model.js";
@@ -28,6 +29,11 @@ export const getUnread = asyncHandler(async (req, res) => {
   const authorizedUnreads = unreads.filter((receipt) =>
     receipt.channelId && allowedChannelIds.has(receipt.channelId._id.toString()),
   );
+  for (const receipt of authorizedUnreads) {
+    if (receipt.channelId?.lastMessagePreview) {
+      receipt.channelId.lastMessagePreview = decryptPreview(receipt.channelId.lastMessagePreview, workspaceId);
+    }
+  }
 
   res.json({ success: true, data: { unreads: authorizedUnreads } });
 });

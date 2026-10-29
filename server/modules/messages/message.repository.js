@@ -3,6 +3,8 @@ import MessageReaction from './MessageReaction.model.js';
 import Thread from '../threads/Thread.model.js';
 import { injectWorkspaceFilter, injectWorkspaceFilterRequired } from '../../middleware/workspaceContext.js';
 import mongoose from 'mongoose';
+import { encryptMessageData, decryptMessageData, decryptMessages } from '../../services/encryption/messageEncryption.service.js';
+import { encrypt, isEncrypted, generateSearchTokens } from '../../services/encryption/crypto.service.js';
 
 /**
  * Message Repository — data access layer for Message documents.
@@ -24,20 +26,23 @@ class MessageRepository {
     if (data.clientMessageId) {
       const existing = await Message.findOne({ clientMessageId: data.clientMessageId });
       if (existing) {
-        return existing.populate([
+        const populated = await existing.populate([
           { path: 'authorId', select: 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt' },
           { path: 'activityMeta.actorId', select: 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt' },
           { path: 'activityMeta.targetUserId', select: 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt' },
         ]);
+        return decryptMessageData(populated, data.workspaceId);
       }
     }
-    const message = new Message(data);
+    const encryptedData = encryptMessageData(data, data.workspaceId);
+    const message = new Message(encryptedData);
     await message.save();
-    return message.populate([
+    const populated = await message.populate([
       { path: 'authorId', select: 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt' },
       { path: 'activityMeta.actorId', select: 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt' },
       { path: 'activityMeta.targetUserId', select: 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt' },
     ]);
+    return decryptMessageData(populated, data.workspaceId);
   }
 
   /**
@@ -89,7 +94,8 @@ class MessageRepository {
         populate: { path: 'fileId' }
       });
     }
-    return query.exec();
+    const doc = await query.exec();
+    return doc ? decryptMessageData(doc, workspaceId || doc.workspaceId) : null;
   }
 
   /**
@@ -226,7 +232,7 @@ class MessageRepository {
     }
   }
 
-  return messages;
+  return decryptMessages(messages, workspaceId);
 }
 
   /**
@@ -314,9 +320,12 @@ class MessageRepository {
     const before = beforeRaw.slice(0, beforeLimit).reverse();
     const after = afterRaw.slice(0, afterLimit);
 
+    const decryptedTarget = decryptMessageData(target, workspaceId);
+    const decryptedBefore = decryptMessages(before, workspaceId);
+    const decryptedAfter = decryptMessages(after, workspaceId);
     return {
-      messages: [...before, target, ...after],
-      highlightedMessageId: target._id.toString(),
+      messages: [...decryptedBefore, decryptedTarget, ...decryptedAfter],
+      highlightedMessageId: decryptedTarget._id.toString(),
       hasMoreBefore,
       hasMoreAfter,
     };
@@ -343,7 +352,7 @@ class MessageRepository {
       filter._id = { $gt: cursor };
     }
 
-    return Message.find(filter)
+    const replies = await Message.find(filter)
       .sort({ createdAt: 1 })
       .limit(limit)
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
@@ -354,6 +363,7 @@ class MessageRepository {
         populate: { path: 'fileId' }
       })
       .lean();
+    return decryptMessages(replies, workspaceId);
   }
 
   /**
@@ -364,7 +374,28 @@ class MessageRepository {
    */
   async update(messageId, updates, workspaceId) {
     const filter = injectWorkspaceFilter({ _id: messageId }, workspaceId);
-    return Message.findOneAndUpdate(filter, updates, { returnDocument: 'after' })
+    const encryptedUpdates = { ...updates };
+    if (updates.content && !isEncrypted(updates.content)) {
+      encryptedUpdates.content = encrypt(updates.content, workspaceId);
+      encryptedUpdates.isEncrypted = true;
+      encryptedUpdates.searchTokens = generateSearchTokens(updates.content, workspaceId);
+      encryptedUpdates.hasLink = Boolean(/https?:\/\//i.test(updates.content));
+    }
+    if (updates.htmlContent && !isEncrypted(updates.htmlContent)) {
+      encryptedUpdates.htmlContent = encrypt(updates.htmlContent, workspaceId);
+    }
+    if (updates.$push && updates.$push.editHistory) {
+      const hist = updates.$push.editHistory;
+      encryptedUpdates.$push = {
+        ...updates.$push,
+        editHistory: {
+          ...hist,
+          content: hist.content ? encrypt(hist.content, workspaceId) : hist.content,
+          ...(hist.htmlContent ? { htmlContent: encrypt(hist.htmlContent, workspaceId) } : {}),
+        },
+      };
+    }
+    const doc = await Message.findOneAndUpdate(filter, encryptedUpdates, { returnDocument: 'after' })
       .populate('authorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate('activityMeta.actorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
       .populate('activityMeta.targetUserId', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt')
@@ -373,6 +404,7 @@ class MessageRepository {
         populate: { path: 'fileId' }
       })
       .exec();
+    return doc ? decryptMessageData(doc, workspaceId || doc.workspaceId) : null;
   }
 
   /** Atomically advance a receipt without overwriting a concurrent read receipt. */
@@ -471,7 +503,7 @@ class MessageRepository {
       workspaceId,
       'pinned messages query',
     );
-    return Message.find(filter)
+    const pinned = await Message.find(filter)
       .sort({ pinnedAt: -1 })
       .populate('authorId', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt')
       .populate('activityMeta.actorId', 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt')
@@ -485,6 +517,7 @@ class MessageRepository {
         },
       })
       .lean();
+    return decryptMessages(pinned, workspaceId);
   }
 
   /**
@@ -615,7 +648,7 @@ class MessageRepository {
     if (channelId) filter.channelId = channelId;
     else if (channelIds && channelIds.length > 0) filter.channelId = { $in: channelIds };
 
-    return Message.find(filter, { score: { $meta: 'textScore' } })
+    const searchResults = await Message.find(filter, { score: { $meta: 'textScore' } })
       .sort({ score: { $meta: 'textScore' } })
       .limit(limit)
       .populate('authorId', 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt')
@@ -627,6 +660,7 @@ class MessageRepository {
       })
       .populate('channelId', 'name slug type')
       .lean();
+    return decryptMessages(searchResults, workspaceId);
   }
 
   /**
@@ -674,13 +708,14 @@ class MessageRepository {
     }
     const filter = { channelId, isDeleted: false, workspaceId };
 
-    return Message.findOne(filter)
+    const doc = await Message.findOne(filter)
       .sort({ createdAt: -1 })
       .populate({
         path: 'fileReferences',
         populate: { path: 'fileId' }
       })
       .lean();
+    return doc ? decryptMessageData(doc, workspaceId) : null;
   }
 
   /**
@@ -709,7 +744,7 @@ class MessageRepository {
 
     const result = new Map();
     for (const item of latestMessages) {
-      result.set(item._id.toString(), item.latest);
+      result.set(item._id.toString(), decryptMessageData(item.latest, workspaceId));
     }
     return result;
   }

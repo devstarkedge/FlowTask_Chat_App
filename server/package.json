@@ -15,7 +15,8 @@
     "media:install": "npm --prefix huddle-media ci",
     "media:start": "npm --prefix huddle-media start",
     "media:test": "npm --prefix huddle-media test",
-    "test:huddle-launcher": "node --test scripts/startWithHuddleMedia.check.mjs"
+    "test:huddle-launcher": "node --test scripts/startWithHuddleMedia.check.mjs",
+    "db:encrypt-history": "node scripts/migrate/encrypt-message-history.js"
   },
   "dependencies": {
     "@hocuspocus/extension-redis": "^2.15.3",

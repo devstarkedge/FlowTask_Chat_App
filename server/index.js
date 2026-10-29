@@ -352,6 +352,11 @@ async function startServer() {
       logger.error('Failed to start canvas collaboration server', { error: collabErr?.message || collabErr });
     }
 
+    // 8d. Background historical message encryption migration (SaaS automated)
+    import('./scripts/migrate/encrypt-message-history.js')
+      .then(({ migrateHistoricalMessages }) => migrateHistoricalMessages().catch(err => logger.error('History encryption migration error', { error: err.message })))
+      .catch((err) => logger.warn('History encryption script import failed', { error: err.message }));
+
     // 9. Start HTTP server
     httpServer.listen(env.PORT, () => {
       logger.info(`TaskChat server running`, {

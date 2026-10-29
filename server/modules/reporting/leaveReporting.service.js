@@ -71,7 +71,7 @@ export async function handleLeaveReport(payload, workspaceId) {
           eventType: 'leave.daily_report', employeeId: employee._id, flowTaskUserId: payload.employee.flowTaskUserId,
           employeeName: employee.name, workDateKey: payload.dateKey, leaveRequestId: payload.leaveRequestId, leaveRetracted: retracted,
         } };
-        if (existing) { await Message.updateOne({ _id: existing._id, workspaceId }, { $set: changes }, { session }); message = { ...existing, ...changes }; }
+        if (existing) { await Message.updateOne({ _id: existing._id, workspaceId }, { $set: { ...changes, isEdited: true }, $push: { editHistory: { content: existing.content, htmlContent: existing.htmlContent, editedBy: bot._id, editedAt: new Date() } } }, { session }); message = { ...existing, ...changes }; }
         else if (!retracted) {
           [message] = await Message.create([{ ...filter, ...changes, authorId: bot._id, senderSnapshot: { name: 'FlowTask', avatar: bot.avatar }, visibleTo: [] }], { session });
           created = true;

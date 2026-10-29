@@ -1,3 +1,5 @@
+import toast from 'react-hot-toast';
+import { copyImageToClipboard } from '../../utils/clipboardUtils';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
@@ -12,6 +14,8 @@ import {
   File,
   Table2,
   Forward,
+  Copy,
+  ExternalLink,
   Info,
   X,
   Calendar,
@@ -451,107 +455,7 @@ function FileCardGeneric({ file, onOpen, onForward, kind }) {
       </div>
       {showDetails && <FileDetailsModal file={file} onClose={() => setShowDetails(false)} onForward={onForward} />}
 
-      {cardContextMenu && (
-        <div
-          style={{
-            position: "fixed",
-            left: cardContextMenu.x,
-            top: cardContextMenu.y,
-            zIndex: 10050,
-            background: "var(--bg-secondary, #222529)",
-            border: "1px solid var(--border-primary, rgba(255, 255, 255, 0.15))",
-            borderRadius: 8,
-            padding: "4px",
-            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.65)",
-            minWidth: 165,
-            backdropFilter: "blur(8px)",
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "7px 10px",
-              background: "transparent",
-              border: "none",
-              borderRadius: 6,
-              color: "var(--text-primary, #ffffff)",
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            onClick={async () => {
-              setCardContextMenu(null);
-              await copyImageToClipboard(imageUrl);
-            }}
-          >
-            <Copy size={15} />
-            <span>Copy Image</span>
-          </button>
-          <button
-            type="button"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "7px 10px",
-              background: "transparent",
-              border: "none",
-              borderRadius: 6,
-              color: "var(--text-primary, #ffffff)",
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            onClick={() => {
-              setCardContextMenu(null);
-              if (navigator.clipboard?.writeText) {
-                navigator.clipboard.writeText(imageUrl);
-                toast.success("Image link copied to clipboard");
-              }
-            }}
-          >
-            <ExternalLink size={15} />
-            <span>Copy Link</span>
-          </button>
-          <div style={{ height: 1, background: "var(--border-subtle, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
-          <button
-            type="button"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "7px 10px",
-              background: "transparent",
-              border: "none",
-              borderRadius: 6,
-              color: "var(--text-primary, #ffffff)",
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            onClick={() => {
-              setCardContextMenu(null);
-              handleDownload(file);
-            }}
-          >
-            <Download size={15} />
-            <span>Download</span>
-          </button>
-        </div>
-      )}
+
     </>
   );
 }
@@ -584,10 +488,11 @@ function ImageThumbnailCard({ file, onOpen, onForward }) {
     if (!cardContextMenu) return;
     const handleClose = () => setCardContextMenu(null);
     window.addEventListener("click", handleClose);
-    window.addEventListener("keydown", (e) => { if (e.key === "Escape") handleClose(); });
+    const handleKeyDown = (e) => { if (e.key === "Escape") handleClose(); };
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("click", handleClose);
-      window.removeEventListener("keydown", handleClose);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [cardContextMenu]);
 
@@ -695,6 +600,107 @@ function ImageThumbnailCard({ file, onOpen, onForward }) {
         </div>
       </div>
       {showDetails && <FileDetailsModal file={file} onClose={() => setShowDetails(false)} onForward={onForward} />}
+      {cardContextMenu && (
+        <div
+          style={{
+            position: "fixed",
+            left: cardContextMenu.x,
+            top: cardContextMenu.y,
+            zIndex: 10050,
+            background: "var(--bg-secondary, #222529)",
+            border: "1px solid var(--border-primary, rgba(255, 255, 255, 0.15))",
+            borderRadius: 8,
+            padding: "4px",
+            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.65)",
+            minWidth: 165,
+            backdropFilter: "blur(8px)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "7px 10px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 6,
+              color: "var(--text-primary, #ffffff)",
+              fontSize: 13,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            onClick={async () => {
+              setCardContextMenu(null);
+              await copyImageToClipboard(imageUrl);
+            }}
+          >
+            <Copy size={15} />
+            <span>Copy Image</span>
+          </button>
+          <button
+            type="button"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "7px 10px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 6,
+              color: "var(--text-primary, #ffffff)",
+              fontSize: 13,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            onClick={() => {
+              setCardContextMenu(null);
+              if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(imageUrl);
+                toast.success("Image link copied to clipboard");
+              }
+            }}
+          >
+            <ExternalLink size={15} />
+            <span>Copy Link</span>
+          </button>
+          <div style={{ height: 1, background: "var(--border-subtle, rgba(255, 255, 255, 0.1))", margin: "4px 0" }} />
+          <button
+            type="button"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "7px 10px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 6,
+              color: "var(--text-primary, #ffffff)",
+              fontSize: 13,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover, rgba(255, 255, 255, 0.1))")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            onClick={() => {
+              setCardContextMenu(null);
+              handleDownload(file);
+            }}
+          >
+            <Download size={15} />
+            <span>Download</span>
+          </button>
+        </div>
+      )}
     </>
   );
 }

@@ -50,9 +50,14 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const fetchNotificationPrefs = useCallback(async () => {
     try {
       const res = await notificationPrefAPI.get();
-      const channelPrefs = res.data?.data?.channels?.[channelId];
+      const prefs = res.data?.data || res.data || {};
+      const cIdStr = String(channelId);
+      const channelPrefs = prefs.dms?.overrides?.[cIdStr] ||
+        prefs.channels?.overrides?.[cIdStr] ||
+        prefs.groups?.overrides?.[cIdStr] ||
+        prefs.channels?.[cIdStr];
       if (channelPrefs) {
-        setIsMutedLocal(channelPrefs.paused || false);
+        setIsMutedLocal(Boolean(channelPrefs.muted || channelPrefs.paused));
       }
     } catch (err) {
       logger.error('Failed to load notification preferences:', err);
@@ -176,7 +181,8 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
     setIsMuteLoading(true);
     setIsMutedLocal(val);
     try {
-      await useNotificationPrefStore.getState().toggleChannelMute(channelId, val);
+      const section = (channel?.type === 'dm' || isOneToOneDM) ? 'dms' : (channel?.type === 'private' || channel?.type === 'team') ? 'groups' : 'channels';
+      await useNotificationPrefStore.getState().toggleChannelMute(channelId, val, section);
     } catch (err) {
       logger.error('Failed to update channel mute preferences:', err);
       setIsMutedLocal(!val);

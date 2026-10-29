@@ -74,16 +74,28 @@ class NotificationEngine {
       const hasBroadcastMention = { channel: false, here: false, everyone: false };
 
       for (const mention of mentions) {
-        if (mention.type === MENTION_TYPES.USER && mention.targetId) {
-          mentionedUserIds.add(mention.targetId.toString());
-        } else if (mention.type === MENTION_TYPES.CHANNEL) {
-          if (mention.name === 'channel' || mention.name === 'everyone') {
-            hasBroadcastMention.channel = true;
-          }
-          if (mention.name === 'here') {
-            hasBroadcastMention.here = true;
+        const typeStr = (mention.type || '').toLowerCase();
+        const targetIdStr = (mention.targetId || '').toString();
+        const nameStr = (mention.name || '').toLowerCase();
+
+        if (targetIdStr === 'channel' || nameStr === 'channel' || nameStr === 'everyone' || typeStr === 'channel') {
+          hasBroadcastMention.channel = true;
+        } else if (targetIdStr === 'here' || nameStr === 'here') {
+          hasBroadcastMention.here = true;
+        } else if (mention.type === MENTION_TYPES.USER || !mention.type) {
+          if (mention.targetId && mention.targetId !== 'channel') {
+            mentionedUserIds.add(mention.targetId.toString());
           }
         }
+      }
+
+      // Check for broadcast mentions in content
+      const rawText = `${message.content || ''} ${message.htmlContent || ''}`;
+      if (/\b@channel\b/i.test(rawText) || /\b@everyone\b/i.test(rawText)) {
+        hasBroadcastMention.channel = true;
+      }
+      if (/\b@here\b/i.test(rawText)) {
+        hasBroadcastMention.here = true;
       }
 
       // Build message preview — fall back to attachment label when there is no text
@@ -201,16 +213,18 @@ class NotificationEngine {
       recipientIdStr, workspaceId, channelIdStr, convType,
     );
 
-    if (!channelLevel.shouldNotify || channelLevel.muted) {
-      return { sent: false, reason: 'channel_muted' };
-    }
-
     // 6. Determine if this message qualifies for notification based on level
     const isMentioned = mentionedUserIds.has(recipientIdStr);
     const isBroadcast = hasBroadcastMention.channel || hasBroadcastMention.everyone;
     const isHereMention = hasBroadcastMention.here;
     const isDM = convType === 'dm';
     const isThreadReply = !!threadId;
+
+    // Direct mentions and broadcast @channel mentions bypass channel mute
+    const isChannelMuted = !channelLevel.shouldNotify || channelLevel.muted;
+    if (isChannelMuted && !isMentioned && !isBroadcast && !(isDM && !isThreadReply)) {
+      return { sent: false, reason: 'channel_muted' };
+    }
 
     let shouldNotify = false;
     let notificationType = NOTIFICATION_TYPES.CHANNEL_MESSAGE;
@@ -321,7 +335,7 @@ class NotificationEngine {
       : !isViewingSameChat && !activeWindowChannel;
 
     // 9. Build notification title
-    const title = this._buildTitle(notificationType, senderName, channelName, convType, isThreadReply);
+    const title = this._buildTitle(notificationType, senderName, channelName, convType, isThreadReply, isBroadcast);
 
     // 10. Build deep-link data
     const deepLink = {
@@ -595,7 +609,7 @@ class NotificationEngine {
    * Build human-readable notification title.
    * @private
    */
-  _buildTitle(type, senderName, channelName, convType, isThread) {
+  _buildTitle(type, senderName, channelName, convType, isThread, isBroadcast = false) {
     const safeSender = senderName || 'Someone';
     const safeChannel = channelName || 'channel';
 
@@ -603,7 +617,9 @@ class NotificationEngine {
       case NOTIFICATION_TYPES.DM:
         return `New message from ${safeSender}`;
       case NOTIFICATION_TYPES.MENTION:
-        return `${safeSender} mentioned you in #${safeChannel}`;
+        return isBroadcast
+          ? `${safeSender} mentioned @channel in #${safeChannel}`
+          : `${safeSender} mentioned you in #${safeChannel}`;
       case NOTIFICATION_TYPES.THREAD_REPLY:
         return `${safeSender} replied in a thread in #${safeChannel}`;
       case NOTIFICATION_TYPES.GROUP_MESSAGE:

@@ -16,20 +16,54 @@ export const useNotificationPrefStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { data } = await notificationPrefAPI.get();
-      const prefs = data.data || data;
-      const channelPrefs = prefs.channels || {};
+      const prefs = data?.data || data || {};
       const mutedMap = {};
-      Object.keys(channelPrefs).forEach((cId) => {
-        if (channelPrefs[cId]?.paused) {
-          mutedMap[cId] = true;
+
+      const extractMutes = (overrides) => {
+        if (!overrides) return;
+        if (overrides instanceof Map) {
+          for (const [id, val] of overrides.entries()) {
+            if (val?.muted || val?.paused) {
+              if (!val.muteUntil || new Date(val.muteUntil) > new Date()) {
+                mutedMap[String(id)] = true;
+              }
+            }
+          }
+          return;
         }
-      });
+        if (typeof overrides === 'object') {
+          Object.keys(overrides).forEach((id) => {
+            const val = overrides[id];
+            if (val?.muted || val?.paused) {
+              if (!val.muteUntil || new Date(val.muteUntil) > new Date()) {
+                mutedMap[String(id)] = true;
+              }
+            }
+          });
+        }
+      };
+
+      // Extract from all sections (dms, channels, groups)
+      extractMutes(prefs.dms?.overrides);
+      extractMutes(prefs.channels?.overrides);
+      extractMutes(prefs.groups?.overrides);
+
+      // Legacy fallback if channels was stored as flat map
+      if (prefs.channels && typeof prefs.channels === 'object') {
+        Object.keys(prefs.channels).forEach((key) => {
+          if (key !== 'overrides' && key !== 'defaultLevel') {
+            const val = prefs.channels[key];
+            if (val?.muted || val?.paused) mutedMap[String(key)] = true;
+          }
+        });
+      }
+
       set({
         preferences: prefs,
         mutedChannels: mutedMap,
         level: prefs.level || prefs.notificationLevel || 'all',
-        isPaused: !!prefs.isPaused || !!prefs.pausedUntil,
-        pauseUntil: prefs.pausedUntil || null,
+        isPaused: !!prefs.isPaused || !!prefs.pause?.active || !!prefs.pausedUntil,
+        pauseUntil: prefs.pause?.resumeAt || prefs.pausedUntil || null,
         isLoading: false,
       });
     } catch (error) {
@@ -38,16 +72,39 @@ export const useNotificationPrefStore = create((set, get) => ({
     }
   },
 
-  toggleChannelMute: async (channelId, isMuted) => {
+  toggleChannelMute: async (channelId, isMuted, section = null) => {
+    const idStr = String(channelId);
     set((state) => ({
-      mutedChannels: { ...state.mutedChannels, [channelId]: isMuted },
+      mutedChannels: { ...state.mutedChannels, [idStr]: isMuted },
     }));
+
     try {
-      await notificationPrefAPI.updateChannel(channelId, { paused: isMuted });
+      let sectionKey = section;
+      if (!sectionKey) {
+        try {
+          const { useChannelStore } = require('./channelStore');
+          const channel = useChannelStore.getState().channels?.find((c) => String(c._id) === idStr);
+          if (channel?.type === 'dm' || channel?.isDM) {
+            sectionKey = 'dms';
+          } else if (channel?.type === 'private' || channel?.type === 'team') {
+            sectionKey = 'groups';
+          } else {
+            sectionKey = 'channels';
+          }
+        } catch (_) {
+          sectionKey = 'channels';
+        }
+      }
+
+      await notificationPrefAPI.updateChannel(channelId, {
+        muted: isMuted,
+        paused: isMuted,
+        section: sectionKey,
+      });
     } catch (error) {
       logger.error('Failed to update channel mute preferences:', error);
       set((state) => ({
-        mutedChannels: { ...state.mutedChannels, [channelId]: !isMuted },
+        mutedChannels: { ...state.mutedChannels, [idStr]: !isMuted },
       }));
       throw error;
     }

@@ -7,6 +7,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Pressable,
   RefreshControl,
   ActivityIndicator,
   Alert,
@@ -178,22 +179,24 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
 
   return (
     <Swipeable
+      containerStyle={{ backgroundColor: colors.background }}
+      childrenContainerStyle={{ backgroundColor: colors.background }}
       ref={swipeableRef}
       renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
       onSwipeableOpen={(direction) => {
-        if (direction === 'left') handleSwipeAction(swipeActivityLeft);
-        else if (direction === 'right') handleSwipeAction(swipeActivityRight);
+        if (direction === 'right') handleSwipeAction(swipeActivityLeft);
+        else if (direction === 'left') handleSwipeAction(swipeActivityRight);
       }}
 
     >
-      <TouchableOpacity 
+      <Pressable
         onPress={handlePress} 
         style={[
           arStyles.container, 
           { backgroundColor: (!item.isRead && !item.read) ? (colors.backgroundSecondary || (colors.primary + '08')) : colors.background }
         ]} 
-        activeOpacity={0.7}
+
       >
         <View style={arStyles.avatarContainer}>
           <AppAvatar user={sender} size={40} showStatus={false} />
@@ -235,7 +238,7 @@ const ActivityRow = React.memo(({ item, colors, navigation }) => {
             </Text>
           ) : null}
         </View>
-      </TouchableOpacity>
+      </Pressable>
     </Swipeable>
   );
 });

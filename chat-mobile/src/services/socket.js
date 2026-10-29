@@ -534,11 +534,17 @@ export const connectSocket = async () => {
       const notifChannelId =
         notification.channelId?._id || notification.channelId || notification.conversationId;
       const isCritical =
-        ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type) ||
-        notification.priority === 'high';
+        ['reminder_overdue', 'system', 'bot_alert'].includes(notification.type);
+
 
       // Drop notification if channel/user is muted
-      const isMuted = notifChannelId && useNotificationPrefStore.getState().mutedChannels?.[notifChannelId];
+      const mutedMap = useNotificationPrefStore.getState().mutedChannels || {};
+      const notifIdStr = notifChannelId ? String(notifChannelId) : null;
+      const senderIdStr = notification.senderId ? String(notification.senderId) : null;
+      const isMuted = Boolean(
+        (notifIdStr && mutedMap[notifIdStr]) ||
+        (senderIdStr && mutedMap[senderIdStr])
+      );
       if (isMuted && !isCritical) {
         return; // Suppress notification completely
       }

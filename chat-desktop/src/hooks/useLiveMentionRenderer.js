@@ -13,6 +13,14 @@ export function renderCurrentMentions(html, profiles = EMPTY) {
   let changed = false;
   container.content.querySelectorAll('[data-mention-id], [data-id], [data-user-id], [data-type="mention"], .mention[data-user-id], [data-mention-type="user"], .mention-tag').forEach((node) => {
     const id = node.getAttribute('data-id') || node.getAttribute('data-user-id') || node.getAttribute('data-mention-id');
+    const dataLabel = node.getAttribute('data-label') || node.getAttribute('data-mention-label');
+
+    if (id === 'channel' || dataLabel === 'channel') {
+      node.textContent = '@channel';
+      node.setAttribute('data-label', 'channel');
+      changed = true;
+      return;
+    }
     let name = id ? profiles[id]?.name : null;
     if (!name && id) {
       try {

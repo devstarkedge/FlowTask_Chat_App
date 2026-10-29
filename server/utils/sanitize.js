@@ -75,5 +75,13 @@ export function extractMentions(html) {
     });
   }
 
+  if (/\b@channel\b/i.test(html) && !mentions.some(m => m.targetId === 'channel' || m.name === 'channel')) {
+    mentions.push({
+      targetId: 'channel',
+      type: 'channel',
+      name: 'channel',
+    });
+  }
+
   return mentions;
 }

@@ -43,14 +43,9 @@ export function formatReportingMessage(payload) {
       lines.push('Break: ' + duration(payload.breakSeconds), 'Work: ' + contextLabel(payload.current));
       break;
     case 'attendance.checked_out':
-      lines.push('Hours: ' + time(payload.checkInAt) + '–' + time(payload.checkOutAt),
-        'Attendance: ' + duration(payload.attendanceSeconds), 'Tracked work: ' + duration(payload.summary?.workSeconds),
-        'Personal breaks: ' + duration(payload.summary?.personalPauseSeconds));
+      lines.push('Hours: ' + time(payload.checkInAt) + '–' + time(payload.checkOutAt));
       for (const row of payload.summary?.rows || []) lines.push(contextLabel(row) + ' — ' + duration(row.seconds));
-      if (payload.outcome?.label || payload.outcome?.presenceState) lines.push('Outcome: ' + clean(payload.outcome.label || payload.outcome.presenceState));
-      if (payload.outcome?.leaveState && payload.outcome.leaveState !== 'NONE') lines.push('Leave: ' + clean(payload.outcome.leaveState));
-      if (payload.outcome?.provisional) lines.push('Attendance pending review.');
-      if (payload.pendingEvidenceUploads) lines.push('Pending uploads: ' + payload.pendingEvidenceUploads);
+      lines.push('Total Tracked Work: ' + duration(payload.summary?.workSeconds));
       break;
   }
   const content = lines.join('\n');

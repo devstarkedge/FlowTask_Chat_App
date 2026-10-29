@@ -1,3 +1,5 @@
+import { readReportingActivity } from '../reporting/reportingHistory.service.js';
+import reportingAsyncHandler from '../../middleware/asyncHandler.js';
 import { scanUploadedFiles } from '../../services/uploadScanner.js';
 import { Router } from 'express';
 import {
@@ -105,6 +107,11 @@ router.post('/reminders/parse', parseReminderText);
 router.delete('/reminders/:id', deleteReminder);
 
 // ─── Message ID parameterized routes ─────────────────────────────────────────
+router.get('/:id/reporting-activity', requireMessageAccess(), reportingAsyncHandler(async (req, res) => {
+  const data = await readReportingActivity(req.params.id, req.user._id, req.workspaceId, req.query);
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data });
+}));
 router.get('/:id', requireMessageAccess(), getMessage);
 router.put('/:id', requireMessageAccess(), validate({ body: editMessageSchema }), editMessage);
 router.delete('/:id', requireMessageAccess(), deleteMessage);

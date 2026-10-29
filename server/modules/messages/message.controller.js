@@ -28,6 +28,7 @@ import Message from "./Message.model.js";
  * Get messages for a channel (cursor-based pagination).
  */
 export const getMessages = asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
   const result = await messageService.getChannelMessages(
     req.params.channelId,
     req.query,
@@ -49,7 +50,7 @@ export const getMessagesAround = asyncHandler(async (req, res) => {
     req.params.messageId,
     req.query,
     req.workspaceId,
-    req.membership,
+    req.user._id,
   );
 
   res.json({ success: true, data: result });
@@ -124,9 +125,11 @@ export const sendMessage = asyncHandler(async (req, res) => {
  * Get a single message.
  */
 export const getMessage = asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
   const message = await messageService.getMessageById(
     req.params.id,
     req.workspaceId,
+    req.user._id,
   );
   res.json({ success: true, data: { message } });
 });

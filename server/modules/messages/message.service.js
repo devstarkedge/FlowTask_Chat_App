@@ -1,3 +1,4 @@
+import { attachReportingHistory } from '../reporting/reportingHistory.service.js';
 import { isReportingChannel, reportingRecipients } from '../reporting/reportingAccess.js';
 import { authorizeFileReferences } from '../files/fileAccess.service.js';
 import canvasRepository from '../canvas/canvas.repository.js';
@@ -579,13 +580,13 @@ class MessageService {
         isAdmin: membership?.role === 'admin' || membership?.role === 'owner',
       },
     );
-    return cursorPaginationResponse(messages, limit, '_id');
+    return cursorPaginationResponse(await attachReportingHistory(messages, userId, workspaceId), limit, '_id');
   }
 
   /**
    * Get a context window around a target message for deep-link navigation.
    */
-  async getMessagesAround(channelId, messageId, query = {}, workspaceId) {
+  async getMessagesAround(channelId, messageId, query = {}, workspaceId, userId) {
     const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
 
@@ -600,7 +601,7 @@ class MessageService {
     }
 
     return {
-      items: around.messages,
+      items: await attachReportingHistory(around.messages, userId, workspaceId),
       highlightedMessageId: around.highlightedMessageId,
       hasMoreBefore: around.hasMoreBefore,
       hasMoreAfter: around.hasMoreAfter,
@@ -628,11 +629,11 @@ class MessageService {
   /**
    * Get a single message by ID.
    */
-  async getMessageById(messageId, workspaceId) {
+  async getMessageById(messageId, workspaceId, userId) {
     const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
-    return message;
+    return (await attachReportingHistory([message], userId, workspaceId))[0];
   }
 
   // ──────────────────── Edit / Delete ───────────────────────────────────────

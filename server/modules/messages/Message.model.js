@@ -248,8 +248,9 @@ const messageSchema = new Schema({
   },
   reportingEventId: { type: String },
   reportingDigest: String,
+  reportingDigestVersion: { type: Number, default: 1 },
   reportingRevision: { type: Number, default: 1 },
-  reportingMeta: { type: new Schema({ eventType: String, occurredAt: Date, workDateKey: String, employeeName: String, employeeId: Schema.Types.ObjectId }, { _id: false }), default: null },
+  reportingMeta: { type: new Schema({ eventType: String, occurredAt: Date, workDateKey: String, employeeName: String, employeeId: Schema.Types.ObjectId, flowTaskUserId: String, attendanceSessionId: String, historySchemaVersion: Number }, { _id: false }), default: null },
   // Structured metadata for activity/system messages (UI rendering context)
   activityMeta: {
     type: activityMetaSchema,
@@ -488,6 +489,18 @@ messageSchema.methods.removeReaction = function (emoji, userId) {
   }
   return this;
 };
+
+// Intermediate source messages are retained for audit/reconciliation. They are
+// never exposed through channel pagination, direct GET, population or search.
+// Only the integration migrator can opt into reading those source records.
+const hiddenReportingTypes = ['tracking.work_started', 'tracking.work_switched', 'tracking.break_started', 'tracking.work_resumed'];
+messageSchema.pre(/^find|^countDocuments|^distinct/, function () {
+  if (!this.getOptions().includeReportingActivity) this.and([{ 'reportingMeta.eventType': { $nin: hiddenReportingTypes } }]);
+});
+messageSchema.pre('aggregate', function () {
+  if (!this.options.includeReportingActivity) this.pipeline().unshift({ $match: { 'reportingMeta.eventType': { $nin: hiddenReportingTypes } } });
+});
+messageSchema.index({ workspaceId: 1, channelId: 1, 'reportingMeta.attendanceSessionId': 1, 'reportingMeta.eventType': 1 });
 
 const Message = mongoose.models.Message || model('Message', messageSchema);
 

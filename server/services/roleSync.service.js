@@ -78,6 +78,8 @@ class RoleSyncService {
       const oldAccess = membership.flowTaskAccess?.toObject?.()
         || membership.flowTaskAccess
         || {};
+      // Ignore a delayed signed role snapshot after a more recent sync.
+      if (flowTaskAccess?.syncedAt && oldAccess.syncedAt && +new Date(nextAccess.syncedAt) < +new Date(oldAccess.syncedAt)) return false;
       const oldFlowTaskRole = oldAccess.role || null;
       const oldWorkspaceRole = membership.role;
       const comparableOld = { ...oldAccess, syncedAt: undefined };
@@ -88,7 +90,9 @@ class RoleSyncService {
       if (changed) {
         membership.role = nextWorkspaceRole;
         membership.flowTaskAccess = nextAccess;
+        if (membership.attendanceReportingAccess) membership.attendanceReportingAccess.historyAdmin = nextAccess.role === 'admin' && !_isCustomRole;
         await membership.save();
+        emitToUser(String(chatUser._id), 'reporting:access-updated', { workspaceId: String(workspaceId) }, String(workspaceId));
 
         const revokedChannelIds = await purgeUnauthorizedProjectActivity(
           chatUser._id,

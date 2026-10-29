@@ -26,7 +26,8 @@ function getDb() {
 function sanitizeMessages(messages) {
   if (!Array.isArray(messages)) return []
   const trimmed = messages.slice(-MAX_MESSAGES_PER_CHANNEL)
-  return trimmed.filter((message) => !!message?._id)
+  return trimmed.filter(message => !!message?._id && (!message.reportingMeta || ['attendance.checked_in', 'attendance.checked_out'].includes(message.reportingMeta.eventType)))
+    .map(message => { const { reportingHistory, ...safe } = message; return safe })
 }
 
 /** IndexedDB only accepts string/number/Date/Array as keys. Guard against objects. */

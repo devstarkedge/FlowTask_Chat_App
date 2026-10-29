@@ -7,7 +7,7 @@ import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import ReportingActivity from './ReportingActivity.model.js';
 import { hasReportingAccess, isReportingChannel } from './reportingAccess.js';
 import { encrypt, decrypt } from '../../services/encryption/crypto.service.js';
-import { formatReportingMessage } from './reportingFormat.js';
+import { contextLabel, formatReportingMessage } from './reportingFormat.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 
 export const INTERMEDIATE_REPORT_TYPES = ['tracking.work_started', 'tracking.work_switched', 'tracking.break_started', 'tracking.work_resumed'];
@@ -34,6 +34,21 @@ export function mayReadHistory(message, channel, principal) {
     (!message.reportingMeta.flowTaskUserId || message.reportingMeta.flowTaskUserId === principal.flowTaskUserId);
 }
 
+// Only authorized viewers receive the initial work selected after check-in.
+async function initialWorkByRoot(roots, workspaceId) {
+  if (!roots.length) return new Map();
+  const rows = await ReportingActivity.aggregate([
+    { $match: { workspaceId: new mongoose.Types.ObjectId(workspaceId), checkInMessageId: { $in: roots.map(root => root._id) }, eventType: 'tracking.work_started' } },
+    { $sort: { occurredAt: 1, sequence: 1, eventId: 1 } },
+    { $group: { _id: '$checkInMessageId', payloadCipher: { $first: '$payloadCipher' } } },
+  ]);
+  return new Map(rows.flatMap(row => {
+    const snapshot = JSON.parse(decrypt(row.payloadCipher, workspaceId));
+    const label = snapshot.current ? contextLabel(snapshot.current) : snapshot.content?.match(/^Work: (.+)$/m)?.[1];
+    return label ? [[String(row._id), { label }]] : [];
+  }));
+}
+
 // Fan-out is batched per report rather than querying memberships/counts once
 // for every recipient in a large department.
 export async function reportingHistoryAudience(message, channel) {
@@ -48,13 +63,25 @@ export async function reportingHistoryAudience(message, channel) {
   const audience = members.map(member => ({ recipient: id(member.userId), canView: mayReadHistory(message, channel,
     mappings.get(id(member.userId)) ? { member, userId: id(member.userId), flowTaskUserId: mappings.get(id(member.userId)), workspaceId: id(channel.workspaceId) } : null) }));
   const count = audience.some(row => row.canView) ? await ReportingActivity.countDocuments({ workspaceId: channel.workspaceId, checkInMessageId: message._id }) : 0;
+  const initial = await initialWorkByRoot(audience.some(row => row.canView) ? [message] : [], channel.workspaceId);
   return audience.map(row => ({ recipient: row.recipient, reportingHistory: {
-    canView: row.canView, ...(row.canView ? { count } : {}), viewerId: row.recipient, workspaceId: id(channel.workspaceId),
+    canView: row.canView, ...(row.canView ? { count, initialWork: initial.get(id(message)) || null } : {}), viewerId: row.recipient, workspaceId: id(channel.workspaceId),
   } }));
 }
 
-export async function attachReportingHistory(messages, userId, workspaceId) {
+export async function attachReportingProfiles(messages, workspaceId) {
   const output = messages.map(plain);
+  const ids = output.filter(m => m.reportingMeta?.employeeId).map(m => m.reportingMeta.employeeId);
+  if (!ids.length) return output;
+  const members = await WorkspaceMembership.find({ workspaceId, userId: { $in: ids } }).select('userId').lean();
+  const users = await ChatUser.find({ _id: { $in: members.map(m => m.userId) } }).select('_id name avatar flowTaskUserId flowTaskProfileUpdatedAt').lean();
+  const profiles = new Map(users.map(user => [id(user), user]));
+  for (const message of output) if (message.reportingMeta) message.reportingEmployee = profiles.get(id(message.reportingMeta.employeeId)) || null;
+  return output;
+}
+
+export async function attachReportingHistory(messages, userId, workspaceId) {
+  const output = await attachReportingProfiles(messages, workspaceId);
   const roots = output.filter(message => message.reportingMeta?.eventType === 'attendance.checked_in');
   if (!roots.length) return output;
   const principal = await historyPrincipal(userId, workspaceId);
@@ -66,9 +93,10 @@ export async function attachReportingHistory(messages, userId, workspaceId) {
     { $group: { _id: '$checkInMessageId', count: { $sum: 1 } } },
   ]) : [];
   const countById = new Map(counts.map(row => [id(row), row.count]));
+  const initial = await initialWorkByRoot(allowed, workspaceId);
   const allowedIds = new Set(allowed.map(id));
   for (const root of roots) root.reportingHistory = allowedIds.has(id(root))
-    ? { canView: true, count: countById.get(id(root)) || 0, viewerId: id(userId), workspaceId: id(workspaceId) }
+    ? { canView: true, count: countById.get(id(root)) || 0, initialWork: initial.get(id(root)) || null, viewerId: id(userId), workspaceId: id(workspaceId) }
     : { canView: false, viewerId: id(userId), workspaceId: id(workspaceId) };
   return output;
 }

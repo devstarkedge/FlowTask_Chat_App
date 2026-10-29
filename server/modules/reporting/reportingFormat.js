@@ -37,7 +37,6 @@ export function formatReportingMessage(payload) {
         'Now: ' + contextLabel(payload.current));
       break;
     case 'tracking.break_started':
-      lines.push('Work: ' + contextLabel(payload.previous), 'Worked: ' + duration(payload.workSeconds));
       break;
     case 'tracking.work_resumed':
       lines.push('Break: ' + duration(payload.breakSeconds), 'Work: ' + contextLabel(payload.current));

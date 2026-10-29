@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useReportingHistoryStore } from '../../stores/reportingHistoryStore'
 
-export default function ReportingHistory({ message, present }) {
+export default function ReportingHistory({ message, present, onInitialWork }) {
   const viewerId = useAuthStore(state => state.user?._id)
   const workspaceId = useWorkspaceStore(state => state.activeWorkspaceId)
   const revision = useReportingHistoryStore(state => state.revision)
@@ -46,7 +46,7 @@ export default function ReportingHistory({ message, present }) {
       setAccess(current => {
         if (current?.revision !== revision) return current
         if (!incoming.canView) return { ...current, canView: false, count: undefined }
-        return current.canView ? { ...current, count: Math.max(current.count || 0, incoming.count || 0) } : current
+        return current.canView ? { ...current, count: Math.max(current.count || 0, incoming.count || 0), initialWork: incoming.initialWork || current.initialWork } : current
       })
     }
   }, [message.reportingHistory, viewerId, workspaceId, revision])
@@ -75,6 +75,10 @@ export default function ReportingHistory({ message, present }) {
     if (expanded && allowed) void load()
     return cancelRequests
   }, [expanded, allowed, count, revision, load, cancelRequests])
+
+  useEffect(() => {
+    onInitialWork?.(allowed && access.initialWork ? { ...access.initialWork, revision, viewerId, workspaceId } : null)
+  }, [allowed, access?.initialWork, revision, viewerId, workspaceId, onInitialWork])
 
   if (!allowed) return null
   const historyId = 'reporting-history-' + message._id

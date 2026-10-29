@@ -135,6 +135,7 @@ export function messageSocketPayload(message, extras = {}) {
     flowTaskRef: plain.flowTaskRef || null,
     activityMeta: plain.activityMeta || null,
     reportingMeta: plain.reportingMeta || null,
+    reportingEmployee: plain.reportingEmployee || null,
     reportingEventId: plain.reportingEventId || null,
     forwardMeta: plain.forwardMeta || null,
     gifMeta: plain.gifMeta || null,

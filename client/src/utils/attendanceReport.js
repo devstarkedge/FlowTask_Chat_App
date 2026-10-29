@@ -44,6 +44,15 @@ export function reportPresentation(message) {
     else details.push({ label: '', value: compact(line.replace(/^\d+\.\s*/, '')) })
   }
   flush()
+  if (message.reportingMeta?.eventType === 'attendance.checked_in' && message.reportingHistory?.canView && message.reportingHistory.initialWork?.label) {
+    const work = details.find(row => row.label === 'Work')
+    if (work?.value === 'Attendance only') {
+      work.value = message.reportingHistory.initialWork.label
+      const pending = details.findIndex(row => row.value === 'Tracking has not started.')
+      if (pending !== -1) details.splice(pending, 1)
+    }
+  }
+  if (message.reportingMeta?.eventType === 'tracking.break_started') details.length = 0
   if (message.reportingMeta?.eventType === 'attendance.checked_out') {
     const kept = details.filter(row => !['Attendance', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads', 'Check-in', 'Check-out', 'Tracked work'].includes(row.label)
       && !/^(Attendance outcome|Attendance pending review|Status:|Work Summary)/.test(row.value))
@@ -51,7 +60,7 @@ export function reportPresentation(message) {
     const checkOut = details.find(row => row.label === 'Check-out')?.value
     if (!kept.some(row => row.label === 'Hours') && checkIn && checkOut) kept.unshift({ label: 'Hours', value: checkIn + '–' + checkOut })
     const total = details.find(row => row.label === 'Tracked work')
-    if (total) kept.push({ label: 'Total tracked work', value: total.value, total: true })
+    if (total) kept.push({ label: 'Total working time', value: total.value, total: true })
     details.splice(0, details.length, ...kept)
   }
   const rawDate = field('Workday') || message.reportingMeta?.workDateKey
@@ -60,6 +69,8 @@ export function reportPresentation(message) {
   return {
     title: titles[message.reportingMeta?.eventType] || lines[0] || 'Attendance',
     employee: field('Employee') || message.reportingMeta?.employeeName || 'Team member',
+    date,
+    time: compact((field('Time') || '').replace(/\s*\([^)]*\)$/, '')),
     stamp: [date, compact((field('Time') || '').replace(/\s*\([^)]*\)$/, ''))].filter(Boolean).join(' · '),
     details,
   }

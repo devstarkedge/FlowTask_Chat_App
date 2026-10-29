@@ -1,5 +1,5 @@
 import ReportingActivity from './ReportingActivity.model.js';
-import { INTERMEDIATE_REPORT_TYPES, storeReportingActivity, reportingHistoryAudience, reportingDigest } from './reportingHistory.service.js';
+import { INTERMEDIATE_REPORT_TYPES, storeReportingActivity, reportingHistoryAudience, reportingDigest, attachReportingProfiles } from './reportingHistory.service.js';
 import { reconcileLegacyReportingHistory } from './reportingHistory.migration.js';
 import { normalizeFlowTaskAccess } from '../flowtask/flowTaskWorkspaceRoleMap.js';
 import crypto from 'node:crypto';
@@ -207,7 +207,7 @@ export async function handleReportingEvent(payload, workspaceId) {
       const { default: messageService } = await import('../messages/message.service.js');
       await messageService._incrementUnreadForChannel(channel._id, bot._id, String(workspaceId));
     }
-    const persisted = await messageRepository.findById(message._id, { workspaceId });
+    const [persisted] = await attachReportingProfiles([await messageRepository.findById(message._id, { workspaceId })], workspaceId);
     for (const { recipient, reportingHistory } of await reportingHistoryAudience(persisted, channel)) {
       const socketPayload = messageSocketPayload(persisted, { reportingHistory });
       emitToUser(recipient, created ? 'message:create' : 'message:update', { message: socketPayload }, String(workspaceId));

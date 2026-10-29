@@ -4,7 +4,7 @@ import Channel from '../channels/Channel.model.js';
 import Message from '../messages/Message.model.js';
 import User from '../users/ChatUser.model.js';
 import Membership from '../workspaces/WorkspaceMembership.model.js';
-import Receipt from '../readReceipts/ReadReceipt.model.js';
+import Receipt from '../readReceipts/readReceipt.model.js';
 import userRepository from '../users/user.repository.js';
 import { encryptMessageData, decryptMessageData } from '../../services/encryption/messageEncryption.service.js';
 import { emitToUser } from '../../sockets/socketManager.js';

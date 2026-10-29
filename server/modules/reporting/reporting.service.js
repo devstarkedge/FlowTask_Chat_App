@@ -1,3 +1,4 @@
+import { handleLeaveReport, reconcileLeaveUnread } from './leaveReporting.service.js';
 import ReportingActivity from './ReportingActivity.model.js';
 import { INTERMEDIATE_REPORT_TYPES, storeReportingActivity, reportingHistoryAudience, reportingDigest, attachReportingProfiles } from './reportingHistory.service.js';
 import { reconcileLegacyReportingHistory } from './reportingHistory.migration.js';
@@ -113,7 +114,7 @@ async function syncDirectory(payload, workspaceId) {
     if ((member.attendanceReportingAccess?.version || 0) > version) return;
     const access = payload.reportingAccess;
     if (!access || !Array.isArray(access.departmentIds) || !access.departmentIds.every(validId)) throw new ValidationError('Invalid reporting access');
-    const membershipHash = crypto.createHash('sha256').update(JSON.stringify([payload.active === true && access.active === true, access.allDepartments === true, access.historyAdmin === true, payload.access?.role, [...access.departmentIds].sort(), member.isActive])).digest('hex');
+    const membershipHash = crypto.createHash('sha256').update(JSON.stringify([payload.active === true && access.active === true, access.allDepartments === true, access.historyAdmin === true, access.leaveScope, payload.access?.role, [...access.departmentIds].sort(), member.isActive])).digest('hex');
     let sourceAccess = null;
     if (payload.access?.role) {
       const { _workspaceRole, _isCustomRole, ...normalized } = normalizeFlowTaskAccess(payload.access);
@@ -124,13 +125,15 @@ async function syncDirectory(payload, workspaceId) {
       ...(sourceIsCurrent ? { $and: [{ $or: [{ 'flowTaskAccess.syncedAt': null }, { 'flowTaskAccess.syncedAt': { $lte: sourceAccess.syncedAt } }] }] } : {}), $or: [
       { 'attendanceReportingAccess.version': { $lte: version } }, { 'attendanceReportingAccess.version': { $exists: false } },
     ] }, { $set: { ...(sourceIsCurrent ? { flowTaskAccess: sourceAccess } : {}), attendanceReportingAccess: { active: payload.active === true && access.active === true,
-      allDepartments: access.allDepartments === true, historyAdmin: sourceIsCurrent && sourceAccess.role === 'admin' && access.historyAdmin === true, departmentIds: access.departmentIds, version, syncedAt: new Date(), membershipHash: member.attendanceReportingAccess?.membershipHash } } }, { returnDocument: 'after' });
+      allDepartments: access.allDepartments === true, leaveScope: access.leaveScope || null, historyAdmin: sourceIsCurrent && sourceAccess.role === 'admin' && access.historyAdmin === true, departmentIds: access.departmentIds, version, syncedAt: new Date(), membershipHash: member.attendanceReportingAccess?.membershipHash } } }, { returnDocument: 'after' });
     if (!updated) return;
     if (updated.attendanceReportingAccess.membershipHash === membershipHash && !payload.reconcile) return;
     const previousChannels = await ChannelMember.find({ workspaceId, userId: user._id, isActive: true }).select('channelId').lean();
     const channelFilter = reportFilter(workspaceId);
     if (!access.allDepartments) channelFilter.$or = [{ 'flowTaskRef.entityId': { $in: access.departmentIds } }, { _id: { $in: previousChannels.map(m => m.channelId) } }];
     for (const channel of await Channel.find(channelFilter)) await syncChannelMember(channel, user._id, updated);
+    emitToUser(String(user._id), 'reporting:leave-access-updated', { workspaceId: String(workspaceId) }, String(workspaceId));
+    await reconcileLeaveUnread(user._id, workspaceId);
     await WorkspaceMembership.updateOne({ workspaceId, userId: user._id, 'attendanceReportingAccess.version': version }, { $set: { 'attendanceReportingAccess.membershipHash': membershipHash } });
     emitToUser(String(user._id), 'reporting:access-updated', { workspaceId: String(workspaceId) }, String(workspaceId));
   }
@@ -138,6 +141,7 @@ async function syncDirectory(payload, workspaceId) {
 
 export async function handleReportingEvent(payload, workspaceId) {
   if (!validId(payload.workspaceId) || !payload.eventId || typeof payload.eventId !== 'string' || payload.eventId.length > 250) throw new ValidationError('Invalid reporting event identity');
+  if (payload.eventType === 'leave.daily_report') return handleLeaveReport(payload, workspaceId);
   if (DIRECTORY_TYPES.has(payload.eventType)) { await syncDirectory(payload, workspaceId); return { status: 'processed' }; }
   if (!REPORT_TYPES.has(payload.eventType) || !validId(payload.employee?.flowTaskUserId) || !validId(payload.attendanceSessionId) ||
     !Array.isArray(payload.departments) || !/^\d{4}-\d{2}-\d{2}$/.test(payload.workDateKey) || !Number.isFinite(+new Date(payload.occurredAt))) throw new ValidationError('Invalid attendance report');

@@ -22,6 +22,13 @@ import { handleChannelRemoved } from './channelEvents'
 import { handleUserProfileUpdated } from './userProfileEvents'
 import { useUserProfileStore } from '../stores/userProfileStore'
 
+function purgePrivateLeaveReports() {
+  const state = useChatStore.getState()
+  for (const [channelId, messages] of Object.entries(state.messagesByChannel)) for (const message of messages) {
+    if (message.reportingMeta?.eventType === 'leave.daily_report') state.removeMessage(message._id, channelId)
+  }
+}
+
 let socket = null
 let disposeHuddleSocket = null
 let _disconnectTime = 0   // timestamp when socket last disconnected
@@ -185,6 +192,9 @@ export function connectSocket() {
   disposeHuddleSocket = bindHuddleSocket(socket, () => useWorkspaceStore.getState().activeWorkspaceId)
 
   socket.on('connect', () => {
+    purgePrivateLeaveReports()
+    const leaveChannel = useChannelStore.getState().activeChannelId
+    if (leaveChannel) void useChatStore.getState().fetchMessages(leaveChannel)
     invalidateReportingHistory()
     useUserProfileStore.getState().clearProfiles()
     useWorkspaceStore.getState().fetchMembers()
@@ -235,6 +245,7 @@ export function connectSocket() {
   })
 
   socket.on('disconnect', (reason) => {
+    purgePrivateLeaveReports()
     invalidateReportingHistory()
     logger.log('[Socket] Disconnected:', reason)
     _disconnectTime = Date.now()
@@ -429,6 +440,14 @@ export function connectSocket() {
     }
   })
 
+  socket.on('reporting:leave-access-updated', ({ workspaceId }) => {
+    if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
+    invalidateReportingHistory()
+    purgePrivateLeaveReports()
+    const state = useChatStore.getState()
+    const active = useChannelStore.getState().activeChannelId
+    if (active) void state.fetchMessages(active)
+  })
   socket.on('reporting:access-updated', ({ workspaceId }) => {
     if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId) invalidateReportingHistory()
   })

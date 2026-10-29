@@ -1,3 +1,4 @@
+import { leaveViewer } from '../reporting/leaveVisibility.js';
 import { isReportingChannel, canAccessReportingChannel } from '../reporting/reportingAccess.js';
 import env from '../../config/environment.js';
 import tokenService from './token.service.js';
@@ -96,7 +97,7 @@ export async function protect(req, res, next) {
     // Attach to request (global identity — no workspaceId in JWT)
     req.user = chatUser;
 
-    next();
+    leaveViewer.run({ userId: String(chatUser._id), workspaceId: req.headers['x-workspace-id'] || req.headers['workspace-id'] || req.query.workspaceId || req.query.w }, () => next());
   } catch (error) {
     next(error);
   }

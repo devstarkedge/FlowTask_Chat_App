@@ -1,4 +1,5 @@
 const titles = {
+  'leave.daily_report': '🔔 On Leave',
   'attendance.checked_in': 'Checked in',
   'tracking.work_started': 'Work started',
   'tracking.work_switched': 'Switched work',
@@ -40,7 +41,7 @@ export function reportPresentation(message) {
     if (/^Leave:\s*NONE$/i.test(line)) continue
     const match = line.match(/^([^:]+):\s*(.*)$/)
     const labels = { 'Check-In': 'Check-in', 'Check-Out': 'Check-out', 'Work Mode': 'Work mode', 'Previous Work': 'Work', 'Work Completed So Far': 'Worked', 'Break Started': 'Break started', 'Personal Break Duration': 'Break', 'Resuming': 'Work', 'Attendance Duration': 'Attendance', 'Attendance Status': 'Outcome', 'Total Tracked Work': 'Tracked work', 'Total Personal Pause': 'Personal breaks' }
-    if (match && (labels[match[1]] || ['Work mode', 'Work', 'From', 'Now', 'Worked', 'Break', 'Hours', 'Attendance', 'Tracked work', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads'].includes(match[1]))) details.push({ label: labels[match[1]] || match[1], value: compact(match[2]) })
+    if (match && (labels[match[1]] || ['Work mode', 'Work', 'From', 'Now', 'Worked', 'Break', 'Hours', 'Attendance', 'Tracked work', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads', 'Leave Type', 'Coverage'].includes(match[1]))) details.push({ label: labels[match[1]] || match[1], value: compact(match[2]) })
     else details.push({ label: '', value: compact(line.replace(/^\d+\.\s*/, '')) })
   }
   flush()

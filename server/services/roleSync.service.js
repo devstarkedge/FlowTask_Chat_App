@@ -92,6 +92,9 @@ class RoleSyncService {
         membership.flowTaskAccess = nextAccess;
         if (membership.attendanceReportingAccess) membership.attendanceReportingAccess.historyAdmin = nextAccess.role === 'admin' && !_isCustomRole;
         await membership.save();
+        const { reconcileLeaveUnread } = await import('../modules/reporting/leaveReporting.service.js');
+        try { await reconcileLeaveUnread(chatUser._id, workspaceId); } catch (error) { logger.warn('Leave unread reconciliation will retry', { workspaceId, error: error.message }); }
+        emitToUser(String(chatUser._id), 'reporting:leave-access-updated', { workspaceId: String(workspaceId) }, String(workspaceId));
         emitToUser(String(chatUser._id), 'reporting:access-updated', { workspaceId: String(workspaceId) }, String(workspaceId));
 
         const revokedChannelIds = await purgeUnauthorizedProjectActivity(

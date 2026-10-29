@@ -1361,6 +1361,7 @@ class MessageService {
       const orig = await messageRepository.findById(id, { workspaceId });
       if (!orig) throw new NotFoundError(`Message ${id} not found`);
       this._assertWorkspaceMatch(orig.workspaceId, workspaceId, 'Message');
+      if (orig.reportingMeta?.eventType === 'leave.daily_report') throw new ForbiddenError('Private leave reports cannot be forwarded');
       originals.push(orig);
     }
 

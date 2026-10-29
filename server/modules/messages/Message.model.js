@@ -1,3 +1,4 @@
+import { leaveVisibilityFilter } from '../reporting/leaveVisibility.js';
 import mongoose from 'mongoose';
 import {
   MESSAGE_CONTENT_TYPES,
@@ -250,7 +251,7 @@ const messageSchema = new Schema({
   reportingDigest: String,
   reportingDigestVersion: { type: Number, default: 1 },
   reportingRevision: { type: Number, default: 1 },
-  reportingMeta: { type: new Schema({ eventType: String, occurredAt: Date, workDateKey: String, employeeName: String, employeeId: Schema.Types.ObjectId, flowTaskUserId: String, attendanceSessionId: String, historySchemaVersion: Number }, { _id: false }), default: null },
+  reportingMeta: { type: new Schema({ eventType: String, occurredAt: Date, workDateKey: String, employeeName: String, employeeId: Schema.Types.ObjectId, flowTaskUserId: String, attendanceSessionId: String, historySchemaVersion: Number, leaveRequestId: String, leaveRetracted: Boolean }, { _id: false }), default: null },
   // Structured metadata for activity/system messages (UI rendering context)
   activityMeta: {
     type: activityMetaSchema,
@@ -494,10 +495,12 @@ messageSchema.methods.removeReaction = function (emoji, userId) {
 // never exposed through channel pagination, direct GET, population or search.
 // Only the integration migrator can opt into reading those source records.
 const hiddenReportingTypes = ['tracking.work_started', 'tracking.work_switched', 'tracking.break_started', 'tracking.work_resumed'];
-messageSchema.pre(/^find|^countDocuments|^distinct/, function () {
+messageSchema.pre(/^find|^countDocuments|^distinct/, async function () {
+  this.and([await leaveVisibilityFilter(this.getOptions())]);
   if (!this.getOptions().includeReportingActivity) this.and([{ 'reportingMeta.eventType': { $nin: hiddenReportingTypes } }]);
 });
-messageSchema.pre('aggregate', function () {
+messageSchema.pre('aggregate', async function () {
+  this.pipeline().unshift({ $match: await leaveVisibilityFilter(this.options) });
   if (!this.options.includeReportingActivity) this.pipeline().unshift({ $match: { 'reportingMeta.eventType': { $nin: hiddenReportingTypes } } });
 });
 messageSchema.index({ workspaceId: 1, channelId: 1, 'reportingMeta.attendanceSessionId': 1, 'reportingMeta.eventType': 1 });

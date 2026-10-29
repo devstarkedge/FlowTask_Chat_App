@@ -1,4 +1,4 @@
-export const REPORT_TYPES = new Set(['attendance.checked_in', 'tracking.work_started', 'tracking.work_switched',
+export const REPORT_TYPES = new Set(['leave.daily_report', 'attendance.checked_in', 'tracking.work_started', 'tracking.work_switched',
   'tracking.break_started', 'tracking.work_resumed', 'attendance.checked_out']);
 export const DIRECTORY_TYPES = new Set(['reporting.department_synced', 'reporting.departments_reconciled', 'reporting.member_synced']);
 const clean = value => String(value || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, 1000);

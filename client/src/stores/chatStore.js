@@ -1,3 +1,4 @@
+import { useReportingHistoryStore } from './reportingHistoryStore';
 import { create } from "zustand";
 import { createElement } from "react";
 import { messageAPI, threadAPI, botAPI } from "../services/api";
@@ -360,6 +361,7 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Messages ────────────────────────────────────────────────────────
   fetchMessages: async (channelId, options = {}) => {
+    const leaveRevision = useReportingHistoryStore.getState().revision;
     // Guard: reject invalid channelIds before hitting the API or IndexedDB.
     if (!channelId || typeof channelId !== 'string' || channelId === '[object Object]') {
       logger.warn('[chatStore] fetchMessages called with invalid channelId:', channelId)
@@ -411,7 +413,7 @@ export const useChatStore = create((set, get) => ({
     try {
       const { data } = await messageAPI.list(channelId, options);
       if (revokedReportingChannels.has(channelId)) return;
-      const messages = data.data.items || [];
+      const messages = (data.data.items || []).filter(message => message.reportingMeta?.eventType !== 'leave.daily_report' || leaveRevision === useReportingHistoryStore.getState().revision);
       const hasMore = data.data.hasMore ?? false;
 
       set((state) => {
@@ -478,6 +480,7 @@ export const useChatStore = create((set, get) => ({
       logger.error("Failed to fetch messages:", error);
     } finally {
       fetching.delete(fetchKey);
+      if (leaveRevision !== useReportingHistoryStore.getState().revision) queueMicrotask(() => { void get().fetchMessages(channelId); });
     }
   },
 

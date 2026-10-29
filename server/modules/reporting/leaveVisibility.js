@@ -26,8 +26,8 @@ export async function leaveVisibilityFilter(options = {}) {
   if (!access?.active) return { 'reportingMeta.eventType': { $ne: 'leave.daily_report' } };
   const scope = effectiveLeaveScope(member);
   let ids = [context.userId];
-  if (scope?.allUsers) return { 'reportingMeta.leaveRetracted': { $ne: true } };
+  if (scope?.allUsers) return { $or: [{ 'reportingMeta.eventType': { $ne: 'leave.daily_report' } }, { workspaceId: new mongoose.Types.ObjectId(context.workspaceId), 'reportingMeta.leaveRetracted': { $ne: true } }] };
   if (scope?.employeeIds?.length) ids = [...ids, ...(await User.find({ flowTaskUserId: { $in: scope.employeeIds } }).select('_id').lean()).map(u => u._id)];
   return { $or: [{ 'reportingMeta.eventType': { $ne: 'leave.daily_report' } },
-    { 'reportingMeta.employeeId': { $in: ids.map(id => new mongoose.Types.ObjectId(id)) }, 'reportingMeta.leaveRetracted': { $ne: true } }] };
+    { workspaceId: new mongoose.Types.ObjectId(context.workspaceId), 'reportingMeta.employeeId': { $in: ids.map(id => new mongoose.Types.ObjectId(id)) }, 'reportingMeta.leaveRetracted': { $ne: true } }] };
 }

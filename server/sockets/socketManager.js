@@ -1,3 +1,4 @@
+import { leaveViewer } from '../modules/reporting/leaveVisibility.js';
 import { isReportingChannel, canAccessReportingChannel, reportingRecipients } from '../modules/reporting/reportingAccess.js';
 import env from '../config/environment.js';
 import { hasRecipientMembership, isRecipientChannel } from '../modules/channels/recipientChannelAccess.js';
@@ -257,6 +258,7 @@ export async function initializeSocket(httpServer, corsOptions) {
   // ─── Connection Handler ────────────────────────────────────────────────
 
   io.on('connection', async (socket) => {
+    socket.use((_packet, next) => leaveViewer.run({ userId: String(socket.chatUser._id), get workspaceId() { return socket.workspaceId; } }, () => next()));
     const user = socket.chatUser;
     const userId = user._id.toString();
     let wsId = socket.workspaceId;

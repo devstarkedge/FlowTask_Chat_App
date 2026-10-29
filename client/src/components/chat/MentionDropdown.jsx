@@ -94,7 +94,7 @@ const MentionDropdown = memo(function MentionDropdown({
           letterSpacing: '0.5px',
         }}
       >
-        {items[0]?.type === 'user' ? 'Members' : 'Channels'}
+        {items[0]?.type === 'user' || items[0]?.isSpecial ? 'Members & Special' : 'Channels'}
       </div>
       {items.map((item, i) => (
         <button
@@ -120,7 +120,25 @@ const MentionDropdown = memo(function MentionDropdown({
           }}
           onMouseEnter={() => setActiveIndex?.(i)}
         >
-          {item.type === 'user' ? (
+          {item.isSpecial ? (
+            <div
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--accent-primary, #3b82f6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 12,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              @
+            </div>
+          ) : item.type === 'user' ? (
             item.avatar ? (
               <img
                 src={item.avatar}
@@ -130,6 +148,7 @@ const MentionDropdown = memo(function MentionDropdown({
                   height: 24,
                   borderRadius: 'var(--radius-sm)',
                   objectFit: 'cover',
+                  flexShrink: 0,
                 }}
               />
             ) : (
@@ -145,6 +164,7 @@ const MentionDropdown = memo(function MentionDropdown({
                   color: 'white',
                   fontSize: 11,
                   fontWeight: 700,
+                  flexShrink: 0,
                 }}
               >
                 {(item.name || '?')[0].toUpperCase()}
@@ -153,9 +173,16 @@ const MentionDropdown = memo(function MentionDropdown({
           ) : (
             <Hash size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           )}
-          <span className="truncate" style={{ fontWeight: 500 }}>
-            {item.name}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+            <span className="truncate" style={{ fontWeight: 500 }}>
+              {item.isSpecial ? `@${item.name}` : item.name}
+            </span>
+            {item.description ? (
+              <span className="truncate" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {item.description}
+              </span>
+            ) : null}
+          </div>
         </button>
       ))}
     </div>,

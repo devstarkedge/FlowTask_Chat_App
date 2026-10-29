@@ -63,12 +63,26 @@ const MentionDropdown = React.memo(function MentionDropdown({
 
   const filteredMembers = useMemo(() => {
     const q = (searchQuery || '').trim().toLowerCase();
-    if (!q) return normalizedMembers;
-    return normalizedMembers.filter(m =>
-      (m.name || '').toLowerCase().includes(q) ||
-      (m.email || '').toLowerCase().includes(q) ||
-      (m.username || '').toLowerCase().includes(q)
-    );
+    const specialItems = [];
+    if (!q || 'channel'.includes(q) || 'everyone'.includes(q)) {
+      specialItems.push({
+        _id: 'channel',
+        id: 'channel',
+        name: 'channel',
+        username: 'channel',
+        type: 'channel',
+        isSpecial: true,
+        description: 'Notify everyone in this channel',
+      });
+    }
+    const matched = !q
+      ? normalizedMembers
+      : normalizedMembers.filter(m =>
+          (m.name || '').toLowerCase().includes(q) ||
+          (m.email || '').toLowerCase().includes(q) ||
+          (m.username || '').toLowerCase().includes(q)
+        );
+    return [...specialItems, ...matched];
   }, [normalizedMembers, searchQuery]);
 
   if (!visible) return null;
@@ -143,16 +157,29 @@ const MentionDropdown = React.memo(function MentionDropdown({
                       onPress={() => onSelect(item)}
                       activeOpacity={0.7}
                     >
-                      <AppAvatar user={item} size={34} showStatus={false} />
+                      {item.isSpecial ? (
+                        <View
+                          style={{
+                            width: scale(34),
+                            height: scale(34),
+                            borderRadius: moderateScale(8),
+                            backgroundColor: colors.primary,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <AtSign size={18} color="#ffffff" />
+                        </View>
+                      ) : (
+                        <AppAvatar user={item} size={34} showStatus={false} />
+                      )}
                       <View style={styles.memberInfo}>
                         <Text style={[styles.memberName, { color: colors.textPrimary }]} numberOfLines={1}>
-                          {item.name || 'Unknown User'}
+                          {item.isSpecial ? `@${item.name}` : (item.name || 'Unknown User')}
                         </Text>
-                        {item.email ? (
-                          <Text style={[styles.memberEmail, { color: colors.textTertiary }]} numberOfLines={1}>
-                            {item.email}
-                          </Text>
-                        ) : null}
+                        <Text style={[styles.memberEmail, { color: colors.textTertiary }]} numberOfLines={1}>
+                          {item.description || item.email || ''}
+                        </Text>
                       </View>
                       <View style={[styles.mentionBadge, { backgroundColor: colors.primary + '15' }]}>
                         <Text style={[styles.mentionBadgeText, { color: colors.primary }]}>Select</Text>

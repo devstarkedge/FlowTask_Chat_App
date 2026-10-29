@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import './src/i18n';
-import { Keyboard, Dimensions, AppState } from "react-native";
+import { Keyboard, Dimensions, AppState, View, Text, Image, ActivityIndicator, StyleSheet } from "react-native";
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -85,6 +88,20 @@ export default function App() {
     });
     return () => { cancelled = true; };
   }, [authInitialized, workspaceHydrated, accessToken, userId, activeWorkspaceId, navigationRestore.ready]);
+
+  useEffect(() => {
+    // Quickly hide native splash so our custom branded screen with logo appears
+    const timer = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 150);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (navigationRestore.ready && authInitialized) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [navigationRestore.ready, authInitialized]);
 
   const persistNavigation = state => {
     if (!accessToken) return;
@@ -194,13 +211,27 @@ export default function App() {
           <ErrorBoundary>
             <ThemeProvider>
               <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                {navigationRestore.ready && <NavigationContainer ref={navigationRef} linking={linking} initialState={navigationRestore.state}
-                  onReady={() => { persistNavigation(navigationRef.getRootState()); handlePushNavigationReady(); }}
-                  onStateChange={state => { persistNavigation(state); handlePushNavigationReady(); }}>
-                  <AppNavigator />
-                  <HuddleOverlay />
-                  <GlobalToastProvider />
-                </NavigationContainer>}
+                {navigationRestore.ready ? (
+                  <NavigationContainer
+                    ref={navigationRef}
+                    linking={linking}
+                    initialState={navigationRestore.state}
+                    onReady={() => {
+                      persistNavigation(navigationRef.getRootState());
+                      handlePushNavigationReady();
+                    }}
+                    onStateChange={(state) => {
+                      persistNavigation(state);
+                      handlePushNavigationReady();
+                    }}
+                  >
+                    <AppNavigator />
+                    <HuddleOverlay />
+                    <GlobalToastProvider />
+                  </NavigationContainer>
+                ) : (
+                  <SplashScreenFallback />
+                )}
               </KeyboardProvider>  
             </ThemeProvider>
           </ErrorBoundary>
@@ -209,3 +240,37 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+function SplashScreenFallback() {
+  return (
+    <View style={splashStyles.container}>
+      <Image
+        source={require('./assets/Vector.png')}
+        style={splashStyles.logo}
+        resizeMode="contain"
+      />
+      <Text style={splashStyles.title}>TaskChat</Text>
+      <ActivityIndicator size="small" color="#6366f1" style={{ marginTop: 24 }} />
+    </View>
+  );
+}
+
+const splashStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 96,
+    height: 96,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginTop: 16,
+    letterSpacing: -0.6,
+  },
+});

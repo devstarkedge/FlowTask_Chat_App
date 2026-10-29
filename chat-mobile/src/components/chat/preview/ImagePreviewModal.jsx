@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { X, Download, Image as ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
@@ -39,7 +40,8 @@ export default function ImagePreviewModal({
   // Dynamically compute the header top padding so it sits flush below the
   // status bar on every device (notched, Dynamic Island, legacy Android, etc.)
   // We do NOT hard-code any top margin — insets.top IS the status-bar height.
-  const headerTopPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 24);
+  const androidStatusBar = StatusBar.currentHeight || 24;
+  const headerTopPadding = Platform.OS === 'android' ? Math.max(insets.top, androidStatusBar) + verticalScale(8) : Math.max(insets.top, 44);
 
   useEffect(() => {
     if (!visible) {

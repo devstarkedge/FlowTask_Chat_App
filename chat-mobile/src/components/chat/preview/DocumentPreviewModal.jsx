@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Modal,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { X, Download } from 'lucide-react-native';
@@ -49,10 +50,10 @@ export default function DocumentPreviewModal({
   );
 
   const insets = useSafeAreaInsets();
-  // Use only the true device safe-area inset — no hardcoded platform minimum.
-  // statusBarTranslucent means the modal starts behind the status bar, so
-  // insets.top gives us the exact pixels we need to clear it.
-  const headerTopPadding = insets.top;
+  const androidStatusBar = StatusBar.currentHeight || 24;
+  const headerTopPadding = Platform.OS === 'android'
+    ? Math.max(insets.top, androidStatusBar) + verticalScale(8)
+    : Math.max(insets.top, 44);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -226,6 +227,7 @@ export default function DocumentPreviewModal({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <SafeAreaProvider>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <View style={styles.modalBg}>
           <View style={[styles.header, { paddingTop: headerTopPadding }]}>
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}>

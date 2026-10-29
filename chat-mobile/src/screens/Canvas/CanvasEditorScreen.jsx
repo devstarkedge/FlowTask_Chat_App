@@ -20,7 +20,7 @@ import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useThemeStore } from '../../stores/themeStore';
-import { fileAPI, directoriesAPI } from '../../services/api';
+import { fileAPI, directoriesAPI, canvasAPI } from '../../services/api';
 import CanvasHeader from '../../components/canvas/CanvasHeader';
 import CanvasFormatToolbar from '../../components/canvas/CanvasFormatToolbar';
 import CanvasInsertSheet from '../../components/canvas/CanvasInsertSheet';
@@ -32,7 +32,8 @@ import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import logger from '../../utils/logger';
 
 export default function CanvasEditorScreen({ route, navigation }) {
-  const { canvasId, channelId } = route.params || {};
+  const { canvasId: routeCanvasId, token, channelId } = route?.params || {};
+  const [activeCanvasId, setActiveCanvasId] = useState(routeCanvasId);
   const webviewRef = useRef(null);
   const [editorReady, setEditorReady] = useState(false);
   const [selectionState, setSelectionState] = useState({});
@@ -66,6 +67,8 @@ export default function CanvasEditorScreen({ route, navigation }) {
     fetchHistory,
   } = useCanvasStore();
 
+  const canvasId = activeCanvasId || activeCanvas?._id || routeCanvasId;
+
   /**
    * Keep WebView frame stable relative to the closed-keyboard toolbar slot.
    * When keyboard is visible, resize the WebView container so its viewport
@@ -82,18 +85,39 @@ export default function CanvasEditorScreen({ route, navigation }) {
   const editorScrollInset = 0;
 
   useEffect(() => {
+    if (routeCanvasId && routeCanvasId !== activeCanvasId) {
+      setActiveCanvasId(routeCanvasId);
+    }
+  }, [routeCanvasId]);
+
+  useEffect(() => {
+    if (!activeCanvasId && token) {
+      canvasAPI.getPublic(token)
+        .then((res) => {
+          const c = res.data?.data?.canvas || res.data?.data;
+          if (c?._id) {
+            setActiveCanvasId(c._id);
+          }
+        })
+        .catch((err) => {
+          logger.warn('Failed to resolve public canvas token', err);
+        });
+    }
+  }, [token, activeCanvasId]);
+
+  useEffect(() => {
     directoriesAPI.getUsers().then((res) => {
       setAllUsers(res.data?.data || []);
     }).catch(() => {});
 
-    if (canvasId) {
-      loadCanvas(canvasId);
-      fetchHistory(canvasId);
+    if (activeCanvasId) {
+      loadCanvas(activeCanvasId);
+      fetchHistory(activeCanvasId);
     }
     return () => {
       clearActiveCanvas();
     };
-  }, [canvasId]);
+  }, [activeCanvasId]);
 
   const sendEditorCommand = useCallback((command, value = null) => {
     if (webviewRef.current) {

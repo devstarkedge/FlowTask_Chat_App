@@ -18,6 +18,7 @@ import { Node, mergeAttributes } from '@tiptap/core'
 
 const resolveFallbackLabel = (id, mentionType) => {
   if (!id) return ''
+  if (id === 'channel') return 'channel'
   try {
     if (mentionType === 'channel') {
       const channel = useChannelStore?.getState?.()?.channels?.find?.((c) => String(c._id) === String(id))
@@ -99,19 +100,21 @@ const MentionNode = Node.create({
   },
 
   renderText({ node }) {
-    const prefix = node.attrs.mentionType === 'channel' ? '#' : '@'
+    const isBroadcast = node.attrs.id === 'channel' || node.attrs.label === 'channel' || node.attrs.label === 'everyone' || node.attrs.label === 'here';
+    const prefix = (node.attrs.mentionType === 'channel' && !isBroadcast) ? '#' : '@'
     let label = node.attrs.label
     if (!label || label === 'null' || label === 'undefined') {
-      label = resolveFallbackLabel(node.attrs.id, node.attrs.mentionType) || 'User'
+      label = resolveFallbackLabel(node.attrs.id, node.attrs.mentionType) || (isBroadcast ? 'channel' : 'User')
     }
     return `${prefix}${label}`
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const prefix = node.attrs.mentionType === 'channel' ? '#' : '@'
+    const isBroadcast = node.attrs.id === 'channel' || node.attrs.label === 'channel' || node.attrs.label === 'everyone' || node.attrs.label === 'here';
+    const prefix = (node.attrs.mentionType === 'channel' && !isBroadcast) ? '#' : '@'
     let label = node.attrs.label
     if (!label || label === 'null' || label === 'undefined') {
-      label = resolveFallbackLabel(node.attrs.id, node.attrs.mentionType) || 'User'
+      label = resolveFallbackLabel(node.attrs.id, node.attrs.mentionType) || (isBroadcast ? 'channel' : 'User')
     }
     return [
       'span',
@@ -237,10 +240,11 @@ const RichTextEditor = forwardRef(function RichTextEditor(
         const mentions = []
         editor.state.doc.descendants((node) => {
           if (node.type.name === 'mention') {
+            const isBroadcast = node.attrs.id === 'channel' || node.attrs.label === 'channel' || node.attrs.label === 'everyone' || node.attrs.label === 'here';
             mentions.push({
               userId: node.attrs.id,
               username: node.attrs.label,
-              type: node.attrs.mentionType || 'user'
+              type: isBroadcast ? 'channel' : (node.attrs.mentionType || 'user')
             })
           }
         })
@@ -281,9 +285,10 @@ const RichTextEditor = forwardRef(function RichTextEditor(
       /** Insert a mention node */
       insertMention(id, label, mentionType = 'user', range = null) {
         if (!editor) return
+        const isBroadcast = id === 'channel' || label === 'channel' || label === 'everyone' || label === 'here';
         const safeLabel = (label && label !== 'null' && label !== 'undefined')
           ? label
-          : (resolveFallbackLabel(id, mentionType) || 'User')
+          : (resolveFallbackLabel(id, mentionType) || (isBroadcast ? 'channel' : 'User'))
 
         const content = [
           {

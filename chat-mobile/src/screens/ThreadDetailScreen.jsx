@@ -20,6 +20,9 @@ import { laterAPI, threadAPI, pinsAPI } from '../services/api';
 import { formatRelativeTimeLong, formatMessageTime } from '../utils/dateUtils';
 import { ScreenLayout, AppAvatar, HeaderBackButton, MobileFileCard } from '../components/common';
 import RichText from '../components/RichText';
+import CanvasDocumentCard from '../components/chat/CanvasDocumentCard';
+import HuddleLinkCard from '../components/chat/HuddleLinkCard';
+import { extractCanvasInfo, extractHuddleLinks } from '../utils/chatLinkCards';
 import ReactionBar from '../components/ReactionBar';
 import EmojiPickerModal from '../components/EmojiPickerModal';
 import ReminderModal from '../components/ReminderModal';
@@ -119,6 +122,19 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     replyCount: initialReplyCount,
   };
 
+  const rootCanvasData = extractCanvasInfo(effectiveRoot);
+  const rootHuddleLinks = extractHuddleLinks(effectiveRoot, channelId);
+  const rootOnlyCard =
+    (rootCanvasData && rootCanvasData.isOnlyLink) ||
+    (rootHuddleLinks.length > 0 && rootHuddleLinks.every((l) => l.isOnlyLink));
+  const rootResolvedText = rootOnlyCard
+    ? ''
+    : rootCanvasData?.cleanText ?? (rootHuddleLinks[0]?.cleanText ?? effectiveRoot.content);
+  const rootShowText =
+    !rootOnlyCard &&
+    (!!(rootResolvedText || '').trim() ||
+      !!(effectiveRoot.htmlContent || '').replace(/<[^>]*>/g, '').trim());
+
   const renderReply = useCallback(({ item, index }) => {
     const sender = resolveAuthor(item);
     const name = sender?.name || sender?.email || 'Unknown';
@@ -131,6 +147,19 @@ const ThreadDetailScreen = ({ route, navigation }) => {
     if (!prevItem && new Date(item.createdAt).toDateString() === new Date().toDateString()) {
       showToday = true;
     }
+
+    const itemCanvasData = extractCanvasInfo(item);
+    const itemHuddleLinks = extractHuddleLinks(item, channelId);
+    const itemOnlyCard =
+      (itemCanvasData && itemCanvasData.isOnlyLink) ||
+      (itemHuddleLinks.length > 0 && itemHuddleLinks.every((l) => l.isOnlyLink));
+    const itemResolvedText = itemOnlyCard
+      ? ''
+      : itemCanvasData?.cleanText ?? (itemHuddleLinks[0]?.cleanText ?? item.content);
+    const itemShowText =
+      !itemOnlyCard &&
+      (!!(itemResolvedText || '').trim() ||
+        !!(item.htmlContent || '').replace(/<[^>]*>/g, '').trim());
 
     return (
       <View key={item._id}>
@@ -238,18 +267,40 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                 />
               ) : item.contentType === 'gif' && item.gifMeta ? (
                 <GifRenderer item={item} contentColor={colors.textPrimary} styles={styles} />
-              ) : !!(item.htmlContent || item.content) && (
-                <RichText
-                  html={item.htmlContent || (/<[a-z][\s\S]*>/i.test(item.content) ? item.content : undefined)}
-                  text={item.content}
-                  mentions={item.mentions}
-                  onMentionPress={(userId) => {
-                    navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
-                  }}
-                  colors={{ ...colors, textPrimary: colors.textPrimary }}
-                  baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(15), lineHeight: 22 }}
-                />
-              )}
+              ) : (itemShowText || itemCanvasData || itemHuddleLinks.length > 0) ? (
+                <View>
+                  {itemShowText && (
+                    <RichText
+                      html={item.htmlContent || (/<[a-z][\s\S]*>/i.test(itemResolvedText) ? itemResolvedText : undefined)}
+                      text={itemResolvedText}
+                      mentions={item.mentions}
+                      onMentionPress={(userId) => {
+                        navigation.navigate('UserProfile', { user: { _id: userId }, channelId });
+                      }}
+                      colors={{ ...colors, textPrimary: colors.textPrimary }}
+                      baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(15), lineHeight: 22 }}
+                    />
+                  )}
+                  {itemCanvasData && (
+                    <CanvasDocumentCard
+                      canvasData={itemCanvasData}
+                      channelId={channelId}
+                      navigation={navigation}
+                      colors={colors}
+                    />
+                  )}
+                  {itemHuddleLinks.length > 0 &&
+                    itemHuddleLinks.map((link, idx) => (
+                      <HuddleLinkCard
+                        key={`${link.workspaceId || 'ws'}:${link.channelId || idx}`}
+                        link={link}
+                        channelId={channelId}
+                        channelName={channelName}
+                        colors={colors}
+                      />
+                    ))}
+                </View>
+              ) : null}
               {(!item.htmlContent && !item.content && itemAttachments.length > 0) && (
                 <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: moderateScale(14) }}>
                   [Media attached]
@@ -374,16 +425,38 @@ const ThreadDetailScreen = ({ route, navigation }) => {
                   />
                 ) : effectiveRoot.contentType === 'gif' && effectiveRoot.gifMeta ? (
                   <GifRenderer item={effectiveRoot} contentColor={colors.textPrimary} styles={styles} />
-                ) : !!(effectiveRoot.htmlContent || effectiveRoot.content) && (
-                  <RichText
-                    html={effectiveRoot.htmlContent || (/<[a-z][\s\S]*>/i.test(effectiveRoot.content) ? effectiveRoot.content : undefined)}
-                    text={effectiveRoot.content}
-                    mentions={effectiveRoot.mentions}
-                    onMentionPress={(userId) => { navigation.navigate('UserProfile', { user: { _id: userId }, channelId }); }}
-                    colors={{ ...colors, textPrimary: colors.textPrimary }}
-                    baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(16), lineHeight: 24 }}
-                  />
-                )}
+                ) : (rootShowText || rootCanvasData || rootHuddleLinks.length > 0) ? (
+                  <View>
+                    {rootShowText && (
+                      <RichText
+                        html={effectiveRoot.htmlContent || (/<[a-z][\s\S]*>/i.test(rootResolvedText) ? rootResolvedText : undefined)}
+                        text={rootResolvedText}
+                        mentions={effectiveRoot.mentions}
+                        onMentionPress={(userId) => { navigation.navigate('UserProfile', { user: { _id: userId }, channelId }); }}
+                        colors={{ ...colors, textPrimary: colors.textPrimary }}
+                        baseStyle={{ color: colors.textPrimary, fontSize: moderateScale(16), lineHeight: 24 }}
+                      />
+                    )}
+                    {rootCanvasData && (
+                      <CanvasDocumentCard
+                        canvasData={rootCanvasData}
+                        channelId={channelId}
+                        navigation={navigation}
+                        colors={colors}
+                      />
+                    )}
+                    {rootHuddleLinks.length > 0 &&
+                      rootHuddleLinks.map((link, idx) => (
+                        <HuddleLinkCard
+                          key={`${link.workspaceId || 'ws'}:${link.channelId || idx}`}
+                          link={link}
+                          channelId={channelId}
+                          channelName={channelName}
+                          colors={colors}
+                        />
+                      ))}
+                  </View>
+                ) : null}
                 {(!effectiveRoot.htmlContent && !effectiveRoot.content && effectiveRootAttachments.length > 0) && (
                   <Text style={{ color: colors.textSecondary, fontStyle: 'italic', fontSize: moderateScale(15) }}>[Media attached]</Text>
                 )}

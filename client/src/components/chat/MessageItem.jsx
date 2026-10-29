@@ -11,7 +11,7 @@ import { useChannelStore } from "../../stores/channelStore";
 import { format } from "date-fns";
 import { Smile, MessageSquare, Edit, Trash2, Pin, FileText, Download, Image as ImageIcon, File, FileArchive, FileCode, Film, Music, Check, CheckCheck, CheckSquare, Square, Copy, Bookmark, BookmarkCheck, Forward, Link2, MoreVertical, Info, ChevronDown, Save, Clock, AlertCircle } from "lucide-react";
 import { useLaterStore } from "../../stores/laterStore";
-import SlackFileCard from "./SlackFileCard";
+import SlackFileCard, { getFileKind } from "./SlackFileCard";
 import { ReactionRenderer } from "../shared/EmojiRenderer";
 import { Avatar } from "./MemberAvatarGroup";
 import EmojiPicker from "./EmojiPicker";
@@ -74,6 +74,61 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
       border-bottom: 1px solid var(--border-primary, rgba(255,255,255,0.1));
       background: var(--bg-secondary, #222529);
       flex-wrap: wrap;
+    }
+
+
+    .inline-editor-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 4px 12px 10px;
+      align-items: center;
+    }
+    .inline-editor-attachment-item {
+      display: inline-flex;
+      align-items: center;
+    }
+    .inline-editor-thumb-box {
+      width: 58px;
+      height: 58px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.15));
+      background: var(--bg-secondary, #222529);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+      flex-shrink: 0;
+      transition: transform 120ms ease, border-color 120ms ease;
+    }
+    .inline-editor-thumb-box:hover {
+      border-color: var(--accent-primary, #1264a3);
+      transform: scale(1.03);
+    }
+    .inline-editor-thumb-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 7px;
+    }
+    .inline-editor-file-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.15));
+      background: var(--bg-secondary, #222529);
+      font-size: 12px;
+      color: var(--text-primary);
+      max-width: 220px;
+    }
+    .inline-editor-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .inline-editor-content {
@@ -241,14 +296,30 @@ function fileIcon(mimeType) {
 
 const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
 
-// ─── InlineEditor ─────────────────────────────────────────────────────────────
+// ─── InlineEditor ───────────────────────────────────────────────────────────
+function isImageAttachment(file) {
+  if (!file) return false;
+  const mime = (file.mimeType || file.type || '').toLowerCase();
+  if (mime.startsWith('image/')) return true;
+  const name = file.originalName || file.fileName || file.name || '';
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+}
+
+function getAttachmentThumb(file) {
+  if (!file) return '';
+  const direct = file.thumbnailUrl || file.preview || file.secureUrl || file.url || '';
+  if (direct) return getFileUrl({ ...file, url: direct });
+  return getFileUrl(file) || '';
+}
+
 
 /**
  * Inline message editor — uses RichTextEditor (TipTap) and the shared
  * FormattingToolbar. Formatting is preserved because we pass `html` (TipTap
  * HTML output) to `onSave`, which the store stores as `htmlContent`.
  */
-function InlineEditor({ initialHtml, initialText, channelId, onSave, onCancel }) {
+function InlineEditor({ initialHtml, initialText, channelId, attachments = [], onSave, onCancel }) {
   const editorRef = useRef(null);
   const wrapRef = useRef(null);
 
@@ -338,12 +409,12 @@ function InlineEditor({ initialHtml, initialText, channelId, onSave, onCancel })
 
     const { html, text } = ed.getContent();
 
-    // Require at least some non-whitespace text content
-    if (!text?.trim()) return;
+    const hasAttachments = attachments && attachments.length > 0;
+    if (!hasAttachments && !text?.trim()) return;
 
     // Pass both HTML (for rich rendering) and plain text (for search/preview)
     onSave(html, text);
-  }, [onSave]);
+  }, [onSave, attachments]);
 
   const handleEditorInput = useCallback(() => {
     syncFormatState();
@@ -366,7 +437,7 @@ function InlineEditor({ initialHtml, initialText, channelId, onSave, onCancel })
       <div className="inline-editor-content">
         <RichTextEditor
           ref={editorRef}
-          placeholder="Edit message…"
+          placeholder={initialText || initialHtml ? "Edit message…" : "Add message"}
           onInput={handleEditorInput}
           onSubmit={handleSave}
           onKeyDown={(e) => {
@@ -376,6 +447,36 @@ function InlineEditor({ initialHtml, initialText, channelId, onSave, onCancel })
             return false;
           }}
         />
+
+
+        {/* Attachment Previews in Edit Mode */}
+        {attachments && attachments.length > 0 && (
+          <div className="inline-editor-attachments">
+            {attachments.map((file, idx) => {
+              const isImg = isImageAttachment(file);
+              const thumbSrc = getAttachmentThumb(file);
+              const name = file.originalName || file.fileName || file.name || "Attachment";
+              return (
+                <div
+                  key={file._id || file.fileId || idx}
+                  className="inline-editor-attachment-item"
+                  title={name}
+                >
+                  {isImg && thumbSrc ? (
+                    <div className="inline-editor-thumb-box">
+                      <img src={thumbSrc} alt={name} loading="lazy" />
+                    </div>
+                  ) : (
+                    <div className="inline-editor-file-box">
+                      <FileText size={18} style={{ color: "var(--accent-primary, #1264a3)", flexShrink: 0 }} />
+                      <span className="inline-editor-file-name">{name}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Mention Dropdown */}
         {mentionType && (
@@ -628,38 +729,7 @@ const MessageItem = memo(
       ? "var(--text-muted)"
       : "var(--text-secondary)";
 
-    /**
-     * Called by InlineEditor when the user saves.
-     * `html`  — TipTap HTML (bold, lists, code, etc.) — stored as htmlContent
-     * `text`  — plain-text equivalent              — stored as content
-     */
-    const handleEdit = useCallback(
-      (html, text) => {
-        if (text?.trim()) {
-          editMessage(message._id, {
-            content: text,
-            htmlContent: html,
-          });
-        }
-        clearEditingMessageId();
-      },
-      [editMessage, message._id, clearEditingMessageId],
-    );
-
-    const handleReaction = (emoji) => {
-      const currentUserId = String(user?._id || "");
-      const existing = message.reactions?.find(
-        (r) =>
-          r.emoji === emoji &&
-          (r.users?.some((id) => String(id?._id || id) === currentUserId) ||
-            r.userIds?.some((id) => String(id) === currentUserId)),
-      );
-      if (existing) removeReaction(message._id, emoji, message.channelId);
-      else addReaction(message._id, emoji, message.channelId);
-      setShowReactionPicker(false);
-    };
-
-    let derivedAttachments = [];
+let derivedAttachments = [];
     if (message.fileReferences?.length > 0) {
       derivedAttachments = message.fileReferences
         .map((ref) => {
@@ -685,6 +755,40 @@ const MessageItem = memo(
     if (derivedAttachments.length === 0 && message.attachments?.length > 0) {
       derivedAttachments = message.attachments;
     }
+
+    /**
+     * Called by InlineEditor when the user saves.
+     * `html`  — TipTap HTML (bold, lists, code, etc.) — stored as htmlContent
+     * `text`  — plain-text equivalent              — stored as content
+     */
+    const handleEdit = useCallback(
+      (html, text) => {
+        const hasAttachments = derivedAttachments && derivedAttachments.length > 0;
+        if (text?.trim() || hasAttachments) {
+          editMessage(message._id, {
+            content: text || "",
+            htmlContent: html || "",
+          });
+        }
+        clearEditingMessageId();
+      },
+      [editMessage, message._id, clearEditingMessageId, derivedAttachments],
+    );
+
+    const handleReaction = (emoji) => {
+      const currentUserId = String(user?._id || "");
+      const existing = message.reactions?.find(
+        (r) =>
+          r.emoji === emoji &&
+          (r.users?.some((id) => String(id?._id || id) === currentUserId) ||
+            r.userIds?.some((id) => String(id) === currentUserId)),
+      );
+      if (existing) removeReaction(message._id, emoji, message.channelId);
+      else addReaction(message._id, emoji, message.channelId);
+      setShowReactionPicker(false);
+    };
+
+    
 
     // System messages
     if (message.huddleMeta) return <HuddleSummary message={message}/>;
@@ -1055,6 +1159,7 @@ const MessageItem = memo(
                   initialHtml={message.htmlContent || ""}
                   initialText={message.content}
                   channelId={message.channelId || channelId}
+                  attachments={derivedAttachments}
                   onSave={handleEdit}
                   onCancel={clearEditingMessageId}
                 />
@@ -1162,18 +1267,20 @@ const MessageItem = memo(
                       </span>
                     </div>
                   ) : (
-                    <div
-                      className="flex items-center gap-1 text-[13px] font-medium mb-1"
-                      style={{ color: "inherit", opacity: 0.85 }}
-                    >
-                      <span className="cursor-pointer flex items-center gap-1 hover:underline">
-                        {derivedAttachments[0].originalName ||
-                          derivedAttachments[0].fileName ||
-                          derivedAttachments[0].name ||
-                          "File"}{" "}
-                        <ChevronDown size={14} style={{ opacity: 0.7 }} />
-                      </span>
-                    </div>
+                    !["image", "video"].includes(getFileKind(derivedAttachments[0]?.mimeType || derivedAttachments[0]?.type, derivedAttachments[0]?.originalName || derivedAttachments[0]?.fileName || derivedAttachments[0]?.name)) && (
+                      <div
+                        className="flex items-center gap-1 text-[13px] font-medium mb-1"
+                        style={{ color: "inherit", opacity: 0.85 }}
+                      >
+                        <span className="cursor-pointer flex items-center gap-1 hover:underline">
+                          {derivedAttachments[0].originalName ||
+                            derivedAttachments[0].fileName ||
+                            derivedAttachments[0].name ||
+                            "File"}{" "}
+                          <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                        </span>
+                      </div>
+                    )
                   )}
                   <div className="flex flex-wrap gap-2">
                     {derivedAttachments.map((att, idx) => (

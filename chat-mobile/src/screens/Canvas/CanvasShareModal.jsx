@@ -10,9 +10,12 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { X, Shield, Globe, Check } from "lucide-react-native";
+import { X, Shield, Globe, Check, Copy } from "lucide-react-native";
+import * as Clipboard from 'expo-clipboard';
+import Toast from 'react-native-toast-message';
 import Avatar from '../../components/Avatar';
 import api from '../../services/api';
+import ENV from '../../config/environment';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 
@@ -93,6 +96,18 @@ export default function CanvasShareModal({ visible, onClose, canvasId }) {
                   thumbColor={isPublic ? '#4f46e5' : '#f4f3f4'}
                 />
               </View>
+
+              <TouchableOpacity
+                onPress={async () => {
+                  const url = `${ENV.CLIENT_URL}/canvas/${canvasId}`;
+                  await Clipboard.setStringAsync(url);
+                  Toast.show({ type: 'success', text1: 'Canvas link copied to clipboard' });
+                }}
+                style={styles.copyLinkBtn}
+              >
+                <Copy size={16} color="#4f46e5" style={{ marginRight: scale(8) }} />
+                <Text style={styles.copyLinkText}>Copy Canvas Link</Text>
+              </TouchableOpacity>
 
               <Text style={styles.sectionHeader}>Channel Members</Text>
               <FlatList
@@ -245,5 +260,22 @@ const styles = StyleSheet.create({
     padding: moderateScale(40),
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  copyLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: verticalScale(10),
+    paddingHorizontal: scale(14),
+    borderRadius: moderateScale(8),
+    borderWidth: 1,
+    borderColor: '#e0e7ff',
+    backgroundColor: '#f5f3ff',
+    marginBottom: verticalScale(16),
+  },
+  copyLinkText: {
+    fontSize: moderateScale(13),
+    fontWeight: '600',
+    color: '#4f46e5',
   },
 });

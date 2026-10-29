@@ -43,6 +43,12 @@ const trace = (stage, details = {}) => logger.info('[Push]', { stage, platform: 
 export { IOS_NOTIFICATION_SOUND as FLOWTASK_NOTIFICATION_SOUND } from '../constants/notificationSounds';
 let _navigationRef = null;
 export const setNavigationRef = (ref) => { _navigationRef = ref; };
+export const getNavigationRef = () => _navigationRef;
+export const navigateApp = (screen, params) => {
+  if (_navigationRef && _navigationRef.isReady()) {
+    _navigationRef.navigate(screen, params);
+  }
+};
 export const handlePushNavigationReady = () => { void _flushResponse(); };
 
 // Helper to check if running inside Expo Go app

@@ -14,13 +14,15 @@ import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 
 export default function UnsupportedPreviewModal({ visible, name, fileUrl, mimeType, onClose }) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = insets.top; // purely inset-derived, no hardcoded fallback
+  const androidStatusBar = StatusBar.currentHeight || 24;
+  const headerTopPadding = Platform.OS === 'android' ? Math.max(insets.top, androidStatusBar) + verticalScale(8) : Math.max(insets.top, 44);
   const handleDownload = async () => {
     await downloadAndSaveFile(fileUrl, name, mimeType);
   };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <SafeAreaProvider>
         <View style={styles.modalBg}>
           <View style={[styles.header, { paddingTop: headerTopPadding }]}>

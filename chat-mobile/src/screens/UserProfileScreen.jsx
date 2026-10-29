@@ -15,6 +15,9 @@ import { useThemeStore } from '../stores/themeStore';
 import { useWorkspaceMembers } from '../hooks/queries/useWorkspaceMembers';
 import { useChannelStore } from '../stores/channelStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useHuddleUiStore } from '../stores/huddleUiStore';
+import * as Clipboard from 'expo-clipboard';
+import ENV from '../config/environment';
 import { MessageSquare, Clock, Mail, Headphones, UserX, Shield } from "lucide-react-native";
 import { formatMessageTime } from '../utils/dateUtils';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -138,8 +141,32 @@ const UserProfileScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleHuddle = () => {
-    Toast.show({ type: 'info', text1: 'Huddles are coming soon!' });
+  const handleHuddle = async () => {
+    try {
+      const channel = await createDM(targetIdStr);
+      const channelId = channel?._id || channel?.id;
+      if (channelId) {
+        const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+        useHuddleUiStore.getState().openPanel({ channelId, workspaceId, label: liveUser.name || 'Huddle' });
+      }
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Failed to start huddle' });
+    }
+  };
+
+  const handleCopyHuddle = async () => {
+    try {
+      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+      const channel = await createDM(targetIdStr);
+      const channelId = channel?._id || channel?.id;
+      if (channelId) {
+        const url = `${ENV.CLIENT_URL}/workspace/${workspaceId}/channel/${channelId}?huddle=1`;
+        await Clipboard.setStringAsync(url);
+        Toast.show({ type: 'success', text1: 'Huddle link copied to clipboard' });
+      }
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Failed to generate huddle link' });
+    }
   };
 
   const imageSize = Math.min(width - scale(32), scale(320));

@@ -92,6 +92,19 @@ export function useMentions({ channelId, editorRef }) {
       const q = mentionQuery.toLowerCase()
       const candidateMap = new Map()
 
+      // Special broadcast mention: @channel
+      const specialItems = []
+      if (!q || 'channel'.includes(q) || 'everyone'.includes(q)) {
+        specialItems.push({
+          id: 'channel',
+          name: 'channel',
+          displayName: 'channel',
+          description: 'Notify everyone in this channel',
+          type: 'channel',
+          isSpecial: true,
+        })
+      }
+
       // 1. Channel members (highest priority)
       if (Array.isArray(members) && members.length > 0) {
         members.forEach((m) => {
@@ -148,12 +161,14 @@ export function useMentions({ channelId, editorRef }) {
         })
       }
 
-      return Array.from(candidateMap.values())
+      const filtered = Array.from(candidateMap.values())
         .filter((m) => {
           if (!q) return true
           return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
         })
         .slice(0, 8)
+
+      return [...specialItems, ...filtered]
     }
 
     if (mentionType === 'channel') {
@@ -243,7 +258,7 @@ export function useMentions({ channelId, editorRef }) {
       ed.insertMention(
         item.id,
         item.name,
-        item.type === 'user' ? 'user' : 'channel',
+        item.isSpecial ? 'channel' : (item.type === 'user' ? 'user' : 'channel'),
         deleteCount > 0 ? { from: startPos, to: from } : null,
       )
       closeMentions()

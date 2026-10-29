@@ -16,41 +16,43 @@ export function contextLabel(context) {
   if (context.kind === 'INDIVIDUAL') return `Individual / ${clean(context.agenda) || 'Individual work'}${context.description ? ` — ${clean(context.description)}` : ''}${context.attributed ? ` (attributed to ${clean(context.project)} / ${clean(context.task)})` : ''}`;
   return `${clean(context.project) || 'Project'} / ${clean(context.task) || 'Task'}`;
 }
-export function formatReportingMessage(payload, department) {
+export function formatReportingMessage(payload) {
   let zone = payload.timezone || 'UTC';
   try { new Intl.DateTimeFormat('en', { timeZone: zone }); } catch { zone = 'UTC'; }
   const time = value => value ? new Intl.DateTimeFormat('en-IN', { timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(value)) : '—';
-  const titles = { 'attendance.checked_in': '🟢 CHECK-IN — Work Started', 'tracking.work_started': '🟢 WORK TRACKING STARTED',
-    'tracking.work_switched': '🔄 WORK SWITCHED', 'tracking.break_started': '☕ PERSONAL BREAK STARTED',
-    'tracking.work_resumed': '▶️ WORK RESUMED', 'attendance.checked_out': '🔴 CHECK-OUT — Daily Work Completed' };
-  const title = payload.eventType === 'attendance.checked_in' && !payload.trackingStarted ? '🟢 CHECK-IN — Attendance Confirmed' : titles[payload.eventType];
-  const lines = [title, `Employee: ${clean(payload.employee.name)}`, `Department: ${clean(department.name)}`,
-    `Workday: ${clean(payload.workDateKey)}`, `Time: ${time(payload.occurredAt)} (${zone})`];
+  const titles = { 'attendance.checked_in': 'Checked in', 'tracking.work_started': 'Work started',
+    'tracking.work_switched': 'Switched work', 'tracking.break_started': 'On a break',
+    'tracking.work_resumed': 'Work resumed', 'attendance.checked_out': 'Checked out' };
+  const lines = [titles[payload.eventType], 'Employee: ' + clean(payload.employee.name),
+    'Workday: ' + clean(payload.workDateKey), 'Time: ' + time(payload.occurredAt)];
   switch (payload.eventType) {
     case 'attendance.checked_in':
     case 'tracking.work_started':
-      lines.push(`Check-In: ${time(payload.checkInAt)}`, `Work Mode: ${clean(payload.workMode) || '—'}`,
-        `Tracking: ${payload.current?.kind === 'TASK' ? 'Assigned Task' : payload.current ? 'Individual Work' : 'Not started'}`,
-        contextLabel(payload.current), `Status: ${payload.trackingStarted ? 'Checked In & Tracking Started' : 'Checked In — Work tracking not started'}`); break;
+      if (payload.workMode) lines.push('Work mode: ' + clean(payload.workMode));
+      lines.push('Work: ' + contextLabel(payload.current));
+      if (!payload.trackingStarted) lines.push('Tracking has not started.');
+      break;
     case 'tracking.work_switched':
-      lines.push('', 'Previous Work', contextLabel(payload.previous), `Started: ${time(payload.previous?.startedAt)}`,
-        `Ended: ${time(payload.previous?.endedAt || payload.occurredAt)}`, `Duration: ${duration(payload.previousSeconds)}`,
-        '', 'New Work', contextLabel(payload.current), `Started: ${time(payload.current?.startedAt)}`, 'Status: Tracking Continued'); break;
+      lines.push('From: ' + contextLabel(payload.previous) + ' · ' + time(payload.previous?.startedAt) + '–' + time(payload.previous?.endedAt || payload.occurredAt) + ' · ' + duration(payload.previousSeconds),
+        'Now: ' + contextLabel(payload.current));
+      break;
     case 'tracking.break_started':
-      lines.push(`Previous Work: ${contextLabel(payload.previous)}`, `Work Completed So Far: ${duration(payload.workSeconds)}`, 'Status: On Personal Pause'); break;
+      lines.push('Work: ' + contextLabel(payload.previous), 'Worked: ' + duration(payload.workSeconds));
+      break;
     case 'tracking.work_resumed':
-      lines.push(`Break Started: ${time(payload.breakStartedAt)}`, `Personal Break Duration: ${duration(payload.breakSeconds)}`,
-        `Resuming: ${contextLabel(payload.current)}`, 'Status: Tracking Running'); break;
+      lines.push('Break: ' + duration(payload.breakSeconds), 'Work: ' + contextLabel(payload.current));
+      break;
     case 'attendance.checked_out':
-      lines.push(`Check-In: ${time(payload.checkInAt)}`, `Check-Out: ${time(payload.checkOutAt)}`, '', 'Attendance',
-        `Attendance Duration: ${duration(payload.attendanceSeconds)}`, `Attendance Status: ${clean(payload.outcome?.label || payload.outcome?.presenceState)}`,
-        `Leave: ${clean(payload.outcome?.leaveState) || 'NONE'}`, '', 'Work Summary');
-      for (const [index, row] of (payload.summary?.rows || []).entries()) lines.push(`${index + 1}. ${contextLabel(row)} — ${duration(row.seconds)}`);
-      lines.push(`Total Tracked Work: ${duration(payload.summary?.workSeconds)}`, `Total Personal Pause: ${duration(payload.summary?.personalPauseSeconds)}`);
-      if (payload.outcome?.provisional) lines.push('Attendance outcome is provisional — review required.');
-      if (payload.pendingEvidenceUploads) lines.push(`Pending evidence uploads: ${payload.pendingEvidenceUploads} (work time comes from saved tracking segments).`);
-      lines.push('Status: Checked Out — Work Completed'); break;
+      lines.push('Hours: ' + time(payload.checkInAt) + '–' + time(payload.checkOutAt),
+        'Attendance: ' + duration(payload.attendanceSeconds), 'Tracked work: ' + duration(payload.summary?.workSeconds),
+        'Personal breaks: ' + duration(payload.summary?.personalPauseSeconds));
+      for (const row of payload.summary?.rows || []) lines.push(contextLabel(row) + ' — ' + duration(row.seconds));
+      if (payload.outcome?.label || payload.outcome?.presenceState) lines.push('Outcome: ' + clean(payload.outcome.label || payload.outcome.presenceState));
+      if (payload.outcome?.leaveState && payload.outcome.leaveState !== 'NONE') lines.push('Leave: ' + clean(payload.outcome.leaveState));
+      if (payload.outcome?.provisional) lines.push('Attendance pending review.');
+      if (payload.pendingEvidenceUploads) lines.push('Pending uploads: ' + payload.pendingEvidenceUploads);
+      break;
   }
   const content = lines.join('\n');
-  return { content, htmlContent: `<p>${lines.map(escapeHtml).join('<br>')}</p>` };
+  return { content, htmlContent: '<p>' + lines.map(escapeHtml).join('<br>') + '</p>' };
 }

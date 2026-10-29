@@ -1,3 +1,4 @@
+import { isReportingChannel, canAccessReportingChannel } from '../reporting/reportingAccess.js';
 import env from '../../config/environment.js';
 import tokenService from './token.service.js';
 import userRepository from '../users/user.repository.js';
@@ -160,6 +161,12 @@ export function requireChannelAccess() {
         return next(new ForbiddenError('Channel not found'));
       }
 
+      if (isReportingChannel(channel)) {
+        if (!await canAccessReportingChannel(channel, req.user._id, req.workspaceId)) return next(new ForbiddenError('Reporting channel access denied'));
+        req.channel = channel;
+        return next();
+      }
+
       const { canAccessFlowTaskProjectChannel, isFlowTaskProjectChannel } =
         await import('../flowtask/projectAccess.service.js');
 
@@ -277,6 +284,13 @@ export function requireMessageAccess(options = { allowMissing: false }) {
       if (!channel) {
         const { NotFoundError } = await import('../../middleware/errorHandler.js');
         return next(new NotFoundError('Channel'));
+      }
+
+      if (isReportingChannel(channel)) {
+        if (!await canAccessReportingChannel(channel, req.user._id, req.workspaceId)) return next(new ForbiddenError('Reporting message access denied'));
+        req.message = message;
+        req.channel = channel;
+        return next();
       }
 
       const { canAccessFlowTaskProjectChannel, isFlowTaskProjectChannel } =

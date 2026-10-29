@@ -1,3 +1,4 @@
+import { isReportingChannel, hasReportingAccess } from '../reporting/reportingAccess.js';
 import { decryptMessages } from '../../services/encryption/messageEncryption.service.js';
 import { generateSearchQueryToken } from '../../services/encryption/crypto.service.js';
 import mongoose from 'mongoose';
@@ -310,11 +311,13 @@ async function getAccessibleChannelIds(userId, workspaceId) {
       { dmParticipants: userId.toString() },
     ],
   })
-    .select('_id name slug type visibility description topic memberCount lastMessageAt dmParticipants recipientOnly nameFromMembers members workspaceId')
+    .select('_id name slug type visibility description topic memberCount lastMessageAt dmParticipants recipientOnly nameFromMembers members workspaceId flowTaskRef')
     .lean();
 
   const { default: channelService } = await import('../channels/channel.service.js');
-  const decorated = await channelService._decorateRecipientGroups(channels, workspaceId);
+  const membership = await WorkspaceMembership.findOne({ userId, workspaceId, isActive: true }).lean();
+  const authorized = channels.filter(channel => !isReportingChannel(channel) || hasReportingAccess(channel, membership));
+  const decorated = await channelService._decorateRecipientGroups(authorized, workspaceId);
   return { channelIds: decorated.map((channel) => channel._id), channels: decorated };
 }
 

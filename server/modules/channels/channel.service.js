@@ -1,3 +1,4 @@
+import { isReportingChannel, hasReportingAccess, canAccessReportingChannel } from '../reporting/reportingAccess.js';
 import { decryptPreview } from '../../services/encryption/messageEncryption.service.js';
 import Channel from "./Channel.model.js";
 import crypto from "crypto";
@@ -1126,6 +1127,8 @@ class ChannelService {
       channels = memberChannels;
     }
 
+    channels = channels.filter(channel => !isReportingChannel(channel) || hasReportingAccess(channel, membership));
+
     // Legacy department channels were generated merely from department/user
     // creation. Departments now organize real channels; they are not channels.
     channels = [...new Map(channels.map((channel) => [channel._id.toString(), channel])).values()]
@@ -1186,6 +1189,7 @@ class ChannelService {
       .filter((sc) => sc.uiHidden)
       .map((sc) => sc.slug);
     const visibleChannels = all.filter((c) =>
+      (!isReportingChannel(c) || hasReportingAccess(c, membership)) &&
       !hiddenSlugs.includes(c.slug)
       && !(c.type === CHANNEL_TYPES.DEPARTMENT && c.flowTaskRef?.entityType === "department"),
     );
@@ -1344,6 +1348,11 @@ class ChannelService {
       throw new NotFoundError("Channel not found");
     }
 
+    if (isReportingChannel(channel) && userId) {
+      if (!await canAccessReportingChannel(channel, userId, workspaceId)) throw new ForbiddenError('Reporting channel access denied');
+      return channel;
+    }
+
     // Permission-based access check (default-deny)
     if (userId) {
       if (isFlowTaskProjectChannel(channel)) {
@@ -1415,6 +1424,7 @@ class ChannelService {
       workspaceId,
     });
     if (!channel) throw new NotFoundError("Channel not found");
+    if (isReportingChannel(channel)) throw new ForbiddenError('Attendance reporting channels are managed by FlowTask');
     if (channel.isArchived) throw new ForbiddenError("Channel is archived");
 
     const effectiveWsId = channel.workspaceId?.toString();
@@ -2130,6 +2140,7 @@ class ChannelService {
       workspaceId,
     });
     if (!channel) throw new NotFoundError("Channel not found");
+    if (isReportingChannel(channel)) throw new ForbiddenError('Attendance reporting channels are managed by FlowTask');
 
     if (!channel.hasMember(userId) && !(await ChannelMember.isMember(channelId, userId))) return channel;
 
@@ -2217,6 +2228,7 @@ class ChannelService {
       workspaceId,
     });
     if (!channel || channel.archivedReason === "project_deleted") throw new NotFoundError("Channel not found");
+    if (isReportingChannel(channel)) throw new ForbiddenError('Attendance reporting channels are managed by FlowTask');
     if (channel.recipientOnly && updates.visibility !== undefined && updates.visibility !== CHANNEL_VISIBILITY.PRIVATE) {
       throw new ForbiddenError('Recipient conversations must remain private');
     }
@@ -2335,6 +2347,7 @@ class ChannelService {
       workspaceId,
     });
     if (!channel) throw new NotFoundError("Channel not found");
+    if (isReportingChannel(channel)) throw new ForbiddenError('Attendance reporting channels are managed by FlowTask');
 
     if (channel.type === CHANNEL_TYPES.SYSTEM) {
       throw new ForbiddenError("Cannot archive system channels");
@@ -2496,7 +2509,9 @@ class ChannelService {
    */
   async searchChannels(query, userId, workspaceId) {
     const channels = await channelRepository.search(query, userId, 20, workspaceId);
-    return this._decorateDMChannels(channels, userId, workspaceId);
+    const membership = await WorkspaceMembership.findOne({ userId, workspaceId, isActive: true }).lean();
+    const authorized = channels.filter(channel => !isReportingChannel(channel) || hasReportingAccess(channel, membership));
+    return this._decorateDMChannels(authorized, userId, workspaceId);
   }
 
   // ──────────────────── Channel Members ─────────────────────────────────────

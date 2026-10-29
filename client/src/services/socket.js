@@ -4,7 +4,7 @@ import { authAPI } from './api'
 import { io } from 'socket.io-client'
 import { queryClient } from '../queries/queryClient'
 import { useAuthStore } from '../stores/authStore'
-import { useChatStore } from '../stores/chatStore'
+import { useChatStore, restoreReportingChannelHistory } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useNotificationStore } from '../stores/notificationStore'
@@ -481,6 +481,7 @@ export function connectSocket() {
 
   // ─── Channel Events ─────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.CHANNEL_ADDED, ({ channel }) => {
+    if (channel?.flowTaskRef?.entityType === 'attendance_department') restoreReportingChannelHistory(channel._id)
     useChannelStore.getState().addChannel(channel)
     // Subscribe to the new channel's message room so we receive real-time messages
     if (socket && channel?._id) {

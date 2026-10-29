@@ -246,6 +246,10 @@ const messageSchema = new Schema({
     type: flowTaskRefSchema,
     default: null,
   },
+  reportingEventId: { type: String },
+  reportingDigest: String,
+  reportingRevision: { type: Number, default: 1 },
+  reportingMeta: { type: new Schema({ eventType: String, occurredAt: Date, workDateKey: String, employeeName: String, employeeId: Schema.Types.ObjectId }, { _id: false }), default: null },
   // Structured metadata for activity/system messages (UI rendering context)
   activityMeta: {
     type: activityMetaSchema,
@@ -407,6 +411,7 @@ const messageSchema = new Schema({
 });
 
 // ─── Indexes (all workspace-scoped) ──────────────────────────────────────────
+messageSchema.index({ workspaceId: 1, channelId: 1, reportingEventId: 1 }, { unique: true, partialFilterExpression: { reportingEventId: { $type: 'string' } } });
 // Primary query: channel messages ordered by time (cursor-based pagination)
 messageSchema.index({ workspaceId: 1, searchTokens: 1 }, { sparse: true });
 messageSchema.index({ workspaceId: 1, isEncrypted: 1 }, { sparse: true });

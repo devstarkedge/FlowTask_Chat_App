@@ -114,6 +114,14 @@ export default function AutoActivityMessage({ message }) {
   message = useLiveProfileData(message)
   // The chat list routes system messages here before MessageItem.
   if (message.huddleMeta) return <HuddleSummary message={message} />
+  if (message.reportingMeta) return (
+    <article style={{ margin: '12px 20px', padding: '16px', border: '1px solid var(--border-primary, var(--border-color))', borderRadius: '10px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+        <strong style={{ color: 'var(--accent-primary)' }}>FlowTask</strong><span>Verified attendance report</span>
+      </div>
+      <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '14px', lineHeight: 1.6 }}>{message.content}</div>
+    </article>
+  )
   const meta = { ...message.activityMeta }
   if (meta.actorId?.name) {
     meta.actorName = meta.actorId.name

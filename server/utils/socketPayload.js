@@ -134,6 +134,8 @@ export function messageSocketPayload(message, extras = {}) {
     isDeleted: plain.isDeleted || false,
     flowTaskRef: plain.flowTaskRef || null,
     activityMeta: plain.activityMeta || null,
+    reportingMeta: plain.reportingMeta || null,
+    reportingEventId: plain.reportingEventId || null,
     forwardMeta: plain.forwardMeta || null,
     gifMeta: plain.gifMeta || null,
     audioMeta: plain.audioMeta || null,

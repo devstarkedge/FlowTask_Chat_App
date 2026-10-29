@@ -63,3 +63,16 @@ describe('project channel removal events', () => {
     expect(useChatStore.getState().activeThread).toBeNull()
   })
 })
+
+
+it('purges revoked reporting history and rejects messages arriving after revocation', () => {
+  const channel = { _id: 'attendance-channel', flowTaskRef: { entityType: 'attendance_department' } }
+  useChannelStore.setState({ channels: [channel, other] })
+  const report = { _id: 'report-1', channelId: channel._id, reportingMeta: { eventType: 'attendance.checked_in' }, content: 'Private report' }
+  useChatStore.setState({ messagesByChannel: { [channel._id]: [report], [other._id]: [{ _id: 'other-message' }] }, messagesById: { 'report-1': report }, messageChannelById: { 'report-1': channel._id }, channelMessageIds: { [channel._id]: ['report-1'] } })
+  handleChannelRemoved({ channelId: channel._id, workspaceId: 'workspace-1' })
+  useChatStore.getState().addMessage({ ...report, _id: 'late-report' })
+  expect(useChatStore.getState().messagesByChannel[channel._id]).toBeUndefined()
+  expect(useChatStore.getState().messagesById['report-1']).toBeUndefined()
+  expect(useChatStore.getState().messagesByChannel[other._id]).toHaveLength(1)
+})

@@ -1,3 +1,4 @@
+import { isReportingChannel, canAccessReportingChannel, reportingRecipients } from '../modules/reporting/reportingAccess.js';
 import env from '../config/environment.js';
 import { hasRecipientMembership, isRecipientChannel } from '../modules/channels/recipientChannelAccess.js';
 import tokenService from '../modules/auth/token.service.js';
@@ -227,6 +228,8 @@ export async function initializeSocket(httpServer, corsOptions) {
       }
 
       socket.workspaceId = requestedWsId;
+      socket.data.userId = String(chatUser._id);
+      socket.data.workspaceId = requestedWsId;
       next();
     } catch (error) {
       logger.warn('Socket authentication failed', {
@@ -396,6 +399,12 @@ export async function initializeSocket(httpServer, corsOptions) {
             channelWorkspace: channel.workspaceId.toString(),
           });
           socket.emit('error', { message: 'Access denied: cross-workspace channel' });
+          return;
+        }
+
+        if (isReportingChannel(channel)) {
+          if (!await canAccessReportingChannel(channel, userId, wsId)) { socket.emit('error', { message: 'Reporting channel access denied' }); return; }
+          await socket.join(buildRoomName(wsId, 'channel', channelId));
           return;
         }
 
@@ -650,6 +659,7 @@ export async function initializeSocket(httpServer, corsOptions) {
         // Update workspace context
         const previousWorkspaceId = wsId;
         socket.workspaceId = newWorkspaceId;
+        socket.data.workspaceId = newWorkspaceId;
         leaveHuddleForWorkspaceSwitch(socket);
         socket.workspaceMembership = newMembership;
         wsId = newWorkspaceId;
@@ -939,8 +949,12 @@ export function emitToUser(userId, event, data, workspaceId) {
     try {
       const sockets = await io.fetchSockets();
       for (const sock of sockets) {
-        const sockUserId = sock.chatUser?._id?.toString?.();
-        if (sockUserId !== userId) continue;
+        const sockUserId = sock.data?.userId || sock.chatUser?._id?.toString?.();
+        if (sockUserId !== String(userId)) continue;
+        // The same identity can have a tab in another tenant. An event for a
+        // workspace must never fall back to those sockets. Socket.data also
+        // survives fetchSockets across the Redis adapter.
+        if (workspaceId && String(sock.data?.workspaceId || sock.workspaceId || '') !== String(workspaceId)) continue;
         // Skip sockets that already received the emit via the room emit
         if (room && sock.rooms && sock.rooms.has(room)) continue;
         try {
@@ -1161,6 +1175,7 @@ export async function reconcileChannelRoomAccess(channelId, workspaceId) {
       '../modules/flowtask/projectAccess.service.js'
     );
     const allowedUserIds = new Set(
+      isReportingChannel(channel) ? await reportingRecipients(channel) :
       isFlowTaskProjectChannel(channel)
         ? await getAuthorizedProjectUserIds(channel, workspaceId)
         : await ChannelMember.getMemberIds(channelId),

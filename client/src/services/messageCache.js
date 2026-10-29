@@ -95,3 +95,9 @@ export async function clearMessageCache() {
     logger.error('[MessageCache] Failed to clear IndexedDB cache:', error)
   }
 }
+
+export async function deleteChannelMessageCache(channelId) {
+  if (!isValidKey(channelId)) return
+  try { const db = await getDb(); await db.delete(CHANNEL_STORE, channelId) }
+  catch (error) { logger.error('[MessageCache] Failed to revoke channel cache:', error) }
+}

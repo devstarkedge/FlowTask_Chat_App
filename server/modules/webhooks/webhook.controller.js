@@ -1,3 +1,6 @@
+import { handleReportingEvent } from '../reporting/reporting.service.js';
+import { REPORT_TYPES, DIRECTORY_TYPES } from '../reporting/reportingFormat.js';
+import { ForbiddenError, ValidationError } from '../../middleware/errorHandler.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 import { webhookVerifier } from '../../middleware/webhookVerifier.js';
 import eventProcessor from '../../services/eventProcessor.js';
@@ -43,9 +46,16 @@ export const handleFlowTaskWebhook = [
     const { eventName, deliveryId, eventVersion } = req.webhook;
     const payload = req.body;
 
+    if (req.headers['x-flowtask-workspace'] && req.headers['x-flowtask-workspace'] !== payload?.workspaceId) throw new ForbiddenError('Webhook workspace header and signed body do not match');
     // Resolve target workspace (supports multi-workspace)
     const workspace = await resolveWebhookWorkspace(req);
     payload._workspaceId = workspace._id.toString();
+
+    if (REPORT_TYPES.has(eventName) || DIRECTORY_TYPES.has(eventName)) {
+      if (payload.eventType !== eventName || payload.eventId !== deliveryId) throw new ValidationError('Signed reporting event headers do not match body');
+      const result = await handleReportingEvent(payload, payload._workspaceId);
+      return res.status(200).json({ success: true, ...result, deliveryId });
+    }
 
     logger.info('Webhook received', { eventName, deliveryId, workspaceId: payload._workspaceId });
 

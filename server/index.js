@@ -1,3 +1,4 @@
+import { ensureAttendanceReportingIndexes } from './modules/reporting/reporting.service.js';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -279,6 +280,7 @@ async function startServer() {
   try {
     // 1. Connect to MongoDB
     await connectDatabase();
+    await ensureAttendanceReportingIndexes();
     if (!isDatabaseConnected()) throw new Error('MongoDB is not ready; startup was stopped before database queries.');
     // Shared Huddle presence and the Socket.IO adapter need initialized clients.
     await redisManager.init();

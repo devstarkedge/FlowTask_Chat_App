@@ -19,6 +19,7 @@ import {
   loadChannelMessagesFromCache,
   saveChannelMessagesToCache,
   clearMessageCache,
+  deleteChannelMessageCache,
 } from "../services/messageCache";
 
 // ─── LRU Message Cache ─────────────────────────────────────────────────────
@@ -29,6 +30,23 @@ const hydratedChannels = new Set();
 const hydrationInFlight = new Set();
 const pendingPersistByChannel = new Map();
 let persistTimer = null;
+const revokedReportingChannels = new Set();
+export function restoreReportingChannelHistory(channelId) { revokedReportingChannels.delete(String(channelId)); }
+export function purgeReportingChannelHistory(channelId) {
+  channelId = String(channelId);
+  revokedReportingChannels.add(channelId);
+  pendingPersistByChannel.delete(channelId);
+  hydratedChannels.delete(channelId);
+  useChatStore.setState(state => {
+    const messagesByChannel = { ...state.messagesByChannel }, channelMessageIds = { ...state.channelMessageIds };
+    const pinnedMessagesByChannel = { ...state.pinnedMessagesByChannel };
+    delete messagesByChannel[channelId]; delete channelMessageIds[channelId]; delete pinnedMessagesByChannel[channelId];
+    return { messagesByChannel, channelMessageIds, pinnedMessagesByChannel,
+      messagesById: Object.fromEntries(Object.entries(state.messagesById).filter(([, message]) => normalizeChannelId(message.channelId) !== channelId)),
+      messageChannelById: Object.fromEntries(Object.entries(state.messageChannelById || {}).filter(([, id]) => String(id) !== channelId)) };
+  });
+  void deleteChannelMessageCache(channelId);
+}
 
 // Auto-clear timers for typing indicators (keyed by `${channelId}-${userId}`)
 const typingTimeouts = {};
@@ -347,6 +365,7 @@ export const useChatStore = create((set, get) => ({
       logger.warn('[chatStore] fetchMessages called with invalid channelId:', channelId)
       return
     }
+    if (revokedReportingChannels.has(channelId)) return;
     // Debounce guard: prevent duplicate fetches for the same channel
     const fetchKey = `${channelId}-${options.cursor || "initial"}`;
     const fetching = get()._fetchingChannels;
@@ -368,7 +387,7 @@ export const useChatStore = create((set, get) => ({
       hydrationInFlight.add(channelId);
       try {
         const cachedMessages = await loadChannelMessagesFromCache(channelId);
-        if (cachedMessages.length > 0) {
+        if (!revokedReportingChannels.has(channelId) && cachedMessages.length > 0) {
           set((state) => {
             const existingMessages = state.messagesByChannel[channelId] || [];
             const merged = mergeChronologicalMessages(
@@ -391,6 +410,7 @@ export const useChatStore = create((set, get) => ({
 
     try {
       const { data } = await messageAPI.list(channelId, options);
+      if (revokedReportingChannels.has(channelId)) return;
       const messages = data.data.items || [];
       const hasMore = data.data.hasMore ?? false;
 
@@ -590,6 +610,7 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Real-time message handlers ─────────────────────────────────────
   addMessage: (message) => {
+    if (message.reportingMeta && revokedReportingChannels.has(normalizeChannelId(message.channelId))) return;
     const normalized = normalizeMessage(message);
     const channelId = normalizeChannelId(normalized.channelId);
     if (!channelId) return;
@@ -1996,6 +2017,7 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Workspace Switch — Clear all cached data ──────────────────────
   clearCache: () => {
+    revokedReportingChannels.clear();
     // Clear per-channel pin caches from sessionStorage
     try {
       const keysToRemove = [];

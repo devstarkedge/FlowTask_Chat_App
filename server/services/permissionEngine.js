@@ -1,3 +1,4 @@
+import { isReportingChannel, hasReportingAccess } from '../modules/reporting/reportingAccess.js';
 import logger from '../utils/logger.js';
 import { hasRecipientMembership, isRecipientChannel } from '../modules/channels/recipientChannelAccess.js';
 
@@ -153,6 +154,8 @@ class PermissionEngine {
 
     const workspaceId = channel.workspaceId?.toString();
     const { role } = access;
+
+    if (isReportingChannel(channel)) return hasReportingAccess(channel, principal.workspaceMembership || principal.membership);
 
     // Strict system channel RBAC validation
     if (channel.slug === 'flowtask-admin') {

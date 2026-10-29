@@ -483,7 +483,7 @@ class ChannelRepository {
     
     const found = await Channel.find(filter)
       .limit(limit)
-      .select('name slug type visibility memberCount lastMessageAt isAI recipientOnly nameFromMembers members dmParticipants workspaceId')
+      .select('name slug type visibility memberCount lastMessageAt isAI recipientOnly nameFromMembers members dmParticipants workspaceId flowTaskRef')
       .sort({ memberCount: -1 })
       .lean();
 

@@ -1,3 +1,4 @@
+import { isReportingChannel, reportingRecipients } from '../reporting/reportingAccess.js';
 import { authorizeFileReferences } from '../files/fileAccess.service.js';
 import canvasRepository from '../canvas/canvas.repository.js';
 import { canvasAttachmentIds } from '../canvas/canvasAttachments.js';
@@ -67,6 +68,7 @@ class MessageService {
     const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
+    if (isReportingChannel(channel)) throw new ForbiddenError('Only the verified FlowTask integration can post attendance reports');
 
     await authorizeFileReferences(fileReferences, authorId, workspaceId || channel.workspaceId);
     const canvasFiles = [];
@@ -642,6 +644,7 @@ class MessageService {
     const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
+    if (message.reportingEventId) throw new ForbiddenError('Attendance reports are immutable integration records');
 
     const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
     if (authorIdStr !== userId.toString()) {
@@ -699,6 +702,7 @@ class MessageService {
     const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
+    if (message.reportingEventId) throw new ForbiddenError('Attendance reports are immutable integration records');
 
     const authorIdStr = message.authorId?._id?.toString() || message.authorId?.toString();
     if (authorIdStr !== userId.toString() && !isAdmin) {
@@ -1009,7 +1013,7 @@ class MessageService {
         const { getAuthorizedProjectUserIds, isFlowTaskProjectChannel } =
           await import('../flowtask/projectAccess.service.js');
         const { default: ChannelMember } = await import('../channels/ChannelMember.model.js');
-        memberIds = isFlowTaskProjectChannel(channel)
+        memberIds = isReportingChannel(channel) ? await reportingRecipients(channel) : isFlowTaskProjectChannel(channel)
           ? await getAuthorizedProjectUserIds(channel, workspaceId)
           : await ChannelMember.getMemberIds(channel._id);
       }
@@ -1354,6 +1358,10 @@ class MessageService {
     const destinations = new Map(await Promise.all([...new Set(destinationIds.map(String))].map(async (id) => [
       id, await channelService.getChannelById(id, userId, workspaceId),
     ])));
+
+    for (const destination of destinations.values()) {
+      if (isReportingChannel(destination)) throw new ForbiddenError('Attendance reporting channels only accept verified integration reports');
+    }
 
     // Validate every source before creating any forwarded message.
     const sources = new Map(await Promise.all(originals.map(async (original) => {

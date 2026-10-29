@@ -80,6 +80,11 @@ const workspaceMembershipSchema = new Schema({
     maxlength: 50,
     default: null,
   },
+  // Verified, workspace-scoped reporting projection from FlowTask. Ordinary
+  // workspace/channel roles never expand reporting access.
+  attendanceReportingAccess: { type: new Schema({
+    active: Boolean, allDepartments: Boolean, departmentIds: [String], version: Number, syncedAt: Date, membershipHash: String,
+  }, { _id: false }), default: null },
   flowTaskAccess: {
     type: flowTaskAccessSchema,
     default: null,

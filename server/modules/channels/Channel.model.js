@@ -49,7 +49,7 @@ const flowTaskRefSchema = new Schema(
   {
     entityType: {
       type: String,
-      enum: ["board", "department", "team"],
+      enum: ["board", "department", "team", "attendance_department"],
       required: true,
     },
     entityId: {
@@ -182,6 +182,8 @@ const channelSchema = new Schema(
         ref: "Message",
       },
     ],
+    reportingDirectoryVersion: { type: Number, default: 0 },
+    reportingDirectoryHash: String,
     // Whether this channel is system-managed (created by FlowTask integration)
     systemManaged: {
       type: Boolean,

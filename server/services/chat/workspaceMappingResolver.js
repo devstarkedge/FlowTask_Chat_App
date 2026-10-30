@@ -1,7 +1,7 @@
 import logger from '../../utils/logger.js';
 import Workspace from '../../modules/workspaces/Workspace.model.js';
 import WorkspaceMapping from '../../modules/flowtask/WorkspaceMapping.model.js';
-import { BadRequestError } from '../../middleware/errorHandler.js';
+import { AppError, BadRequestError } from '../../middleware/errorHandler.js';
 
 /**
  * Resolve a ChatApp workspace from FlowTask's own real workspace id.
@@ -16,7 +16,7 @@ import { BadRequestError } from '../../middleware/errorHandler.js';
  * @param {string} flowTaskWorkspaceId
  * @param {{eventName?: string, deliveryId?: string}} [context] - for structured logging only
  * @returns {Promise<object>} the resolved, active ChatApp Workspace document
- * @throws {BadRequestError} if malformed, unmapped, or the mapped workspace is gone/inactive
+ * @throws {AppError} if malformed (BAD_REQUEST), unmapped (WORKSPACE_NOT_LINKED), or inactive (WORKSPACE_MAPPING_INACTIVE)
  */
 export async function resolveByFlowTaskWorkspaceId(flowTaskWorkspaceId, context = {}) {
   const { eventName, deliveryId } = context;
@@ -35,14 +35,15 @@ export async function resolveByFlowTaskWorkspaceId(flowTaskWorkspaceId, context 
   let mapping = await WorkspaceMapping.findByFlowTaskWorkspaceId(ref);
 
   if (!mapping) {
-    logger.error('Webhook workspace resolution failed: no linked ChatApp workspace', {
+    logger.info('Webhook reporting is waiting for a linked ChatApp workspace', {
       flowTaskWorkspaceId: ref,
       eventName,
       deliveryId,
       step: 'workspace_unmapped',
     });
-    throw new BadRequestError(
+    throw new AppError(
       `No ChatApp workspace is linked to FlowTask workspace ${ref}. An admin must open ChatApp from that FlowTask workspace at least once (Open Chat) before its events can sync.`,
+      400, 'WORKSPACE_NOT_LINKED',
     );
   }
 
@@ -53,7 +54,7 @@ export async function resolveByFlowTaskWorkspaceId(flowTaskWorkspaceId, context 
       chatWorkspaceId: mapping.chatWorkspaceId,
       step: 'workspace_mapping_stale',
     });
-    throw new BadRequestError('The ChatApp workspace linked to this FlowTask workspace no longer exists or is inactive.');
+    throw new AppError('The ChatApp workspace linked to this FlowTask workspace no longer exists or is inactive.', 400, 'WORKSPACE_MAPPING_INACTIVE');
   }
 
   mapping.lastSeenAt = new Date();

@@ -109,8 +109,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "postinstall": "node scripts/patch-metro-config.cjs",
-    "build-editor": "node scripts/build-editor.cjs && node scripts/generate-editor-html.cjs",
-    "test:reporting": "node scripts/test-reporting.mjs"
+    "build-editor": "node scripts/build-editor.cjs && node scripts/generate-editor-html.cjs"
   },
   "private": true,
   "devDependencies": {
@@ -137,6 +136,11 @@
           "react-native-webrtc"
         ]
       }
+    },
+    "install": {
+      "exclude": [
+        "jest"
+      ]
     }
   }
 }

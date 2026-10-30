@@ -7,19 +7,9 @@
     "scheme": "flowtaskchat",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/Vector.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mohitgahlyan.chatmobilejs",
-      "splash": {
-        "image": "./assets/Vector.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
-      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "TaskChat accesses your photo library to show recent photos and videos and let you select and upload them to workspace channels and conversations. For example, you can choose a screenshot and share it with members of a channel. TaskChat also uses photo library access when you save downloaded photos and videos to Photos.",
@@ -50,11 +40,6 @@
       "icon": "./assets/icon.png"
     },
     "android": {
-      "splash": {
-        "image": "./assets/Vector.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
-      },
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png"

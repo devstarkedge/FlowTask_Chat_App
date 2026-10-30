@@ -1,10 +1,11 @@
+import { invalidateReportingHistory } from '../stores/reportingHistoryStore'
 import { bindHuddleSocket } from './huddleSocketService'
 import { useHuddleStore } from '../stores/huddleStore'
 import { authAPI } from './api'
 import { io } from 'socket.io-client'
 import { queryClient } from '../queries/queryClient'
 import { useAuthStore } from '../stores/authStore'
-import { useChatStore } from '../stores/chatStore'
+import { useChatStore, restoreReportingChannelHistory } from '../stores/chatStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { useNotificationStore } from '../stores/notificationStore'
@@ -20,6 +21,13 @@ import logger from '../utils/logger'
 import { handleChannelRemoved } from './channelEvents'
 import { handleUserProfileUpdated } from './userProfileEvents'
 import { useUserProfileStore } from '../stores/userProfileStore'
+
+function purgePrivateLeaveReports() {
+  const state = useChatStore.getState()
+  for (const [channelId, messages] of Object.entries(state.messagesByChannel)) for (const message of messages) {
+    if (message.reportingMeta?.eventType === 'leave.daily_report') state.removeMessage(message._id, channelId)
+  }
+}
 
 let socket = null
 let disposeHuddleSocket = null
@@ -184,6 +192,10 @@ export function connectSocket() {
   disposeHuddleSocket = bindHuddleSocket(socket, () => useWorkspaceStore.getState().activeWorkspaceId)
 
   socket.on('connect', () => {
+    purgePrivateLeaveReports()
+    const leaveChannel = useChannelStore.getState().activeChannelId
+    if (leaveChannel) void useChatStore.getState().fetchMessages(leaveChannel)
+    invalidateReportingHistory()
     useUserProfileStore.getState().clearProfiles()
     useWorkspaceStore.getState().fetchMembers()
     authAPI.me().then(({ data }) => {
@@ -233,6 +245,8 @@ export function connectSocket() {
   })
 
   socket.on('disconnect', (reason) => {
+    purgePrivateLeaveReports()
+    invalidateReportingHistory()
     logger.log('[Socket] Disconnected:', reason)
     _disconnectTime = Date.now()
     useChatStore.getState().setConnectionStatus('disconnected')
@@ -426,6 +440,23 @@ export function connectSocket() {
     }
   })
 
+  socket.on('reporting:leave-access-updated', ({ workspaceId }) => {
+    if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
+    invalidateReportingHistory()
+    purgePrivateLeaveReports()
+    const state = useChatStore.getState()
+    const active = useChannelStore.getState().activeChannelId
+    if (active) void state.fetchMessages(active)
+  })
+  socket.on('reporting:access-updated', ({ workspaceId }) => {
+    if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId) invalidateReportingHistory()
+  })
+  socket.on('reporting:activity-updated', ({ workspaceId, channelId, messageId, reportingHistory }) => {
+    if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId || reportingHistory?.viewerId !== useAuthStore.getState().user?._id) return
+    const state = useChatStore.getState()
+    const existing = state.messagesByChannel[channelId]?.find(message => message._id === messageId)
+    if (existing) state.updateMessage({ ...existing, reportingHistory })
+  })
   socket.on(SOCKET_EVENTS.MESSAGE_UPDATE, ({ message }) => {
     useChatStore.getState().updateMessage(message)
   })
@@ -481,6 +512,7 @@ export function connectSocket() {
 
   // ─── Channel Events ─────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.CHANNEL_ADDED, ({ channel }) => {
+    if (channel?.flowTaskRef?.entityType === 'attendance_department') restoreReportingChannelHistory(channel._id)
     useChannelStore.getState().addChannel(channel)
     // Subscribe to the new channel's message room so we receive real-time messages
     if (socket && channel?._id) {
@@ -488,7 +520,7 @@ export function connectSocket() {
     }
   })
 
-  socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, handleChannelRemoved)
+  socket.on(SOCKET_EVENTS.CHANNEL_REMOVED, data => { invalidateReportingHistory(); handleChannelRemoved(data) })
   socket.on(SOCKET_EVENTS.CHANNEL_DELETED, handleChannelRemoved)
 
   socket.on(SOCKET_EVENTS.CHANNEL_UPDATED, ({ channelId, updates }) => {
@@ -710,6 +742,7 @@ export function connectSocket() {
       console.log('[Socket] Updating role for current user', { newRole })
       
       // Update auth store user object
+      invalidateReportingHistory()
       useAuthStore.getState().updateUserRole(newRole, workspaceId, flowTaskRole)
       
       // Refresh workspace memberships to get updated role

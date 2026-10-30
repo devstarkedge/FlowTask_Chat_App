@@ -26,7 +26,8 @@ function getDb() {
 function sanitizeMessages(messages) {
   if (!Array.isArray(messages)) return []
   const trimmed = messages.slice(-MAX_MESSAGES_PER_CHANNEL)
-  return trimmed.filter((message) => !!message?._id)
+  return trimmed.filter(message => !!message?._id && message.reportingMeta?.eventType !== 'leave.daily_report' && (!message.reportingMeta || ['attendance.checked_in', 'attendance.checked_out'].includes(message.reportingMeta.eventType)))
+    .map(message => { const { reportingHistory, ...safe } = message; return safe })
 }
 
 /** IndexedDB only accepts string/number/Date/Array as keys. Guard against objects. */
@@ -98,4 +99,10 @@ export async function clearMessageCache() {
   } catch (error) {
     logger.error('[MessageCache] Failed to clear IndexedDB cache:', error)
   }
+}
+
+export async function deleteChannelMessageCache(channelId) {
+  if (!isValidKey(channelId)) return
+  try { const db = await getDb(); await db.delete(CHANNEL_STORE, channelId) }
+  catch (error) { logger.error('[MessageCache] Failed to revoke channel cache:', error) }
 }

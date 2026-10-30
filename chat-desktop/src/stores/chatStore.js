@@ -1,3 +1,4 @@
+import { useReportingHistoryStore } from './reportingHistoryStore';
 import { create } from "zustand";
 import { createElement } from "react";
 import { messageAPI, threadAPI, botAPI } from "../services/api";
@@ -19,6 +20,7 @@ import {
   loadChannelMessagesFromCache,
   saveChannelMessagesToCache,
   clearMessageCache,
+  deleteChannelMessageCache,
 } from "../services/messageCache";
 
 // ─── LRU Message Cache ─────────────────────────────────────────────────────
@@ -30,6 +32,23 @@ const hydrationInFlight = new Set();
 const pendingPersistByChannel = new Map();
 let persistTimer = null;
 let cacheGeneration = 0;
+const revokedReportingChannels = new Set();
+export function restoreReportingChannelHistory(channelId) { revokedReportingChannels.delete(String(channelId)); }
+export function purgeReportingChannelHistory(channelId) {
+  channelId = String(channelId);
+  revokedReportingChannels.add(channelId);
+  pendingPersistByChannel.delete(channelId);
+  hydratedChannels.delete(channelId);
+  useChatStore.setState(state => {
+    const messagesByChannel = { ...state.messagesByChannel }, channelMessageIds = { ...state.channelMessageIds };
+    const pinnedMessagesByChannel = { ...state.pinnedMessagesByChannel };
+    delete messagesByChannel[channelId]; delete channelMessageIds[channelId]; delete pinnedMessagesByChannel[channelId];
+    return { messagesByChannel, channelMessageIds, pinnedMessagesByChannel,
+      messagesById: Object.fromEntries(Object.entries(state.messagesById).filter(([, message]) => normalizeChannelId(message.channelId) !== channelId)),
+      messageChannelById: Object.fromEntries(Object.entries(state.messageChannelById || {}).filter(([, id]) => String(id) !== channelId)) };
+  });
+  void deleteChannelMessageCache(channelId);
+}
 
 // Auto-clear timers for typing indicators (keyed by `${channelId}-${userId}`)
 const typingTimeouts = {};
@@ -348,6 +367,8 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Messages ────────────────────────────────────────────────────────
   fetchMessages: async (channelId, options = {}) => {
+    const leaveRevision = useReportingHistoryStore.getState().revision;
+    if (revokedReportingChannels.has(String(channelId))) return;
     // Guard: reject invalid channelIds before hitting the API or IndexedDB.
     if (!channelId || typeof channelId !== 'string' || channelId === '[object Object]') {
       logger.warn('[chatStore] fetchMessages called with invalid channelId:', channelId)
@@ -357,7 +378,7 @@ export const useChatStore = create((set, get) => ({
     const generation = cacheGeneration;
     const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
     const userId = useAuthStore.getState().user?._id;
-    const isCurrent = () => generation === cacheGeneration &&
+    const isCurrent = () => !revokedReportingChannels.has(String(channelId)) && generation === cacheGeneration &&
       workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
       userId === useAuthStore.getState().user?._id;
     const fetchKey = `${workspaceId}:${channelId}:${options.cursor || "initial"}`;
@@ -407,7 +428,7 @@ export const useChatStore = create((set, get) => ({
       const { data } = await messageAPI.list(channelId, options);
       if (!isCurrent()) return;
       serverSucceeded = true;
-      const messages = data.data.items || [];
+      const messages = (data.data.items || []).filter(message => message.reportingMeta?.eventType !== 'leave.daily_report' || leaveRevision === useReportingHistoryStore.getState().revision);
       const hasMore = data.data.hasMore ?? false;
 
       set((state) => {
@@ -477,6 +498,7 @@ export const useChatStore = create((set, get) => ({
       logger.error("Failed to fetch messages:", error);
     } finally {
       fetching.delete(fetchKey);
+      if (isCurrent() && leaveRevision !== useReportingHistoryStore.getState().revision) queueMicrotask(() => { void get().fetchMessages(channelId); });
       if (isCurrent()) {
         const channelPending = [...fetching].some(key => key.startsWith(`${workspaceId}:${channelId}:`));
         set((state) => ({
@@ -616,6 +638,7 @@ export const useChatStore = create((set, get) => ({
 
   // ─── Real-time message handlers ─────────────────────────────────────
   addMessage: (message) => {
+    if (message.reportingMeta && revokedReportingChannels.has(normalizeChannelId(message.channelId))) return;
     const normalized = normalizeMessage(message);
     const channelId = normalizeChannelId(normalized.channelId);
     if (!channelId) return;
@@ -2035,6 +2058,7 @@ export const useChatStore = create((set, get) => ({
   // ─── Workspace Switch — Clear all cached data ──────────────────────
   clearCache: () => {
     cacheGeneration++;
+    revokedReportingChannels.clear();
     // Clear per-channel pin caches from sessionStorage
     try {
       const keysToRemove = [];

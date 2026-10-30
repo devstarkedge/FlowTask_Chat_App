@@ -1,3 +1,4 @@
+import { invalidateReportingAccess, restoreReportingChannel, isVisibleReport } from './reportingAccess';
 import {bindHuddleSocket} from './huddleSocketService';
 import {useHuddleStore} from '../stores/huddleStore';
 import { io } from 'socket.io-client';
@@ -109,6 +110,7 @@ export const connectSocket = async () => {
   disposeHuddleSocket?.();
   disposeHuddleSocket=bindHuddleSocket(socket,()=>currentWorkspaceId);
   socket.on('connect', () => {
+    invalidateReportingAccess();
     logger.info('[Socket] ✅ Connected to server');
     isConnecting = false;
     useChatStore.getState().setConnectionStatus('connected');
@@ -128,6 +130,7 @@ export const connectSocket = async () => {
   });
 
   socket.on('disconnect', (reason) => {
+    invalidateReportingAccess({ refetch: false });
     logger.info('[Socket] ❌ Disconnected:', reason);
     isConnecting = false;
     useChatStore.getState().setConnectionStatus('disconnected');
@@ -214,7 +217,24 @@ export const connectSocket = async () => {
     }
   });
 
+  socket.on('reporting:leave-access-updated', ({ workspaceId }) => {
+    if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId) invalidateReportingAccess();
+  });
+  socket.on('reporting:access-updated', ({ workspaceId }) => {
+    if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId) invalidateReportingAccess();
+  });
+  socket.on('reporting:activity-updated', ({ workspaceId, channelId, messageId, reportingHistory }) => {
+    if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId || reportingHistory?.viewerId !== useAuthStore.getState().user?._id) return;
+    updateMessageInCache(channelId, { _id: messageId, reportingHistory });
+    require('../chat/store').useChatStore.getState().updateMessage({ _id: messageId, channelId, reportingHistory });
+  });
+  // FlowTask reporting corrections use the shared server's message:update event.
+  socket.on('message:update', ({ message }) => {
+    if (!isVisibleReport(message)) return;
+    updateMessageInCache(message.channelId?._id || message.channelId, message);
+  });
   socket.on('message:updated', (message) => {
+    if (!isVisibleReport(message)) return;
     const channelId = message.channelId?._id || message.channelId;
     updateMessageInCache(channelId, message);
     // Also update if it's a thread reply
@@ -225,7 +245,7 @@ export const connectSocket = async () => {
 
   socket.on('message:delete', ({ messageId, channelId, isDeleted }) => {
     if (channelId) {
-      removeMessageFromCache(channelId, messageId);
+      removeMessageFromCache(channelId, messageId, isDeleted === false);
     }
     // Also remove from thread replies
     removeThreadReplyFromCache(messageId);
@@ -308,11 +328,13 @@ export const connectSocket = async () => {
 
   // Channel Events
   socket.on('channel:added', ({ channel }) => {
+    restoreReportingChannel(channel._id);
     useChannelStore.getState().addChannel(channel);
     socket.emit('channel:join', channel._id);
   });
 
   socket.on('channel:removed', ({ channelId }) => {
+    invalidateReportingAccess({ channelId });
     useChannelStore.getState().removeChannel(channelId);
   });
 
@@ -746,6 +768,7 @@ export const connectSocket = async () => {
   socket.on('user:role_updated', ({ userId, oldRole, newRole, workspaceId }) => {
     const currentUserId = useAuthStore.getState().user?._id;
     if (userId === currentUserId) {
+      invalidateReportingAccess();
       useAuthStore.getState().updateUserRole(newRole, workspaceId);
       const { queryClient } = require('../queries/queryClient');
       const { queryKeys } = require('../queries/queryKeys');
@@ -924,6 +947,7 @@ export const connectSocket = async () => {
 };
 
 export const disconnectSocket = () => {
+  invalidateReportingAccess({ refetch: false });
   disposeHuddleSocket?.();
   disposeHuddleSocket=null;
   useHuddleStore.getState().reset();

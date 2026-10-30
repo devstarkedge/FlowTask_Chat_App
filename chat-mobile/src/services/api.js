@@ -1,3 +1,4 @@
+import { useReportingHistoryStore } from '../stores/reportingHistoryStore';
 import { Platform } from 'react-native';
 import axios from 'axios';
 import storage from './storage';
@@ -49,7 +50,10 @@ export const setCachedToken = (token) => {
  */
 export const setCachedWorkspaceId = (workspaceId) => {
   const nextWorkspaceId = workspaceId || null;
-  if (nextWorkspaceId !== cachedWorkspaceId) workspaceContextVersion += 1;
+  if (nextWorkspaceId !== cachedWorkspaceId) {
+    workspaceContextVersion += 1;
+    require('./reportingAccess').resetReportingAccess();
+  }
   cachedWorkspaceId = nextWorkspaceId;
 };
 
@@ -81,6 +85,7 @@ export const resolveWorkspaceId = () => {
  */
 export const clearApiCache = () => {
   workspaceContextVersion += 1;
+  require('./reportingAccess').resetReportingAccess();
   cachedToken = null;
   cachedWorkspaceId = null;
   cachedFlowtaskToken = null;
@@ -88,6 +93,8 @@ export const clearApiCache = () => {
 
 // Synchronous request interceptor — uses cached values
 api.interceptors.request.use((config) => {
+  config._reportingRevision = useReportingHistoryStore.getState().revision;
+  config._workspaceVersion = workspaceContextVersion;
   if (cachedToken) {
     config.headers.Authorization = `Bearer ${cachedToken}`;
   }
@@ -168,6 +175,10 @@ const performRefresh = async () => {
 // Response interceptor — handle 401 and token refresh, and auto-sync presence
 api.interceptors.response.use(
   (response) => {
+    if (/messages|notifications/.test(response.config.url || '') &&
+      (response.config._reportingRevision !== useReportingHistoryStore.getState().revision || response.config._workspaceVersion !== workspaceContextVersion)) {
+      return Promise.reject(new axios.CanceledError('Reporting access changed'));
+    }
     // Auto-sync any presence data found in the response payload to the global store
     setTimeout(() => {
       try {
@@ -400,6 +411,7 @@ export const scheduledAPI = {
 
 // Messages API (partial) — add helper for proxying file assets
 export const messageAPI = {
+  reportingActivity: (id, params) => api.get(`/messages/${id}/reporting-activity`, { params }),
   get: (messageId) => api.get(`/messages/${messageId}`),
   getInfo: (messageId, channelId) => api.get(`/messages/${messageId}/info`, { params: { channelId } }),
   getFileProxyUrl: (assetId) => `${api.defaults.baseURL}/messages/files/${encodeURIComponent(assetId)}/proxy`,

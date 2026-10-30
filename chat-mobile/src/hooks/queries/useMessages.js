@@ -1,3 +1,4 @@
+import { reportingSnapshot, isReportingSnapshotCurrent, isVisibleReport } from '../../services/reportingAccess';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api, { messageAPI } from '../../services/api';
 import { queryKeys } from '../../queries/queryKeys';
@@ -29,13 +30,16 @@ export const useMessages = (channelId, options = {}) => {
 
   return useInfiniteQuery({
     queryKey: queryKeys.messages(channelId),
-    queryFn: async ({ pageParam = null }) => {
+    queryFn: async ({ pageParam = null, signal }) => {
+      const snapshot = reportingSnapshot();
+      if (!isReportingSnapshotCurrent(snapshot, channelId)) return { items: [], hasMore: false, nextCursor: null };
       if (!channelId) return { items: [], hasMore: false, nextCursor: null };
 
       const params = { limit: 50 };
       if (pageParam) params.cursor = pageParam;
 
-      const { data } = await api.get(`/channels/${channelId}/messages`, { params });
+      const { data } = await api.get(`/channels/${channelId}/messages`, { params, signal });
+      if (!isReportingSnapshotCurrent(snapshot, channelId)) throw new Error("Reporting access changed; refresh messages.");
       let apiMessages = data?.data?.items || [];
       const hasMore = data?.data?.hasMore || false;
 
@@ -66,6 +70,7 @@ export const useMessages = (channelId, options = {}) => {
           // with a real _id can be older than the newest API message yet still absent
           // from this page; dropping it causes the "message disappears after send" bug.
           const localOnly = existingItems.filter(m => {
+            if (m.reportingMeta) return false; // Server is authoritative for reporting visibility/retractions.
             if (m.pending) return true;          // always keep optimistic
             if (apiIds.has(String(m._id))) return false; // server returned it — use API version
             return true;                          // keep socket / reconciled items missing from page
@@ -88,7 +93,7 @@ export const useMessages = (channelId, options = {}) => {
       // Filter out thread replies so they don't clutter the main chat screen.
       // A thread reply has threadId (and usually parentMessageId).
       // We still want to show regular inline quotes which might only have parentMessageId or replyTo without threadId.
-      apiMessages = orderMessageRecords(apiMessages.filter(m => !m.threadId));
+      apiMessages = orderMessageRecords(apiMessages.filter(m => !m.threadId && isVisibleReport(m)));
 
       return { items: apiMessages, hasMore, nextCursor };
     },

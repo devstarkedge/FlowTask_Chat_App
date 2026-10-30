@@ -1,3 +1,4 @@
+import { isVisibleReport } from '../services/reportingAccess';
 import { queryClient } from './queryClient';
 import { queryKeys } from './queryKeys';
 import { orderMessageRecords } from '../utils/messageTimeline';
@@ -217,6 +218,7 @@ export const markMessageFailedInCache = (channelId, tempId, error) => {
 };
 
 export const addMessageToCache = (channelId, message) => {
+  if (!isVisibleReport(message)) return;
   const queryKey = queryKeys.messages(channelId);
   const oldData = queryClient.getQueryData(queryKey);
   if (!oldData?.pages?.length) {
@@ -257,6 +259,7 @@ export const addMessageToCache = (channelId, message) => {
 };
 
 export const updateMessageInCache = (channelId, message) => {
+  if (!isVisibleReport(message)) return;
   const queryKey = queryKeys.messages(channelId);
   const oldData = queryClient.getQueryData(queryKey);
   if (!oldData || !oldData.pages) return;
@@ -268,14 +271,14 @@ export const updateMessageInCache = (channelId, message) => {
   queryClient.setQueryData(queryKey, { ...oldData, pages: newPages });
 };
 
-export const removeMessageFromCache = (channelId, messageId) => {
+export const removeMessageFromCache = (channelId, messageId, hardDelete = false) => {
   const queryKey = queryKeys.messages(channelId);
   const oldData = queryClient.getQueryData(queryKey);
   if (!oldData || !oldData.pages) return;
 
   const newPages = oldData.pages.map(page => ({
     ...page,
-    items: page.items.map(m => String(m._id) === String(messageId) ? {
+    items: page.items.filter(m => !hardDelete || String(m._id) !== String(messageId)).map(m => String(m._id) === String(messageId) ? {
       ...m,
       isDeleted: true,
       content: '',

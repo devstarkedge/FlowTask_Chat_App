@@ -1,3 +1,4 @@
+import AttendanceReportMessage from './chat/AttendanceReportMessage';
 import React, { memo } from 'react';
 import HuddleMessage from '../features/huddle/components/HuddleMessage';
 import { View as RNView, Text as RNText, TouchableOpacity as RNTouchableOpacity, Pressable, Platform, Linking, StyleSheet } from 'react-native';
@@ -53,6 +54,8 @@ const ChatMessageItem = memo(({
   const isSystem = item.contentType === "system" && !item.activityMeta;
 
   if(item.huddleMeta)return <HuddleMessage message={item} colors={colors}/>;
+
+  if (item.reportingMeta) return <AttendanceReportMessage message={item} colors={colors}/>;
 
   if (isSystem) {
     return (

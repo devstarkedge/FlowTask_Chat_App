@@ -1,3 +1,4 @@
+import AttendanceReportMessage from './AttendanceReportMessage'
 import HuddleSummary from '../huddles/HuddleSummary';
 /* eslint-disable react/prop-types */
 import { ExternalLink, FileText } from 'lucide-react'
@@ -111,6 +112,8 @@ export default function AutoActivityMessage({ message }) {
   const location = useLocation()
   message = useLiveProfileData(message)
   if (message.huddleMeta) return <HuddleSummary message={message} />;
+  if (message.reportingMeta && !['attendance.checked_in', 'attendance.checked_out', 'leave.daily_report'].includes(message.reportingMeta.eventType)) return null
+  if (message.reportingMeta) return <AttendanceReportMessage message={message} />
   const meta = { ...message.activityMeta }
   if (meta.actorId?.name) {
     meta.actorName = meta.actorId.name

@@ -246,6 +246,7 @@ export const favoritesAPI = {
 
 // ─── Messages ────────────────────────────────────────────────────────────
 export const messageAPI = {
+  reportingActivity: (id, params) => api.get(`/messages/${id}/reporting-activity`, { params }),
   list: (channelId, params) =>
     api.get(`/channels/${channelId}/messages`, { params }),
   around: (channelId, messageId, params) =>

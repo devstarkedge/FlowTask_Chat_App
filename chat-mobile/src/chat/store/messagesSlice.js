@@ -1,3 +1,4 @@
+import { isVisibleReport } from '../../services/reportingAccess';
 export const createMessagesSlice = (set, get) => ({
   messagesByChannel: {},
   hasMore: {},
@@ -6,11 +7,12 @@ export const createMessagesSlice = (set, get) => ({
   setMessages: (channelId, messages) => set((state) => ({
     messagesByChannel: {
       ...state.messagesByChannel,
-      [channelId]: messages,
+      [channelId]: messages.filter(isVisibleReport),
     }
   })),
 
   addMessage: (message) => {
+    if (!isVisibleReport(message)) return;
     const { channelId } = message;
     if (!channelId) return;
     set((state) => {
@@ -52,6 +54,7 @@ export const createMessagesSlice = (set, get) => ({
   },
 
   updateMessage: (message) => {
+    if (!isVisibleReport(message)) return;
     const { channelId, _id } = message;
     if (!channelId || !_id) return;
     set((state) => {

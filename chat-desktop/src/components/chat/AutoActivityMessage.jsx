@@ -1,3 +1,4 @@
+import AttendanceReportMessage from './AttendanceReportMessage'
 /* eslint-disable react/prop-types */
 import { ExternalLink, FileText } from 'lucide-react'
 import HuddleSummary from '../huddles/HuddleSummary'
@@ -112,6 +113,8 @@ export default function AutoActivityMessage({ message }) {
   message = useLiveProfileData(message)
   // The chat list routes system messages here before MessageItem.
   if (message.huddleMeta) return <HuddleSummary message={message} />
+  if (message.reportingMeta && !['attendance.checked_in', 'attendance.checked_out', 'leave.daily_report'].includes(message.reportingMeta.eventType)) return null
+  if (message.reportingMeta) return <AttendanceReportMessage message={message} />
   const meta = { ...message.activityMeta }
   if (meta.actorId?.name) {
     meta.actorName = meta.actorId.name

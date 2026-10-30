@@ -7,7 +7,6 @@ import {
   Link,
   List,
   ListOrdered,
-  MessageSquarePlus,
   Strikethrough,
   Underline,
   Pilcrow,
@@ -15,79 +14,9 @@ import {
   AlignCenter,
   AlignRight,
   AlignJustify,
-  Smile,
   ChevronDown,
   CheckSquare,
 } from "lucide-react";
-import EmojiPickerPortal from "../../chat/EmojiPickerPortal";
-import { useCanvasStore } from "../../../stores/canvasStore";
-import { useCanvasUiStore } from "../../../stores/canvasUiStore";
-
-const getBlockIdFromSelection = (ed) => {
-  try {
-    const { $from } = ed.state.selection;
-    for (let d = $from.depth; d > 0; d--) {
-      const n = $from.node(d);
-      if (!n) continue;
-      const name = n?.type?.name;
-      if (["paragraph", "heading", "taskItem"].includes(name)) {
-        return n.attrs?.blockId || null;
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-  return null;
-};
-
-const getCommentRangeFromSelection = (editor) => {
-  try {
-    const { from, to, empty } = editor.state.selection;
-    const { $from } = editor.state.selection;
-    let blockPos = null;
-    let blockNode = null;
-
-    for (let d = $from.depth; d > 0; d--) {
-      const n = $from.node(d);
-      if (!n) continue;
-      const name = n?.type?.name;
-      if (["paragraph", "heading", "taskItem"].includes(name)) {
-        blockPos = $from.start(d) - 1;
-        blockNode = n;
-        break;
-      }
-    }
-
-    if (blockPos === null || !blockNode) return null;
-
-    const blockId = blockNode.attrs?.blockId || null;
-    if (!blockId) return null;
-
-    let startOffset, endOffset, selectedText;
-
-    if (empty) {
-      startOffset = 0;
-      endOffset = blockNode.content.size;
-      selectedText = blockNode.textContent || "";
-    } else {
-      startOffset = from - (blockPos + 1);
-      endOffset = to - (blockPos + 1);
-      selectedText = editor.state.doc.textBetween(from, to) || "";
-    }
-
-    return {
-      blockId,
-      startOffset,
-      endOffset,
-      selectedText,
-      blockType: blockNode.type.name,
-    };
-  } catch (e) {
-    console.warn("Failed to get comment range from selection:", e);
-    return null;
-  }
-};
-
 const BLOCK_TYPES = [
   { 
     id: "paragraph", 
@@ -383,9 +312,7 @@ function AlignDropdown({ editor }) {
   );
 }
 
-const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar, onComment }) {
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const emojiButtonRef = useRef(null);
+const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar, titleOnly = false }) {
 
   if (!editor || !toolbar.visible) return null;
 
@@ -409,8 +336,7 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       onMouseDown={(e) => e.preventDefault()}
     >
       {/* 1. Paragraph / Heading Dropdown */}
-      <BlockSelector editor={editor} />
-      <ToolbarDivider />
+      {!titleOnly && <><BlockSelector editor={editor} /><ToolbarDivider /></>}
 
       {/* 2. Bold, Italic, Underline, Strikethrough */}
       <ToolbarButton
@@ -446,6 +372,7 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
       {/* 3. Bullet list, Inline Code, Link, Text Align Dropdown */}
       <ToolbarButton
         label="Bulleted list"
+        disabled={titleOnly}
         active={editor.isActive("bulletList")}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
       >
@@ -466,47 +393,6 @@ const SelectionToolbar = React.memo(function SelectionToolbar({ editor, toolbar,
         <Link size={15} />
       </ToolbarButton>
       <AlignDropdown editor={editor} />
-      <ToolbarDivider />
-
-      {/* 4. Reaction / Comment */}
-      <div style={{ display: "inline-flex", position: "relative" }} ref={emojiButtonRef}>
-        <ToolbarButton
-          label="Add reaction"
-          active={showEmojiPicker}
-          onClick={() => setShowEmojiPicker((v) => !v)}
-        >
-          <Smile size={15} />
-        </ToolbarButton>
-        {showEmojiPicker && (
-          <EmojiPickerPortal
-            anchorRef={emojiButtonRef}
-            isOpen={showEmojiPicker}
-            onClose={() => setShowEmojiPicker(false)}
-            onSelect={(emoji) => {
-              const blockId = getBlockIdFromSelection(editor);
-              if (blockId) {
-                useCanvasStore.getState().toggleBlockReaction(blockId, emoji);
-              }
-              setShowEmojiPicker(false);
-            }}
-            position="top-start"
-            zIndex={1100}
-          />
-        )}
-      </div>
-      <ToolbarButton
-        label="Comment"
-        onClick={() => {
-          const range = getCommentRangeFromSelection(editor);
-          if (range) {
-            useCanvasUiStore.getState().setHoveredBlockId(range.blockId);
-            useCanvasUiStore.getState().setPendingCommentRange(range);
-          }
-          onComment?.();
-        }}
-      >
-        <MessageSquarePlus size={15} />
-      </ToolbarButton>
     </div>
   );
 });

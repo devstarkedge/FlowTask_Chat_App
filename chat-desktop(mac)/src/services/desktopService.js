@@ -37,10 +37,66 @@ export const setWindowControlsColor = (symbolColor) => {
   }
 };
 
+/**
+ * Dynamically samples the topbar / background header color
+ * and sets native Windows titlebar controls (symbolColor) to high-contrast white or dark symbol.
+ */
+export const updateWindowControlsContrast = (targetElementOrColor) => {
+  if (!isDesktopApp() || !window.electronAPI?.setTitleBarOverlay) return;
+
+  try {
+    let symbolColor = '#ffffff'; // Default to crisp white symbols for dark topbar
+
+    if (typeof targetElementOrColor === 'string' && targetElementOrColor.startsWith('#')) {
+      // Direct hex string passed
+      const rawHex = targetElementOrColor.replace('#', '');
+      const hex = rawHex.length===3 ? [...rawHex].map(value=>value+value).join('') : rawHex;
+      const r = parseInt(hex.substring(0, 2), 16) || 0;
+      const g = parseInt(hex.substring(2, 4), 16) || 0;
+      const b = parseInt(hex.substring(4, 6), 16) || 0;
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      symbolColor = lum > 140 ? '#0f172a' : '#ffffff';
+    } else {
+      // A selector list follows DOM order, not selector priority. The Huddle
+      // portal is mounted before the app layout, so its light header must not
+      // determine native caption colors over the dark application title bar.
+      const topbar = targetElementOrColor instanceof HTMLElement
+        ? targetElementOrColor
+        : document.querySelector('.file-preview-topbar')
+          || document.querySelector('.cl-topbar')
+          || document.querySelector('[data-topbar], .workspace-layout-header')
+          || document.querySelector('header:not(.huddle-window-chrome)');
+
+      const elemToSample = topbar || document.body;
+      const bg = window.getComputedStyle(elemToSample).backgroundColor;
+
+      if (bg && bg.startsWith('rgb')) {
+        const rgbValues = bg.match(/[\d.]+/g);
+        if (rgbValues && rgbValues.length >= 3) {
+          const r = parseInt(rgbValues[0], 10);
+          const g = parseInt(rgbValues[1], 10);
+          const b = parseInt(rgbValues[2], 10);
+          const alpha = rgbValues.length >= 4 ? parseFloat(rgbValues[3]) : 1;
+
+          // Perceived luminance: Y = 0.299R + 0.587G + 0.114B
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          if (alpha > 0.3) {
+            symbolColor = lum > 140 ? '#0f172a' : '#ffffff';
+          }
+        }
+      }
+    }
+
+    window.electronAPI.setTitleBarOverlay({ symbolColor });
+  } catch (e) {
+    console.warn('[desktopService] Failed to update window controls contrast:', e);
+  }
+};
+
 export const showDesktopNotification = (title, options = {}) => {
   if (isDesktopApp() && window.electronAPI && window.electronAPI.showNotification) {
     // Call the native Electron notification API
-    window.electronAPI.showNotification(title, options.body || '', options.data);
+    window.electronAPI.showNotification(title, options.body || '', options.data, options.icon);
   } else {
     // Fallback to standard web notifications
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -68,25 +124,9 @@ export const showDesktopNotification = (title, options = {}) => {
 
 export const onDesktopNotificationClicked = (callback) => {
   if (isDesktopApp() && window.electronAPI?.onNotificationClicked) {
-    window.electronAPI.onNotificationClicked(callback);
+    return window.electronAPI.onNotificationClicked(callback);
   }
-};
-
-export const getNotificationStatus = async () => {
-  if (isDesktopApp() && window.electronAPI?.getNotificationStatus) {
-    try {
-      return await window.electronAPI.getNotificationStatus();
-    } catch {
-      return { platform: 'darwin', supported: true, initialized: false };
-    }
-  }
-  return {
-    platform: isMac() ? 'darwin' : typeof navigator !== 'undefined' ? navigator.platform : 'browser',
-    isMac: isMac(),
-    supported: typeof window !== 'undefined' && 'Notification' in window,
-    permission: typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unknown',
-    initialized: true,
-  };
+  return () => {};
 };
 
 export const getAppVersion = () => {
@@ -94,4 +134,57 @@ export const getAppVersion = () => {
     return window.electronAPI.getAppVersion();
   }
   return 'Web Version';
+};
+
+
+export const updateTaskbarBadge = (count, dataUrl, description) => {
+  if (isDesktopApp() && window.electronAPI?.updateTaskbarBadge) {
+    try {
+      window.electronAPI.updateTaskbarBadge(count, dataUrl, description);
+    } catch (err) {
+      console.warn('[desktopService] Failed to update taskbar badge:', err);
+    }
+  }
+};
+
+export const clearTaskbarBadge = () => {
+  if (isDesktopApp() && window.electronAPI?.clearTaskbarBadge) {
+    try {
+      window.electronAPI.clearTaskbarBadge();
+    } catch (err) {
+      console.warn('[desktopService] Failed to clear taskbar badge:', err);
+    }
+  }
+};
+
+export const flashFrame = (flag = true) => {
+  if (isDesktopApp() && window.electronAPI?.flashFrame) {
+    try {
+      window.electronAPI.flashFrame(Boolean(flag));
+    } catch (err) {
+      console.warn('[desktopService] Failed to flash frame:', err);
+    }
+  }
+};
+
+
+export const onDesktopNotificationFailed = (callback) => {
+  if (isDesktopApp() && window.electronAPI?.onNotificationFailed) {
+    return window.electronAPI.onNotificationFailed(callback);
+  }
+  return () => {};
+};
+
+export const requestNotificationPermission = async () => {
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'default') {
+      try {
+        return await Notification.requestPermission();
+      } catch (e) {
+        console.warn('Failed to request notification permission:', e);
+      }
+    }
+    return Notification.permission;
+  }
+  return 'granted';
 };

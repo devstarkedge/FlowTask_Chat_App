@@ -12,6 +12,12 @@ const isDev = !app.isPackaged;
 const isMac = process.platform === 'darwin';
 const BUNDLE_ID = isDev ? 'com.taskchat.dev' : 'com.taskchat.app';
 
+// Explicitly set the app name for macOS menu, dock, and notification center
+app.name = 'TaskChat';
+if (typeof app.setName === 'function') {
+  app.setName('TaskChat');
+}
+
 if (isDev) {
   // Vite requires unsafe-eval for HMR. We disable the warning in dev mode.
   process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
@@ -20,7 +26,9 @@ if (isDev) {
 }
 
 // Set the App ID for all platforms (Windows, Mac, Linux) to ensure OS-level integrations work
-app.setAppUserModelId(BUNDLE_ID);
+if (process.platform === 'win32') {
+  app.setAppUserModelId(BUNDLE_ID);
+}
 
 let mainWindow;
 let tray = null;
@@ -356,7 +364,7 @@ app.on('window-all-closed', () => {
 });
 
 // GC-safe IPC handler for native notifications
-ipcMain.on('show-notification', (event, { title, body, data }) => {
+ipcMain.on('show-notification', (event, { title, body, data, icon }) => {
   try {
     if (!Notification.isSupported()) {
       console.warn('[Notifications] Electron Notification API is not supported on this platform');
@@ -400,12 +408,87 @@ ipcMain.on('show-notification', (event, { title, body, data }) => {
     notification.on('failed', (error) => {
       console.error('[Notifications] Failed to display native notification:', error);
       cleanup();
+      if (isMac && app.dock) {
+        try {
+          app.dock.bounce('informational');
+        } catch {}
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('notification-failed', {
+          title,
+          body,
+          data,
+          error: error && error.message ? error.message : 'Native notification blocked or failed'
+        });
+      }
     });
 
     notification.show();
+
+    if (isMac && app.dock && (!mainWindow || !mainWindow.isFocused())) {
+      try {
+        app.dock.bounce('informational');
+      } catch {}
+    }
     console.log(`[Notifications] Displayed native notification: "${title}" (active count: ${activeNotifications.size})`);
   } catch (err) {
     console.error('[Notifications] Exception in show-notification handler:', err);
+  }
+});
+
+
+// IPC handler for dock badge / taskbar badge (Mac dock + Windows/Linux)
+ipcMain.on('update-taskbar-badge', (event, { count, dataUrl, description }) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  const numCount = Number(count) || 0;
+
+  if (typeof app.setBadgeCount === 'function') {
+    try {
+      app.setBadgeCount(numCount);
+    } catch (err) {
+      console.warn('[TaskChat] Failed to set badge count:', err);
+    }
+  }
+
+  if (isMac && app.dock) {
+    try {
+      app.dock.setBadge(numCount > 0 ? String(numCount > 99 ? '99+' : numCount) : '');
+    } catch (err) {
+      console.warn('[TaskChat] Failed to set dock badge:', err);
+    }
+  }
+
+  if (win && !win.isDestroyed()) {
+    if (process.platform === 'win32') {
+      try {
+        if (numCount > 0 && dataUrl) {
+          const img = nativeImage.createFromDataURL(dataUrl);
+          const desc = description || `${numCount} unread message${numCount > 1 ? 's' : ''}`;
+          win.setOverlayIcon(img, desc);
+        } else {
+          win.setOverlayIcon(null, '');
+        }
+      } catch (err) {
+        console.error('[TaskChat] Failed to set taskbar overlay icon:', err);
+      }
+    }
+  }
+});
+
+// IPC handler for flash frame / dock bounce
+ipcMain.on('flash-frame', (event, flag) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (isMac && app.dock && flag) {
+    try {
+      app.dock.bounce('informational');
+    } catch {}
+  }
+  if (win && !win.isDestroyed()) {
+    try {
+      win.flashFrame(Boolean(flag));
+    } catch (err) {
+      console.error('[TaskChat] Failed to toggle flash frame:', err);
+    }
   }
 });
 

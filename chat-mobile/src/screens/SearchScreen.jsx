@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message';
 import logger from '../utils/logger';
 import { useAuthStore } from '../stores/authStore';
 import { useChannelStore } from '../stores/channelStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 import useKeyboardBottomInset from '../hooks/useKeyboardBottomInset';
 import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 const RECENT_KEY = 'recent_searches_objects'; // Use new key to avoid conflicts with old string array
@@ -99,9 +100,8 @@ export default function SearchScreen({ navigation }) {
   const doSearch = async (q) => {
     setLoading(true);
     try {
-      // Omit 'scope' parameter for Global Workspace Search exactly like the Web App does.
-      // Providing scope='all' causes the backend to improperly filter results.
-      const res = await searchAPI.global(q);
+      const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+      const res = await searchAPI.global(q, { workspaceId: activeWorkspaceId });
       const data = res?.data?.data || res?.data || null;
       setResults(data);
     } catch (err) {

@@ -32,6 +32,8 @@ import App from './App.jsx'
 import { queryClient } from './queries/queryClient'
 import { isDesktopApp } from './services/desktopService'
 import { notificationService, navigationRouter } from './notifications'
+import { badgeService } from './services/badgeService'
+import { flashFrame, requestNotificationPermission } from './services/desktopService'
 import './stores/themeStore'
 import 'prosemirror-view/style/prosemirror.css'
 import './index.css'
@@ -47,6 +49,17 @@ if (isDesktopApp()) {
 
 // Initialize notification service navigation click routing
 notificationService.setupNavigation();
+requestNotificationPermission();
+
+// Initialize Windows taskbar badge unread count service
+badgeService.init();
+
+// Clear flashing frame when app window gains focus
+if (typeof window !== 'undefined') {
+  window.addEventListener('focus', () => {
+    flashFrame(false);
+  });
+}
 
 // Listen for custom web notification click events
 if (typeof window !== 'undefined') {

@@ -55,6 +55,7 @@ export default function SearchResultsPage() {
           q: query,
           scope: scopeId,
           limit: 30,
+          workspaceId,
           signal: controller.signal,
         })
         if (cancelled) return
@@ -79,7 +80,7 @@ export default function SearchResultsPage() {
       cancelled = true
       controller.abort()
     }
-  }, [channel, query, scopeId])
+  }, [channel, query, scopeId, workspaceId])
 
   const handleSubmit = (event) => {
     event.preventDefault()

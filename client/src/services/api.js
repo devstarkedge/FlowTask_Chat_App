@@ -87,7 +87,7 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
-  if (workspaceId) {
+  if (workspaceId && !config.headers["X-Workspace-Id"]) {
     config.headers["X-Workspace-Id"] = workspaceId;
   }
   // Forward FlowTask JWT for endpoints that need FlowTask API access (e.g., getDMContacts)
@@ -229,7 +229,18 @@ export const channelAPI = {
   addMember: (id, userId) => api.post(`/channels/${id}/members`, { userId }),
   removeMember: (id, userId) => api.delete(`/channels/${id}/members/${userId}`),
   leave: (id) => api.post(`/channels/${id}/leave`),
-  search: (q) => api.get("/channels/search", { params: { q } }),
+  search: (q, params = {}, config = {}) => {
+    const queryParams = typeof params === "object" ? { ...params } : {};
+    queryParams.q = q;
+    const reqConfig = { ...config, params: queryParams };
+    if (queryParams.workspaceId) {
+      reqConfig.headers = {
+        ...reqConfig.headers,
+        "X-Workspace-Id": queryParams.workspaceId,
+      };
+    }
+    return api.get("/channels/search", reqConfig);
+  },
   getMembers: (id) => api.get(`/channels/${id}/members`),
   pin: (id) => api.put(`/channels/${id}/pin`),
   star: (id) => api.put(`/channels/${id}/star`),
@@ -413,12 +424,14 @@ function buildSearchParams({
   scope = null,
   limit = null,
   cursor = null,
+  workspaceId = null,
 } = {}) {
   const params = { q };
 
   if (scope) params.scope = scope;
   if (limit != null) params.limit = limit;
   if (cursor) params.cursor = cursor;
+  if (workspaceId) params.workspaceId = workspaceId;
 
   return params;
 }
@@ -429,12 +442,19 @@ export const searchAPI = {
     scope = null,
     limit = null,
     cursor = null,
+    workspaceId = null,
     signal = undefined,
-  } = {}) =>
-    api.get("/search", {
-      params: buildSearchParams({ q, scope, limit, cursor }),
+  } = {}) => {
+    const headers = {};
+    if (workspaceId) {
+      headers["X-Workspace-Id"] = workspaceId;
+    }
+    return api.get("/search", {
+      params: buildSearchParams({ q, scope, limit, cursor, workspaceId }),
+      headers,
       signal,
-    }),
+    });
+  },
   global: (q, options = {}) => searchAPI.search({ q, ...options }),
 };
 

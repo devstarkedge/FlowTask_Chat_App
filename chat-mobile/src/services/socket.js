@@ -110,7 +110,6 @@ export const connectSocket = async () => {
   disposeHuddleSocket?.();
   disposeHuddleSocket=bindHuddleSocket(socket,()=>currentWorkspaceId);
   socket.on('connect', () => {
-    invalidateReportingAccess();
     logger.info('[Socket] ✅ Connected to server');
     isConnecting = false;
     useChatStore.getState().setConnectionStatus('connected');
@@ -130,7 +129,6 @@ export const connectSocket = async () => {
   });
 
   socket.on('disconnect', (reason) => {
-    invalidateReportingAccess({ refetch: false });
     logger.info('[Socket] ❌ Disconnected:', reason);
     isConnecting = false;
     useChatStore.getState().setConnectionStatus('disconnected');
@@ -952,7 +950,6 @@ export const connectSocket = async () => {
 };
 
 export const disconnectSocket = () => {
-  invalidateReportingAccess({ refetch: false });
   disposeHuddleSocket?.();
   disposeHuddleSocket=null;
   useHuddleStore.getState().reset();

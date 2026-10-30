@@ -12,6 +12,16 @@ export const isDesktopApp = () => {
   return false;
 };
 
+export const isMac = () => {
+  if (typeof window !== 'undefined' && window.electronAPI?.isMac !== undefined) {
+    return window.electronAPI.isMac;
+  }
+  if (typeof navigator !== 'undefined') {
+    return /Mac|iPod|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+  }
+  return false;
+};
+
 export const hasNativeWindowControls = () => {
   if (typeof window === 'undefined') return false;
   return Boolean(window.electronAPI?.hasNativeWindowControls);
@@ -86,7 +96,7 @@ export const updateWindowControlsContrast = (targetElementOrColor) => {
 export const showDesktopNotification = (title, options = {}) => {
   if (isDesktopApp() && window.electronAPI && window.electronAPI.showNotification) {
     // Call the native Electron notification API
-    window.electronAPI.showNotification(title, options.body || '', options.data);
+    window.electronAPI.showNotification(title, options.body || '', options.data, options.icon);
   } else {
     // Fallback to standard web notifications
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -114,8 +124,9 @@ export const showDesktopNotification = (title, options = {}) => {
 
 export const onDesktopNotificationClicked = (callback) => {
   if (isDesktopApp() && window.electronAPI?.onNotificationClicked) {
-    window.electronAPI.onNotificationClicked(callback);
+    return window.electronAPI.onNotificationClicked(callback);
   }
+  return () => {};
 };
 
 export const getAppVersion = () => {
@@ -123,4 +134,57 @@ export const getAppVersion = () => {
     return window.electronAPI.getAppVersion();
   }
   return 'Web Version';
+};
+
+
+export const updateTaskbarBadge = (count, dataUrl, description) => {
+  if (isDesktopApp() && window.electronAPI?.updateTaskbarBadge) {
+    try {
+      window.electronAPI.updateTaskbarBadge(count, dataUrl, description);
+    } catch (err) {
+      console.warn('[desktopService] Failed to update taskbar badge:', err);
+    }
+  }
+};
+
+export const clearTaskbarBadge = () => {
+  if (isDesktopApp() && window.electronAPI?.clearTaskbarBadge) {
+    try {
+      window.electronAPI.clearTaskbarBadge();
+    } catch (err) {
+      console.warn('[desktopService] Failed to clear taskbar badge:', err);
+    }
+  }
+};
+
+export const flashFrame = (flag = true) => {
+  if (isDesktopApp() && window.electronAPI?.flashFrame) {
+    try {
+      window.electronAPI.flashFrame(Boolean(flag));
+    } catch (err) {
+      console.warn('[desktopService] Failed to flash frame:', err);
+    }
+  }
+};
+
+
+export const onDesktopNotificationFailed = (callback) => {
+  if (isDesktopApp() && window.electronAPI?.onNotificationFailed) {
+    return window.electronAPI.onNotificationFailed(callback);
+  }
+  return () => {};
+};
+
+export const requestNotificationPermission = async () => {
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'default') {
+      try {
+        return await Notification.requestPermission();
+      } catch (e) {
+        console.warn('Failed to request notification permission:', e);
+      }
+    }
+    return Notification.permission;
+  }
+  return 'granted';
 };

@@ -9,11 +9,13 @@ import { eventMapper } from './eventMapper.js'
 import { NotificationBuilder } from './notificationBuilder.js'
 import { deduplicationManager } from './deduplicationManager.js'
 import { navigationRouter } from './navigationRouter.js'
-import { showDesktopNotification } from '../services/desktopService.js'
+import React from 'react'
+import toast from 'react-hot-toast'
+import { showDesktopNotification, flashFrame, onDesktopNotificationFailed } from '../services/desktopService.js'
 import { useAuthStore } from '../stores/authStore.js'
 import { useChannelStore } from '../stores/channelStore.js'
 import { useNotificationStore } from '../stores/notificationStore.js'
-import { NotificationPriority, ActiveConversationBehavior } from './types.js'
+import { NotificationType, NotificationPriority, ActiveConversationBehavior } from './types.js'
 
 export class NotificationService {
   constructor() {
@@ -146,6 +148,7 @@ export class NotificationService {
     // A. Native Desktop Notification (Electron or Browser Web API)
     showDesktopNotification(event.title, {
       body: event.body,
+      icon: event.sender?.avatar,
       data: {
         eventId: event.eventId,
         channelId: event.channelId,
@@ -153,21 +156,36 @@ export class NotificationService {
       },
     })
 
-    // B. In-App Notification Store
-    const notifStore = useNotificationStore?.getState ? useNotificationStore.getState() : null
-    if (notifStore?.addNotification) {
-      notifStore.addNotification({
-        _id: event.eventId,
-        type: event.type,
-        title: event.title,
-        body: event.body,
-        channelId: event.channelId,
-        sender: event.sender,
-        priority: event.priority,
-        metadata: event.metadata,
-        navigationTarget: event.navigationTarget,
-        createdAt: new Date(event.timestamp || Date.now()).toISOString(),
-      })
+    // Attract user attention if window is blurred or backgrounded
+    const isDocumentFocused =
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'visible' &&
+      (typeof document.hasFocus === 'function' ? document.hasFocus() : true)
+
+    if (!isDocumentFocused) {
+      flashFrame(true)
+    }
+
+    // B. In-App Notification Store (only for activity notifications/mentions/tasks)
+    if (
+      event.type !== NotificationType.NEW_MESSAGE &&
+      event.type !== NotificationType.THREAD_REPLY
+    ) {
+      const notifStore = useNotificationStore?.getState ? useNotificationStore.getState() : null
+      if (notifStore?.addNotification) {
+        notifStore.addNotification({
+          _id: event.eventId,
+          type: event.type,
+          title: event.title,
+          body: event.body,
+          channelId: event.channelId,
+          sender: event.sender,
+          priority: event.priority,
+          metadata: event.metadata,
+          navigationTarget: event.navigationTarget,
+          createdAt: new Date(event.timestamp || Date.now()).toISOString(),
+        })
+      }
     }
 
     // C. Audio sound alert (if enabled)
@@ -201,6 +219,39 @@ export class NotificationService {
    */
   setupNavigation() {
     navigationRouter.setup()
+
+    // Listen for native notification failure (e.g. macOS dev unsigned or system settings blocked)
+    onDesktopNotificationFailed((payload) => {
+      if (!payload) return
+      const { title, body, data } = payload
+      toast(
+        (t) =>
+          React.createElement(
+            'div',
+            {
+              onClick: () => {
+                toast.dismiss(t.id)
+                if (data?.navigationTarget) {
+                  navigationRouter.navigate(data.navigationTarget)
+                }
+              },
+              className: 'cursor-pointer flex flex-col gap-1 py-1',
+              style: { maxWidth: 300 },
+            },
+            React.createElement(
+              'div',
+              { className: 'font-semibold text-sm flex items-center justify-between', style: { color: 'var(--text-primary)' } },
+              title
+            ),
+            React.createElement(
+              'div',
+              { className: 'text-xs line-clamp-2', style: { color: 'var(--text-secondary)' } },
+              body
+            )
+          ),
+        { duration: 5000, id: data?.eventId || undefined }
+      )
+    })
   }
 }
 

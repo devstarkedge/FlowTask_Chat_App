@@ -7,6 +7,7 @@
 import { NavigationTargetType } from './types.js'
 import { onDesktopNotificationClicked } from '../services/desktopService.js'
 import { useChannelStore } from '../stores/channelStore.js'
+import { useWorkspaceStore } from '../stores/workspaceStore.js'
 import { useChatStore } from '../stores/chatStore.js'
 
 export class NavigationRouter {
@@ -38,6 +39,21 @@ export class NavigationRouter {
     const extra = target.extra || {}
 
     if (!type || !targetId) return
+
+    // Ensure correct workspace is active
+    const targetWsId = extra.workspaceId || target.workspaceId
+    const currentWsId = useWorkspaceStore?.getState ? useWorkspaceStore.getState()?.activeWorkspaceId : null
+    if (targetWsId && targetWsId !== currentWsId && useWorkspaceStore?.getState()?.switchWorkspace) {
+      useWorkspaceStore.getState().switchWorkspace(targetWsId)
+    }
+
+    // If running in Electron with HashRouter, sync URL hash
+    if (typeof window !== 'undefined' && targetWsId && window.location) {
+      const wsHash = `#/workspace/${targetWsId}`
+      if (!window.location.hash.startsWith(wsHash)) {
+        window.location.hash = wsHash
+      }
+    }
 
     // Check custom handler first
     if (this.customNavigators.has(type)) {

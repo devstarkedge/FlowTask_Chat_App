@@ -1,6 +1,7 @@
 import useMentions from '../../hooks/useMentions';
 import MentionDropdown from './MentionDropdown';
 import { useLiveMentionRenderer } from '../../hooks/useLiveMentionRenderer';
+import HuddleSummary from '../huddles/HuddleSummary';
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import MessageContentResolver from "./MessageContentResolver";
@@ -790,6 +791,7 @@ let derivedAttachments = [];
     
 
     // System messages
+    if (message.huddleMeta) return <HuddleSummary message={message}/>;
     if (isSystem) {
       return (
         <div className="flex items-center gap-3 py-2 px-5 my-1 animate-fade-in">
@@ -862,19 +864,38 @@ let derivedAttachments = [];
       );
     };
 
-    // Rendered inside the bubble at the bottom-right for DM own messages
+    // Rendered inside the bubble at the bottom-right for all messages (DMs and public/private channels)
     const renderBubbleStatusRow = () => {
-      if (!isDMChannel || !isOwn) return null;
       return (
         <div
-          className="flex items-center justify-end gap-0.5 mt-1"
-          className="flex items-center justify-end gap-0.5 mt-1 message-bubble-status"
+          className="flex items-center justify-end gap-0.5 mt-1 message-bubble-status select-none"
           style={{ opacity: 0.9, minHeight: 14 }}
         >
-          <span className="message-timestamp" style={{ fontSize: 10, color: "var(--text-timestamp)" }}>
+          {message.isEdited && (
+            <span
+              className="text-[9px] mr-0.5"
+              style={{
+                color: isOwn
+                  ? "color-mix(in srgb, var(--bubble-sender-text, #ffffff) 70%, transparent)"
+                  : "var(--text-muted, #8a8f9d)",
+              }}
+            >
+              (edited)
+            </span>
+          )}
+          <span
+            className="message-timestamp"
+            style={{
+              fontSize: 10,
+              color: isOwn
+                ? "var(--text-timestamp, rgba(255, 255, 255, 0.75))"
+                : "var(--text-timestamp, #64748b)",
+              whiteSpace: "nowrap",
+            }}
+          >
             {time}
           </span>
-          {renderDeliveryStatus()}
+          {isOwn && renderDeliveryStatus()}
         </div>
       );
     };
@@ -1084,14 +1105,7 @@ let derivedAttachments = [];
                   showStatus={false}
                 />
               </div>
-            ) : (
-              <span
-                className="flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: "var(--text-timestamp)", height: 36, fontSize: 10 }}
-              >
-                {format(new Date(message.createdAt), "h:mm")}
-              </span>
-            )}
+            ) : null}
           </div>
 
           {/* Column: name + bubble */}
@@ -1129,20 +1143,6 @@ let derivedAttachments = [];
                     }}
                   >
                     BOT
-                  </span>
-                )}
-                <span
-                  className="text-[11px]"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {time}
-                </span>
-                {message.isEdited && (
-                  <span
-                    className="text-[10px]"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    (edited)
                   </span>
                 )}
                 {message.isPinned && (

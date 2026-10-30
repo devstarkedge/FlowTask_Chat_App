@@ -118,6 +118,14 @@ export const useHomeData = (navigation) => {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (!navigation?.addListener) return;
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadData({ silent: true });
+    });
+    return unsubscribe;
+  }, [navigation, loadData]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {

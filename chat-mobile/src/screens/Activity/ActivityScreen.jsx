@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ReplyQuotePreview from "../../components/ReplyQuotePreview";
 import { hasValidReplyTo } from "../../utils/replyUtils";
 import { useTranslation } from "../../utils/i18n";
+import { useFocusEffect } from "@react-navigation/native";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -334,14 +335,13 @@ const ActivityScreen = ({ navigation }) => {
   const [activeFilter, setActiveFilter] = useState("all");
   const [didInitialFetch, setDidInitialFetch] = useState(false);
 
-  // Fetch on mount
-  React.useEffect(() => {
-    if (!didInitialFetch) {
-      setDidInitialFetch(true);
+  // Fetch on mount and revalidate on tab focus
+  useFocusEffect(
+    useCallback(() => {
       fetchNotifications();
       useNotificationStore.getState().fetchUnreadCount();
-    }
-  }, [didInitialFetch, fetchNotifications]);
+    }, [fetchNotifications])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

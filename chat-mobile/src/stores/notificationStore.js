@@ -1,8 +1,13 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import storage from '../services/storage';
 import api from '../services/api';
 import logger from '../utils/logger';
+import axios from 'axios';
 
-export const useNotificationStore = create((set, get) => ({
+export const useNotificationStore = create(
+  persist(
+    (set, get) => ({
   notifications: [],
   unreadCount: 0,
   isLoading: false,
@@ -49,6 +54,7 @@ export const useNotificationStore = create((set, get) => ({
         return { notifications: unique, hasMore, cursor: nextCursor, isLoading: false, error: null };
       });
     } catch (error) {
+      if (axios.isCancel?.(error) || error?.name === 'CanceledError') return;
       logger.error('Failed to fetch notifications:', error?.response?.data?.error?.message || error.message);
       set({ isLoading: false, error: error.message || 'Failed to load activity' });
     }
@@ -60,6 +66,7 @@ export const useNotificationStore = create((set, get) => ({
       const payload = data?.data || data || {};
       set({ unreadCount: payload.count || 0 });
     } catch (error) {
+      if (axios.isCancel?.(error) || error?.name === 'CanceledError') return;
       logger.error('Failed to fetch unread count:', error?.response?.data?.error?.message || error.message);
     }
   },
@@ -175,4 +182,14 @@ export const useNotificationStore = create((set, get) => ({
   },
 
   clearNotifications: () => set({ notifications: [], unreadCount: 0, cursor: null, hasMore: false }),
-}));
+    }),
+    {
+      name: 'flowtask-notification-storage',
+      storage: createJSONStorage(() => storage),
+      partialize: (state) => ({
+        notifications: (state.notifications || []).slice(0, 50),
+        unreadCount: state.unreadCount || 0,
+      }),
+    }
+  )
+);

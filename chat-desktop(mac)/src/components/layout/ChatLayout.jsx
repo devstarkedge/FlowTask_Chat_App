@@ -77,7 +77,7 @@ import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import { handleDownload } from "../../utils/handleDownload";
 import { useAppHistory } from "../../hooks/useAppHistory";
-import { setWindowControlsColor, hasNativeWindowControls, isDesktopApp } from "../../services/desktopService";
+import { setWindowControlsColor, hasNativeWindowControls, isDesktopApp, updateWindowControlsContrast } from "../../services/desktopService";
 
 const EMPTY_LIST = [];
 
@@ -115,7 +115,7 @@ const LAYOUT_STYLES = `
   height: 48px;
   display: grid;
   grid-template-columns:
-    calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+    calc(var(--workspace-sidebar-width, 48px) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
     auto
     minmax(0, 1fr)
     auto;
@@ -214,9 +214,17 @@ const LAYOUT_STYLES = `
 .cl-topbar__search-wrap {
   flex: 1;
   min-width: 0;
-  max-width: 640px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   overflow: visible;
   position: relative;
+}
+
+.cl-topbar__search-wrap .global-search {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .cl-topbar__actions {
@@ -259,7 +267,7 @@ const LAYOUT_STYLES = `
 @media (max-width: 1024px) {
   .cl-topbar {
     grid-template-columns:
-      calc(var(--workspace-sidebar-width) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
+      calc(var(--workspace-sidebar-width, 48px) + var(--cl-nav-sidebar-width, var(--nav-sidebar-width)))
       auto
       minmax(0, 1fr)
       auto;
@@ -1955,6 +1963,12 @@ function GlobalTopBar({
       return () => {
         if (typeof unsub === "function") unsub();
       };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isDesktopApp()) {
+      updateWindowControlsContrast();
     }
   }, []);
 

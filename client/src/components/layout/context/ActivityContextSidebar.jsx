@@ -67,26 +67,51 @@ const STYLES = `
 
 /* ─── Header ───────────────────────────────────────── */
 /* "Activity" title bar */
+.acs-sidebar-container {
+  container-type: inline-size;
+  container-name: acs-sidebar;
+}
+.acs-sidebar-container .context-sidebar-subheader {
+  padding: 0 !important;
+  border-bottom: none !important;
+  background: transparent !important;
+}
+
+.acs3-subheader-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Header ───────────────────────────────────────── */
+/* "Activity" title bar */
 .acs3-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 4px;
+  padding: 12px 14px 4px;
   gap: 8px;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .acs3-title-left {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .acs3-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--sidebar-text, #fff);
   letter-spacing: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Unread count badge (red pill) */
@@ -131,51 +156,59 @@ const STYLES = `
 
 /* Mark-all-read button */
 .acs3-markbtn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 9px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 4px 8px;
+  height: 28px;
   border-radius: 6px;
   border: 1px solid rgba(255,255,255,0.14);
   background: transparent;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.65);
   font-size: 11.5px; font-weight: 500;
   cursor: pointer; font-family: inherit;
   white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
   transition: all 130ms ease;
 }
 .acs3-markbtn:hover:not(:disabled) {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.09);
   border-color: rgba(255,255,255,0.28);
-  color: rgba(255,255,255,0.9);
+  color: rgba(255,255,255,0.95);
 }
 .acs3-markbtn:disabled { opacity:.4; cursor:not-allowed; }
 
 /* ─── Filter tab pills ───────────────────────────── */
 .acs3-tabs {
   display: flex; align-items: center;
-  gap: 20px;
-  padding: 0 16px;
+  gap: 14px;
+  padding: 0 14px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   overflow-x: auto;
+  overflow-y: hidden;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 .acs3-tabs::-webkit-scrollbar { display:none; }
 
 .acs3-tab {
   display: inline-flex; align-items: center;
-  padding: 8px 4px;
+  padding: 6px 2px 7px;
   border-radius: 0;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: rgba(255,255,255,0.5);
-  font-size: 13px; font-weight: 600;
+  color: rgba(255,255,255,0.55);
+  font-size: 12.5px; font-weight: 600;
   cursor: pointer; white-space: nowrap; font-family: inherit;
   transition: all 140ms ease;
   margin-bottom: -1px;
+  flex-shrink: 0;
 }
 .acs3-tab:hover {
   background: transparent;
-  color: rgba(255,255,255,0.8);
+  color: rgba(255,255,255,0.85);
 }
 .acs3-tab.is-on {
   background: transparent;
@@ -183,6 +216,156 @@ const STYLES = `
   color: #fff;
   font-weight: 600;
   box-shadow: none;
+}
+
+/* ─── Responsive adjustments for small / resized sidebar ─── */
+.acs-sidebar-container.is-narrow .acs3-titlebar {
+  padding: 10px 10px 4px;
+  gap: 4px;
+}
+.acs-sidebar-container.is-narrow .acs3-title {
+  font-size: 14px;
+}
+.acs-sidebar-container.is-narrow .acs3-markbtn-text {
+  display: none;
+}
+.acs-sidebar-container.is-narrow .acs3-markbtn {
+  padding: 0;
+  width: 28px;
+  min-width: 28px;
+}
+.acs-sidebar-container.is-narrow .acs3-tabs {
+  gap: 10px;
+  padding: 0 10px;
+}
+.acs-sidebar-container.is-narrow .acs3-tab {
+  font-size: 12px;
+  padding: 5px 2px 6px;
+}
+.acs-sidebar-container.is-narrow .acs3-row {
+  padding: 8px 10px;
+  gap: 8px;
+}
+.acs-sidebar-container.is-narrow .acs3-name {
+  font-size: 13px;
+}
+.acs-sidebar-container.is-narrow .acs3-time {
+  font-size: 10.5px;
+}
+.acs-sidebar-container.is-narrow .acs3-text {
+  font-size: 12px;
+}
+.acs-sidebar-container.is-narrow .acs3-divider {
+  padding: 12px 10px 6px;
+}
+.acs-sidebar-container.is-narrow .acs3-divider-label {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  margin: 0 6px;
+}
+
+.acs-sidebar-container.is-ultra-narrow .acs3-titlebar {
+  padding: 8px 8px 2px;
+  gap: 2px;
+}
+.acs-sidebar-container.is-ultra-narrow .acs3-title {
+  font-size: 13px;
+}
+.acs-sidebar-container.is-ultra-narrow .acs3-count {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  font-size: 10px;
+}
+.acs-sidebar-container.is-ultra-narrow .acs3-icon-btn,
+.acs-sidebar-container.is-ultra-narrow .acs3-markbtn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+}
+.acs-sidebar-container.is-ultra-narrow .acs3-tabs {
+  gap: 8px;
+  padding: 0 8px;
+}
+.acs-sidebar-container.is-ultra-narrow .acs3-tab {
+  font-size: 11.5px;
+  padding: 4px 1px 5px;
+}
+.acs-sidebar-container.is-ultra-narrow .acs3-row {
+  padding: 6px 8px;
+  gap: 6px;
+}
+.acs-sidebar-container.is-ultra-narrow .acs3-av .acs3-icon-box {
+  width: 28px;
+  height: 28px;
+}
+
+@container acs-sidebar (max-width: 275px) {
+  .acs3-titlebar {
+    padding: 10px 10px 4px !important;
+    gap: 4px !important;
+  }
+  .acs3-title {
+    font-size: 14px !important;
+  }
+  .acs3-markbtn-text {
+    display: none !important;
+  }
+  .acs3-markbtn {
+    padding: 0 !important;
+    width: 28px !important;
+    min-width: 28px !important;
+  }
+  .acs3-tabs {
+    gap: 10px !important;
+    padding: 0 10px !important;
+  }
+  .acs3-tab {
+    font-size: 12px !important;
+    padding: 5px 2px 6px !important;
+  }
+  .acs3-row {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+}
+
+@container acs-sidebar (max-width: 225px) {
+  .acs3-titlebar {
+    padding: 8px 8px 2px !important;
+    gap: 2px !important;
+  }
+  .acs3-title {
+    font-size: 13px !important;
+  }
+  .acs3-count {
+    min-width: 17px !important;
+    height: 17px !important;
+    padding: 0 4px !important;
+    font-size: 10px !important;
+  }
+  .acs3-icon-btn,
+  .acs3-markbtn {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+  }
+  .acs3-tabs {
+    gap: 8px !important;
+    padding: 0 8px !important;
+  }
+  .acs3-tab {
+    font-size: 11.5px !important;
+    padding: 4px 1px 5px !important;
+  }
+  .acs3-row {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+  }
+  .acs3-av .acs3-icon-box {
+    width: 28px !important;
+    height: 28px !important;
+  }
 }
 
 /* ─── Scroll container ───────────────────────────── */
@@ -294,6 +477,8 @@ const STYLES = `
 .acs3-meta {
   display:flex; align-items:baseline;
   justify-content:space-between; gap:6px;
+  min-width: 0;
+  width: 100%;
 }
 /* Sender name */
 .acs3-name {
@@ -302,6 +487,8 @@ const STYLES = `
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   letter-spacing:0; line-height:1.3;
   transition: color 120ms ease;
+  min-width: 0;
+  flex: 1;
 }
 .acs3-row.is-unread .acs3-name,
 .acs3-row.is-on .acs3-name {
@@ -635,6 +822,31 @@ export default function ActivityContextSidebar({
   onAutoSelect,
   isCollapsed = false,
 }) {
+  const containerRef = useRef(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+  const [isUltraNarrow, setIsUltraNarrow] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const updateSize = (width) => {
+      setIsNarrow(width < 275);
+      setIsUltraNarrow(width < 225);
+    };
+
+    updateSize(containerRef.current.offsetWidth);
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const width = entry.contentRect.width;
+          updateSize(width);
+        }
+      });
+      observer.observe(containerRef.current);
+      return () => observer.disconnect();
+    }
+  }, []);
+
   const {
     notifications, unreadCount, isLoading, hasMore,
     fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead,
@@ -704,7 +916,7 @@ export default function ActivityContextSidebar({
 
   /* ── Sub-header: Activity title + tabs (section-specific controls) ── */
   const subHeader = (
-    <>
+    <div className="acs3-subheader-wrap">
       {/* Title + actions */}
       <div className="acs3-titlebar">
         <div className="acs3-title-left">
@@ -721,38 +933,31 @@ export default function ActivityContextSidebar({
                 background: "var(--status-warning, #f59e0b)",
                 color: "#fff",
               }}
+              title="Notifications paused"
             >
               <PauseCircle size={10} />
-              Paused
+              {!isNarrow && <span>Paused</span>}
             </span>
           )}
         </div>
 
         <div className="acs3-title-actions">
           {unreadCount > 0 && (
-            <button className="acs3-markbtn" onClick={handleMarkAll} disabled={marking}>
-              {marking
-                ? <div className="acs3-spinner" style={{ width:12, height:12 }} />
-                : <CheckCheck size={12} />
-              }
-              Mark all read
+            <button
+              className="acs3-markbtn"
+              onClick={handleMarkAll}
+              disabled={marking}
+              title="Mark all as read"
+              aria-label="Mark all as read"
+            >
+              {marking ? (
+                <div className="acs3-spinner" style={{ width: 12, height: 12 }} />
+              ) : (
+                <CheckCheck size={13} className="shrink-0" />
+              )}
+              <span className="acs3-markbtn-text">Mark all read</span>
             </button>
           )}
-          {/* <div style={{ position: 'relative', display: 'inline-block' }}>
-            <button
-              onClick={() => setShowPauseDropdown(!showPauseDropdown)}
-              className="acs3-icon-btn"
-              title="Pause notifications"
-              aria-label="Pause notifications"
-            >
-              <PauseCircle size={15} />
-            </button>
-            {showPauseDropdown && (
-              <PauseNotificationsDropdown
-                onClose={() => setShowPauseDropdown(false)}
-              />
-            )}
-          </div> */}
           <button
             onClick={() => setShowSettings(true)}
             className="acs3-icon-btn"
@@ -766,8 +971,15 @@ export default function ActivityContextSidebar({
       </div>
 
       {/* Filter tabs */}
-      <div className="acs3-tabs">
-        {TABS.map(tab => (
+      <div
+        className="acs3-tabs"
+        onWheel={(e) => {
+          if (e.deltaY !== 0) {
+            e.currentTarget.scrollLeft += e.deltaY;
+          }
+        }}
+      >
+        {TABS.map((tab) => (
           <button
             key={tab.id}
             className={`acs3-tab${activeTab === tab.id ? " is-on" : ""}`}
@@ -777,11 +989,17 @@ export default function ActivityContextSidebar({
           </button>
         ))}
       </div>
-    </>
+    </div>
   );
 
   return (
-    <SidebarContainer subHeader={subHeader} isCollapsed={isCollapsed} aria-label="Activity notifications">
+    <SidebarContainer
+      ref={containerRef}
+      className={`acs-sidebar-container ${isNarrow ? "is-narrow" : ""} ${isUltraNarrow ? "is-ultra-narrow" : ""}`}
+      subHeader={subHeader}
+      isCollapsed={isCollapsed}
+      aria-label="Activity notifications"
+    >
       <StyleInjector />
 
       <div

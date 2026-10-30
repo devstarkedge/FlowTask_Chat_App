@@ -50,7 +50,7 @@ export const setCachedToken = (token) => {
  */
 export const setCachedWorkspaceId = (workspaceId) => {
   const nextWorkspaceId = workspaceId || null;
-  if (nextWorkspaceId !== cachedWorkspaceId) {
+  if (cachedWorkspaceId !== null && nextWorkspaceId !== cachedWorkspaceId) {
     workspaceContextVersion += 1;
     try { require('./reportingAccess').resetReportingAccess(); } catch {}
   }
@@ -180,9 +180,13 @@ const performRefresh = async () => {
 api.interceptors.response.use(
   (response) => {
     try {
+      const url = response.config?.url || '';
+      if (response.config?._workspaceVersion !== undefined && response.config._workspaceVersion !== workspaceContextVersion) {
+        return Promise.reject(new axios.CanceledError('Workspace context changed'));
+      }
       const currentRev = useReportingHistoryStore?.getState?.()?.revision ?? 0;
-      if (/messages|notifications/.test(response.config?.url || '') &&
-        (response.config?._reportingRevision !== currentRev || response.config?._workspaceVersion !== workspaceContextVersion)) {
+      if (/messages/.test(url) && !/unread-count/.test(url) &&
+        response.config?._reportingRevision !== undefined && response.config._reportingRevision !== currentRev) {
         return Promise.reject(new axios.CanceledError('Reporting access changed'));
       }
     } catch {}
@@ -575,8 +579,18 @@ export const pushAPI = {
 
 // Search API (global workspace search)
 export const searchAPI = {
-  search: ({ q = '', scope = null, limit = null, cursor = null, signal = undefined } = {}) =>
-    api.get('/search', { params: { q, scope, limit, cursor }, signal }),
+  search: ({ q = '', scope = null, limit = null, cursor = null, workspaceId = null, signal = undefined } = {}) => {
+    const headers = {};
+    if (workspaceId) {
+      headers['X-Workspace-Id'] = workspaceId;
+    }
+    const params = { q };
+    if (scope) params.scope = scope;
+    if (limit != null) params.limit = limit;
+    if (cursor) params.cursor = cursor;
+    if (workspaceId) params.workspaceId = workspaceId;
+    return api.get('/search', { params, headers, signal });
+  },
   global: (q, options = {}) => searchAPI.search({ q, ...options }),
 };
 

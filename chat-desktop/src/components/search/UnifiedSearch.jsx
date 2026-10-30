@@ -187,17 +187,18 @@ function toHistoryItem(item) {
 function saveRecentClick(userId, workspaceId, item) {
   const hi = toHistoryItem(item);
   if (!hi?.id && !hi?.path && !hi?.url) return readHistory(userId, workspaceId);
+  const taggedHi = { ...hi, workspaceId: workspaceId || hi.workspaceId };
   return updateHistory(userId, workspaceId, (h) => {
     const nextClicks = [
-      { ...hi, viewedAt: Date.now() },
-      ...h.clicks.filter((e) => getItemKey(e) !== getItemKey(hi)),
+      { ...taggedHi, viewedAt: Date.now() },
+      ...h.clicks.filter((e) => getItemKey(e) !== getItemKey(taggedHi)),
     ].slice(0, MAX_RECENT_CLICKS);
     const nextPeople = { ...h.people };
-    if (hi.type === "user" && hi.id) {
-      const cur = nextPeople[hi.id] || {};
-      nextPeople[hi.id] = {
+    if (taggedHi.type === "user" && taggedHi.id) {
+      const cur = nextPeople[taggedHi.id] || {};
+      nextPeople[taggedHi.id] = {
         ...cur,
-        ...hi,
+        ...taggedHi,
         count: (cur.count || 0) + 1,
         lastClickedAt: Date.now(),
         reasonLabel: "Frequent teammate",
@@ -310,7 +311,16 @@ function quickPages() {
 }
 
 function buildEmptyStateResults({ history, channels, drafts, workspaceId }) {
-  const channelById = new Map(channels.map((c) => [c._id, c]));
+  const workspaceChannels = (channels || []).filter((c) => {
+    if (!c) return false;
+    if (workspaceId && c.workspaceId) {
+      const cWs = typeof c.workspaceId === "object" ? (c.workspaceId._id || c.workspaceId.id || c.workspaceId.toString()) : c.workspaceId;
+      return String(cWs) === String(workspaceId);
+    }
+    return true;
+  });
+
+  const channelById = new Map(workspaceChannels.map((c) => [c._id, c]));
 
   const recentSearches = history.queries.map((q) => ({
     id: `recent:${q}`,
@@ -319,12 +329,26 @@ function buildEmptyStateResults({ history, channels, drafts, workspaceId }) {
     reasonLabel: "Recent search",
   }));
 
-  const recentClicks = history.clicks.map((c) => ({
-    ...c,
-    reasonLabel: c.reasonLabel || "Recent open",
-  }));
+  const recentClicks = history.clicks
+    .filter((c) => {
+      if (!workspaceId) return true;
+      if (c.workspaceId && String(c.workspaceId) !== String(workspaceId)) return false;
+      if ((c.type === "channel" || c.type === "dm" || c.type === "message") && c.channelId) {
+        if (!channelById.has(c.channelId) && !channelById.has(c.id)) return false;
+      }
+      return true;
+    })
+    .map((c) => ({
+      ...c,
+      reasonLabel: c.reasonLabel || "Recent open",
+    }));
 
   const frequentPeople = Object.values(history.people || {})
+    .filter((p) => {
+      if (!workspaceId) return true;
+      if (p.workspaceId && String(p.workspaceId) !== String(workspaceId)) return false;
+      return true;
+    })
     .sort((a, b) => {
       if ((b.count || 0) !== (a.count || 0))
         return (b.count || 0) - (a.count || 0);
@@ -333,7 +357,7 @@ function buildEmptyStateResults({ history, channels, drafts, workspaceId }) {
     .slice(0, 4);
 
   const starredChannels = sortByActivity(
-    channels.filter((c) => !c.isArchived && (c.isPinned || c.isStarred)),
+    workspaceChannels.filter((c) => !c.isArchived && (c.isPinned || c.isStarred)),
   ).map((c) =>
     toConversationSuggestion(
       c,
@@ -342,11 +366,11 @@ function buildEmptyStateResults({ history, channels, drafts, workspaceId }) {
   );
 
   const recentConversations = sortByActivity(
-    channels.filter((c) => !c.isArchived && c.lastMessageAt),
+    workspaceChannels.filter((c) => !c.isArchived && c.lastMessageAt),
   ).map((c) => toConversationSuggestion(c, "Recent conversation"));
 
   const draftConversations = sortByActivity(
-    Object.values(drafts || {}).filter((d) => d.workspaceId === workspaceId),
+    Object.values(drafts || {}).filter((d) => !workspaceId || String(d.workspaceId) === String(workspaceId)),
   ).map((d) => toDraftSuggestion(d, channelById.get(d.channelId)));
 
   const quickLinks = quickPages().map((p) => ({
@@ -460,6 +484,14 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
   const [history, setHistory] = useState(() =>
     readHistory(user?._id, workspaceId),
   );
+
+  // Reset search cache, live results, and load scoped history when workspace changes
+  useEffect(() => {
+    cacheRef.current.clear();
+    setGlobalResults(EMPTY_RESULTS_GLOBAL);
+    setSearchMeta(EMPTY_META);
+    setHistory(readHistory(user?._id, workspaceId));
+  }, [user?._id, workspaceId]);
 
   // Channel mode — per-channel query map so state survives channel switches
   const [queryByChannel, setQueryByChannel] = useState({});
@@ -729,6 +761,7 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
       try {
         const { data } = await searchAPI.search({
           q: trimmed,
+          workspaceId,
           signal: controller.signal,
         });
         const results = normalizeGlobalResults(data?.data || {});
@@ -819,6 +852,7 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
           q: trimmed,
           scope: channelId,
           limit: RECENT_LIMIT,
+          workspaceId,
           signal: controller.signal,
         });
         const normalized = normalizeSearchMessages(

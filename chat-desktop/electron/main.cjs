@@ -3,9 +3,29 @@ const { createIncomingCallWindow } = require('./incomingCallWindow.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
 const { installHuddlePopout } = require('./huddlePopout.cjs');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen, clipboard, nativeImage } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const isDev = !app.isPackaged;
+
+function getNotificationIconPath() {
+  const defaultDevIcon = path.join(__dirname, '../public/logo.png');
+  if (isDev) return defaultDevIcon;
+  try {
+    const extractedPath = path.join(app.getPath('userData'), 'notification-icon.png');
+    if (!fs.existsSync(extractedPath)) {
+      const bundledPath = path.join(__dirname, '../dist/logo.png');
+      if (fs.existsSync(bundledPath)) {
+        fs.writeFileSync(extractedPath, fs.readFileSync(bundledPath));
+      }
+    }
+    if (fs.existsSync(extractedPath)) return extractedPath;
+  } catch (err) {
+    console.error('[TaskChat] Failed to extract notification icon:', err);
+  }
+  return path.join(__dirname, '../dist/logo.png');
+}
+
 const isUnpackedPreview = app.isPackaged && process.platform === 'win32' &&
   path.basename(path.dirname(process.execPath)).toLowerCase() === 'win-unpacked';
 // Explicit isolated profile for two-client calling checks. Normal launches
@@ -26,7 +46,7 @@ if (isUnpackedPreview) app.setPath('userData', path.join(app.getPath('appData'),
 if(callingTestProfile)app.setPath('userData',path.join(app.getPath('temp'),`TaskChat-calling-${callingTestProfile}`));
 
 // Set the App ID for all platforms (Windows, Mac, Linux) to ensure OS-level integrations work
-app.setAppUserModelId(callingTestProfile ? `com.taskchat.callingtest.${callingTestProfile}` : isDev ? 'com.taskchat.dev' : isUnpackedPreview ? 'com.taskchat.preview' : 'com.flowtask.chat');
+app.setAppUserModelId(callingTestProfile ? `com.taskchat.callingtest.${callingTestProfile}` : isDev ? process.execPath : isUnpackedPreview ? 'com.taskchat.preview' : 'com.flowtask.chat');
 
 let mainWindow;
 let tray = null;
@@ -88,6 +108,11 @@ function createWindow() {
 
 
   mainWindow.once('ready-to-show', showMainWindow);
+  mainWindow.on('focus', () => {
+    try {
+      mainWindow.flashFrame(false);
+    } catch {}
+  });
 
   if (hasTitleBarOverlay) overlayWindows.add(mainWindow);
 
@@ -244,16 +269,22 @@ app.on('window-all-closed', () => {
 });
 
 // IPC handler for notifications
-ipcMain.on('show-notification', (event, { title, body, data }) => {
-  const { Notification } = require('electron');
+ipcMain.on('show-notification', (event, { title, body, data, icon }) => {
+  let notifIcon = getNotificationIconPath();
+  if (icon && typeof icon === 'string' && icon.startsWith('data:image/')) {
+    try {
+      notifIcon = nativeImage.createFromDataURL(icon);
+    } catch {}
+  }
+
   const notification = new Notification({
-    title,
-    body,
-    icon: path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png'),
+    title: title || 'TaskChat',
+    body: body || '',
+    icon: notifIcon,
   });
 
   notification.on('click', () => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       if (!mainWindow.isVisible()) {
         mainWindow.show();
         if (process.platform === 'darwin' && app.dock) app.dock.show();
@@ -265,6 +296,48 @@ ipcMain.on('show-notification', (event, { title, body, data }) => {
   });
 
   notification.show();
+});
+
+// IPC handler for taskbar badge overlay
+ipcMain.on('update-taskbar-badge', (event, { count, dataUrl, description }) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  const numCount = Number(count) || 0;
+
+  if (app.setBadgeCount) {
+    try {
+      app.setBadgeCount(numCount);
+    } catch (err) {
+      console.warn('[TaskChat] Failed to set badge count:', err);
+    }
+  }
+
+  if (win && !win.isDestroyed()) {
+    if (process.platform === 'win32') {
+      try {
+        if (numCount > 0 && dataUrl) {
+          const img = nativeImage.createFromDataURL(dataUrl);
+          const desc = description || `${numCount} unread notification${numCount > 1 ? 's' : ''}`;
+          win.setOverlayIcon(img, desc);
+        } else {
+          win.setOverlayIcon(null, '');
+        }
+      } catch (err) {
+        console.error('[TaskChat] Failed to set taskbar overlay icon:', err);
+      }
+    }
+  }
+});
+
+// IPC handler for window flash frame (attract attention)
+ipcMain.on('flash-frame', (event, flag) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (win && !win.isDestroyed()) {
+    try {
+      win.flashFrame(Boolean(flag));
+    } catch (err) {
+      console.error('[TaskChat] Failed to toggle flash frame:', err);
+    }
+  }
 });
 
 // Allow renderer to change titleBarOverlay dynamically

@@ -21,6 +21,8 @@ import logger from '../utils/logger'
 import { handleChannelRemoved } from './channelEvents'
 import { handleUserProfileUpdated } from './userProfileEvents'
 import { useUserProfileStore } from '../stores/userProfileStore'
+import { notificationService } from '../notifications'
+import { badgeService } from './badgeService'
 
 function purgePrivateLeaveReports() {
   const state = useChatStore.getState()
@@ -393,6 +395,10 @@ export function connectSocket() {
     // when user is actively viewing the conversation.
     unreadManager.handleMessageReceived(message)
     useChannelStore.getState().handleNewMessage(message)
+
+    const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    notificationService.processEvent('message:create', { message }, { workspaceId: activeWorkspaceId })
+    badgeService.sync()
   })
 
   // ─── Thread Reply Events ──────────────────────────────────────────────
@@ -414,6 +420,9 @@ export function connectSocket() {
       if (message.channelId) {
         useChatStore.getState().incrementReplyCount(resolvedRootId, message.channelId)
       }
+      const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId
+      notificationService.processEvent('thread:reply', { message, rootMessageId: resolvedRootId }, { workspaceId: activeWorkspaceId })
+      badgeService.sync()
     }
   })
 
@@ -805,6 +814,9 @@ export function connectSocket() {
     useNotificationStore.getState().addNotification(notification)
     // Also keep legacy in-memory notification for toast/badge
     useChatStore.getState().addNotification(notification)
+
+    const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
+    notificationService.processEvent(notification.type || 'notification', notification, { workspaceId: activeWsId })
   })
 
   // ─── Multi-Device Notification Sync ──────────────────────────────────

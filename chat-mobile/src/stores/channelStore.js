@@ -25,7 +25,18 @@ export const useChannelStore = create(
       categories: [],
       starredIds: [],
       pinnedIds: [],
+      cachedChannels: {},
       isLoading: false,
+
+      setCachedChannels: (workspaceId, channels) => {
+        if (!workspaceId || !Array.isArray(channels)) return;
+        set((state) => ({
+          cachedChannels: {
+            ...state.cachedChannels,
+            [String(workspaceId)]: channels,
+          },
+        }));
+      },
 
       fetchCategories: async () => {
         const workspaceId = resolveWorkspaceId();
@@ -372,6 +383,7 @@ export const useChannelStore = create(
         starredIds: state.starredIds,
         pinnedIds: state.pinnedIds,
         categories: state.categories,
+        cachedChannels: state.cachedChannels,
       }),
     }
   )

@@ -24,6 +24,7 @@ export const getUnread = asyncHandler(async (req, res) => {
     userId,
     workspaceId,
     req.membership,
+    { includeSidebarDetails: false },
   );
   const allowedChannelIds = new Set(accessibleChannels.map((channel) => channel._id.toString()));
   const authorizedUnreads = unreads.filter((receipt) =>

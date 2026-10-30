@@ -1,4 +1,5 @@
-import admin from 'firebase-admin'
+import { cert, getApps, initializeApp } from 'firebase-admin/app'
+import { getMessaging } from 'firebase-admin/messaging'
 import fs from 'fs'
 import path from 'path'
 import logger from '../utils/logger.js'
@@ -25,9 +26,10 @@ function parseServiceAccount(raw) {
 
 export function initializeFirebase({ throwOnError = false } = {}) {
   try {
-    if (admin && admin.apps && admin.apps.length > 0) {
+    const existing = getAdmin()
+    if (existing) {
       logger.debug('Firebase Admin already initialized. Reusing existing app.')
-      return admin
+      return existing
     }
 
     const raw = process.env.FIREBASE_SERVICE_ACCOUNT || env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_APPLICATION_CREDENTIALS || env.GOOGLE_APPLICATION_CREDENTIALS || ''
@@ -42,12 +44,12 @@ export function initializeFirebase({ throwOnError = false } = {}) {
       serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n')
     }
 
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    const app = initializeApp({
+      credential: cert(serviceAccount),
     })
 
     logger.info('Firebase Admin initialized')
-    return admin
+    return app
   } catch (err) {
     logger.error('Failed to initialize Firebase Admin', { error: err?.message })
     if (throwOnError) throw err
@@ -56,11 +58,16 @@ export function initializeFirebase({ throwOnError = false } = {}) {
 }
 
 export function getAdmin() {
-  return admin
+  return getApps().find(app => app.name === '[DEFAULT]') || null
 }
 
 export function isInitialized() {
-  return Boolean(admin && admin.apps && admin.apps.length > 0)
+  return Boolean(getAdmin())
 }
 
-export default { initializeFirebase, getAdmin, isInitialized }
+export function getMessagingClient() {
+  const app = getAdmin()
+  return app ? getMessaging(app) : null
+}
+
+export default { initializeFirebase, getAdmin, isInitialized, getMessagingClient }

@@ -81,19 +81,21 @@ export async function attachReportingProfiles(messages, workspaceId) {
 }
 
 export async function attachReportingHistory(messages, userId, workspaceId) {
-  const output = await attachReportingProfiles(messages, workspaceId);
+  const sourceRoots = messages.filter(message => message.reportingMeta?.eventType === 'attendance.checked_in');
+  if (!sourceRoots.length) return attachReportingProfiles(messages, workspaceId);
+  const [output, principal, channels] = await Promise.all([
+    attachReportingProfiles(messages, workspaceId),
+    historyPrincipal(userId, workspaceId),
+    Channel.find({ workspaceId, _id: { $in: sourceRoots.map(m => m.channelId) } }).lean(),
+  ]);
   const roots = output.filter(message => message.reportingMeta?.eventType === 'attendance.checked_in');
-  if (!roots.length) return output;
-  const principal = await historyPrincipal(userId, workspaceId);
-  const channels = await Channel.find({ workspaceId, _id: { $in: roots.map(m => m.channelId) } }).lean();
   const byId = new Map(channels.map(c => [id(c), c]));
   const allowed = roots.filter(m => mayReadHistory(m, byId.get(id(m.channelId)), principal));
-  const counts = allowed.length ? await ReportingActivity.aggregate([
+  const [counts, initial] = await Promise.all([allowed.length ? ReportingActivity.aggregate([
     { $match: { workspaceId: new mongoose.Types.ObjectId(workspaceId), checkInMessageId: { $in: allowed.map(m => m._id) } } },
     { $group: { _id: '$checkInMessageId', count: { $sum: 1 } } },
-  ]) : [];
+  ]) : [], initialWorkByRoot(allowed, workspaceId)]);
   const countById = new Map(counts.map(row => [id(row), row.count]));
-  const initial = await initialWorkByRoot(allowed, workspaceId);
   const allowedIds = new Set(allowed.map(id));
   for (const root of roots) root.reportingHistory = allowedIds.has(id(root))
     ? { canView: true, count: countById.get(id(root)) || 0, initialWork: initial.get(id(root)) || null, viewerId: id(userId), workspaceId: id(workspaceId) }

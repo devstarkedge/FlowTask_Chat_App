@@ -1074,7 +1074,7 @@ class ChannelService {
    * @param {string} workspaceId - Workspace ID
    * @param {object|string} [membership] - Active workspace membership (or legacy role)
    */
-  async getChannelsForUser(userId, workspaceId, membership = null) {
+  async getChannelsForUser(userId, workspaceId, membership = null, { includeSidebarDetails = true } = {}) {
     // FlowTask access is workspace-scoped.  Never use ChatUser.role here: a
     // user can hold different FlowTask roles in different linked workspaces.
     if (!membership || typeof membership === 'string') {
@@ -1088,17 +1088,14 @@ class ChannelService {
     }
 
     const role = membership?.role || 'member';
-    const workspace = await workspaceRepository.findById(workspaceId);
-    const isFlowTaskWorkspace = workspace?.source === 'flowtask';
-
-    // For guests, only return channels they are explicitly members of
     const isGuest = role === 'guest';
     const isAdmin = role === 'admin' || role === 'owner';
-
+    const [workspace, memberChannels] = await Promise.all([
+      workspaceRepository.findById(workspaceId),
+      channelRepository.findByMember(userId, { workspaceId }),
+    ]);
+    const isFlowTaskWorkspace = workspace?.source === 'flowtask';
     let channels;
-    const memberChannels = await channelRepository.findByMember(userId, {
-      workspaceId,
-    });
 
     if (isAdmin) {
       // Workspace owners and admins see non-archived public/system/project workspace channels
@@ -1136,6 +1133,7 @@ class ChannelService {
 
     // Guests only see channels they are explicit members of
     if (isGuest) {
+      if (!includeSidebarDetails) return channels;
       const decorated = await this._decorateDMChannels(channels, userId, workspaceId);
 
       // Merge per-user pin/star state
@@ -1163,15 +1161,6 @@ class ChannelService {
       return withPins;
     }
 
-    // Get system public channels the user might not be a member of yet
-    const systemChannels =
-      await channelRepository.findSystemChannels(workspaceId);
-    const publicSystem = systemChannels.filter(
-      (sc) =>
-        sc.visibility === CHANNEL_VISIBILITY.PUBLIC &&
-        !channels.some((c) => c._id.toString() === sc._id.toString()),
-    );
-
     // Include any public channels the user might not yet have a ChannelMember
     // record for (e.g. race condition, legacy data, or first load after join).
     const publicChannels = await channelRepository.findPublicChannels(workspaceId);
@@ -1194,16 +1183,16 @@ class ChannelService {
       && !(c.type === CHANNEL_TYPES.DEPARTMENT && c.flowTaskRef?.entityType === "department"),
     );
 
-    const decorated = await this._decorateDMChannels(visibleChannels, userId, workspaceId);
-
-    // Merge per-user pin/star state
-    const pins = await ChannelPin.getPinsForUser(userId, workspaceId);
+    // Unread/access-only callers need the same authorization without sidebar
+    // profiles, pins or latest-message aggregation.
+    if (!includeSidebarDetails) return visibleChannels;
+    const channelIdsStr = visibleChannels.map(c => String(c._id));
+    const [decorated, pins, latestMessagesMap] = await Promise.all([
+      this._decorateDMChannels(visibleChannels, userId, workspaceId),
+      ChannelPin.getPinsForUser(userId, workspaceId),
+      messageRepository.getLatestMessagesForChannels(channelIdsStr, workspaceId).catch(() => new Map()),
+    ]);
     const pinMap = new Map(pins.map((p) => [p.channelId.toString(), p]));
-
-    // Fetch the actual latest messages for these channels to handle stale previews
-    // caused by direct database manipulation (bypassing the API).
-    const channelIdsStr = decorated.map((c) => (c._id?.toString ? c._id.toString() : String(c._id)));
-    const latestMessagesMap = await messageRepository.getLatestMessagesForChannels(channelIdsStr, workspaceId).catch(() => new Map());
 
     const withPins = decorated.map((ch) => {
       const raw = ch.toObject ? ch.toObject() : ch;

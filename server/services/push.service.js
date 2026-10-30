@@ -29,7 +29,7 @@ registerQueue(RECEIPT_QUEUE, async job => {
 
 // Support CommonJS/ESM interop: web-push may export default in runtime
 const wp = webpush?.default ?? webpush;
-const _firebaseAdmin = firebaseAdmin.initializeFirebase()
+firebaseAdmin.initializeFirebase()
 
 
 // Initialize VAPID details (no-op if keys missing)
@@ -164,8 +164,8 @@ async function _sendFCMHttp(payload, token, fcmData = {}) {
   // Preferred path: use Firebase Admin SDK if initialized
   try {
     if (firebaseAdmin && firebaseAdmin.isInitialized && firebaseAdmin.isInitialized()) {
-      const admin = firebaseAdmin.getAdmin()
-      if (admin && admin.messaging) {
+      const messaging = firebaseAdmin.getMessagingClient()
+      if (messaging) {
         const message = {
           token,
           notification: {
@@ -191,7 +191,7 @@ async function _sendFCMHttp(payload, token, fcmData = {}) {
             },
           },
         }
-        await admin.messaging().send(message)
+        await messaging.send(message)
         return { success: true }
       }
     }

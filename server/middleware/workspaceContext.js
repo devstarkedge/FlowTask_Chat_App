@@ -38,7 +38,10 @@ export const resolveWorkspace = async (req, res, next) => {
     }
 
     // Validate workspace exists and is active
-    const workspace = await Workspace.findById(workspaceId).lean();
+    const [workspace, membership] = await Promise.all([
+      Workspace.findById(workspaceId).lean(),
+      WorkspaceMembership.findOne({ userId: req.user._id, workspaceId, isActive: true }).lean(),
+    ]);
     if (!workspace || !workspace.isActive) {
       return res.status(404).json({
         success: false,
@@ -47,12 +50,6 @@ export const resolveWorkspace = async (req, res, next) => {
     }
 
     // Verify user is a member of this workspace
-    const membership = await WorkspaceMembership.findOne({
-      userId: req.user._id,
-      workspaceId,
-      isActive: true,
-    }).lean();
-
     if (!membership) {
       return res.status(403).json({
         success: false,

@@ -13,11 +13,10 @@ import AccessibleModal from "./AccessibleModal";
 import { useThemeStore } from "../stores/themeStore";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-import { X, MessageSquare, Headphones, Bookmark, Send, GripVertical } from "lucide-react-native";
+import { X, MessageSquare, Bookmark, Send, GripVertical } from "lucide-react-native";
 
 const QUICK_VIEW_ITEMS = [
   { key: "threads", label: "Threads", icon: MessageSquare },
-  { key: "huddles", label: "Huddles", icon: Headphones },
   { key: "later", label: "Later", icon: Bookmark },
   { key: "drafts", label: "Drafts", icon: Send },
   { key: "scheduled", label: "Scheduled", icon: Send },

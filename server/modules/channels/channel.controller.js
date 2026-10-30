@@ -433,15 +433,22 @@ export const leaveChannel = asyncHandler(async (req, res) => {
  * Search channels by name.
  */
 export const searchChannels = asyncHandler(async (req, res) => {
-  const query = (req.query.q || '').trim().toLowerCase();
+  const rawQuery = (req.query.q || '').trim();
+  const cleanQuery = rawQuery.replace(/^[#@]+/, '').trim().toLowerCase();
   const accessibleChannels = await channelService.getChannelsForUser(
     req.user._id,
     req.workspaceId,
     req.membership,
   );
   const channels = accessibleChannels
-    .filter((channel) => !query || channel.name?.toLowerCase().includes(query))
-    .slice(0, 20);
+    .filter((channel) => {
+      if (!cleanQuery) return true;
+      const name = (channel.name || '').toLowerCase();
+      const slug = (channel.slug || '').toLowerCase();
+      const desc = (channel.description || '').toLowerCase();
+      return name.includes(cleanQuery) || slug.includes(cleanQuery) || desc.includes(cleanQuery);
+    })
+    .slice(0, 50);
 
   res.json({
     success: true,

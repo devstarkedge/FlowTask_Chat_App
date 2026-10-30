@@ -224,9 +224,14 @@ export const connectSocket = async () => {
     if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId) invalidateReportingAccess();
   });
   socket.on('reporting:activity-updated', ({ workspaceId, channelId, messageId, reportingHistory }) => {
-    if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId || reportingHistory?.viewerId !== useAuthStore.getState().user?._id) return;
-    updateMessageInCache(channelId, { _id: messageId, reportingHistory });
-    require('../chat/store').useChatStore.getState().updateMessage({ _id: messageId, channelId, reportingHistory });
+    try {
+      if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId || reportingHistory?.viewerId !== useAuthStore.getState().user?._id) return;
+      updateMessageInCache(channelId, { _id: messageId, reportingHistory });
+      const store = require('../chat/store')?.useChatStore || require('../stores/chatStore')?.useChatStore;
+      store?.getState?.()?.updateMessage?.({ _id: messageId, channelId, reportingHistory });
+    } catch (err) {
+      logger.warn('[Socket] Failed to update reporting activity:', err?.message);
+    }
   });
   // FlowTask reporting corrections use the shared server's message:update event.
   socket.on('message:update', ({ message }) => {

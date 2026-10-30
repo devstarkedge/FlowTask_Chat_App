@@ -120,6 +120,7 @@
           "android": {
             "compileSdkVersion": 37,
             "targetSdkVersion": 36,
+            "enableMinifyInReleaseBuilds": false,
             "extraProguardRules": "-keep class org.webrtc.** { *; }\n-dontwarn org.webrtc.**\n-keep class io.webrtc.** { *; }\n-dontwarn io.webrtc.**"
           }
         }

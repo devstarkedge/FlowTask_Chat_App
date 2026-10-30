@@ -52,7 +52,7 @@ export const setCachedWorkspaceId = (workspaceId) => {
   const nextWorkspaceId = workspaceId || null;
   if (nextWorkspaceId !== cachedWorkspaceId) {
     workspaceContextVersion += 1;
-    require('./reportingAccess').resetReportingAccess();
+    try { require('./reportingAccess').resetReportingAccess(); } catch {}
   }
   cachedWorkspaceId = nextWorkspaceId;
 };
@@ -85,7 +85,7 @@ export const resolveWorkspaceId = () => {
  */
 export const clearApiCache = () => {
   workspaceContextVersion += 1;
-  require('./reportingAccess').resetReportingAccess();
+  try { require('./reportingAccess').resetReportingAccess(); } catch {}
   cachedToken = null;
   cachedWorkspaceId = null;
   cachedFlowtaskToken = null;
@@ -93,7 +93,11 @@ export const clearApiCache = () => {
 
 // Synchronous request interceptor — uses cached values
 api.interceptors.request.use((config) => {
-  config._reportingRevision = useReportingHistoryStore.getState().revision;
+  try {
+    config._reportingRevision = useReportingHistoryStore?.getState?.()?.revision ?? 0;
+  } catch {
+    config._reportingRevision = 0;
+  }
   config._workspaceVersion = workspaceContextVersion;
   if (cachedToken) {
     config.headers.Authorization = `Bearer ${cachedToken}`;
@@ -175,10 +179,13 @@ const performRefresh = async () => {
 // Response interceptor — handle 401 and token refresh, and auto-sync presence
 api.interceptors.response.use(
   (response) => {
-    if (/messages|notifications/.test(response.config.url || '') &&
-      (response.config._reportingRevision !== useReportingHistoryStore.getState().revision || response.config._workspaceVersion !== workspaceContextVersion)) {
-      return Promise.reject(new axios.CanceledError('Reporting access changed'));
-    }
+    try {
+      const currentRev = useReportingHistoryStore?.getState?.()?.revision ?? 0;
+      if (/messages|notifications/.test(response.config?.url || '') &&
+        (response.config?._reportingRevision !== currentRev || response.config?._workspaceVersion !== workspaceContextVersion)) {
+        return Promise.reject(new axios.CanceledError('Reporting access changed'));
+      }
+    } catch {}
     // Auto-sync any presence data found in the response payload to the global store
     setTimeout(() => {
       try {

@@ -28,7 +28,6 @@ export const useUIStore = create(
       enabledHomeCards: {
         catchUp: true,
         threads: true,
-        huddles: true,
         later: true,
         drafts: true,
         scheduled: true,

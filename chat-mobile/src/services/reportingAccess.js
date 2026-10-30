@@ -10,16 +10,20 @@ export function isVisibleReport(message) {
 }
 
 export function reportingSnapshot() {
-  return {
-    revision: useReportingHistoryStore.getState().revision,
-    workspaceId: require('../stores/workspaceStore').useWorkspaceStore.getState().activeWorkspaceId,
-    viewerId: require('../stores/authStore').useAuthStore.getState().user?._id,
-  };
+  try {
+    return {
+      revision: useReportingHistoryStore?.getState?.()?.revision ?? 0,
+      workspaceId: require('../stores/workspaceStore')?.useWorkspaceStore?.getState?.()?.activeWorkspaceId ?? null,
+      viewerId: require('../stores/authStore')?.useAuthStore?.getState?.()?.user?._id ?? null,
+    };
+  } catch {
+    return { revision: 0, workspaceId: null, viewerId: null };
+  }
 }
 
 export function isReportingSnapshotCurrent(snapshot, channelId) {
   const current = reportingSnapshot();
-  return !revokedChannels.has(String(channelId)) && current.revision === snapshot.revision && current.workspaceId === snapshot.workspaceId && current.viewerId === snapshot.viewerId;
+  return !revokedChannels.has(String(channelId)) && current.revision === snapshot?.revision && current.workspaceId === snapshot?.workspaceId && current.viewerId === snapshot?.viewerId;
 }
 
 // These queries remain in memory only. Clear every projection, including search
@@ -32,16 +36,26 @@ function scrub(value, removedChannel) {
 }
 
 export function invalidateReportingAccess({ channelId, reset = false, refetch = true } = {}) {
-  invalidateReportingHistory();
-  if (reset) revokedChannels.clear();
-  if (channelId) revokedChannels.add(String(channelId));
-  for (const key of ['messages', 'pinnedMessages', 'threadReplies', 'search', 'notifications']) {
-    void queryClient.cancelQueries({ queryKey: [key] });
-    queryClient.setQueriesData({ queryKey: [key] }, value => scrub(value, channelId ? String(channelId) : undefined));
-    if (refetch) void queryClient.invalidateQueries({ queryKey: [key] });
+  try {
+    invalidateReportingHistory();
+    if (reset) revokedChannels.clear();
+    if (channelId) revokedChannels.add(String(channelId));
+    for (const key of ['messages', 'pinnedMessages', 'threadReplies', 'search', 'notifications']) {
+      try {
+        void queryClient.cancelQueries({ queryKey: [key] });
+        queryClient.setQueriesData({ queryKey: [key] }, value => scrub(value, channelId ? String(channelId) : undefined));
+        if (refetch) void queryClient.invalidateQueries({ queryKey: [key] });
+      } catch {}
+    }
+    const store = require('../chat/store')?.useChatStore;
+    if (store?.setState) {
+      store.setState(state => ({
+        messagesByChannel: scrub(state?.messagesByChannel || {}, channelId ? String(channelId) : undefined)
+      }));
+    }
+  } catch (err) {
+    console.warn('[ReportingAccess] Invalidation failed:', err?.message);
   }
-  const store = require('../chat/store').useChatStore;
-  store.setState(state => ({ messagesByChannel: scrub(state.messagesByChannel, channelId ? String(channelId) : undefined) }));
 }
 
 export function restoreReportingChannel(channelId) { revokedChannels.delete(String(channelId)); }

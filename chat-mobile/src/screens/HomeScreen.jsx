@@ -34,7 +34,7 @@ import {
   AddChannelRow,
   DMRow
 } from "../components/HomeComponents";
-import { Hash, MessageSquare, Bookmark, Headphones, Edit3, Clock, Star, Folder, Radio, Filter } from "lucide-react-native";
+import { Hash, MessageSquare, Bookmark, Edit3, Clock, Star, Folder, Radio, Filter } from "lucide-react-native";
 
 const HomeScreen = ({ navigation }) => {
   if (!navigation) navigation = { navigate: () => {} };
@@ -315,9 +315,6 @@ const HomeScreen = ({ navigation }) => {
     
     if (enabledHomeCards.threads !== false) {
       cards.push({ key: "threads", icon: MessageSquare, label: t("Threads"), subtitle: `${unreadThreadCount} new`, onPress: () => navigation.navigate("Threads") });
-    }
-    if (enabledHomeCards.huddles !== false) {
-      cards.push({ key: "huddles", icon: Headphones, label: t("Huddles"), subtitle: t("0 live"), onPress: () => {} });
     }
     if (enabledHomeCards.later !== false) {
       cards.push({ key: "later", icon: Bookmark, label: t("Later"), subtitle: `${savedCount} items`, onPress: () => navigation.navigate("Later") });

@@ -161,6 +161,11 @@ class DirectoriesRepository {
    */
   async getWorkspaceChannels(workspaceId, { search, type, sort = 'recommended', page = 1, limit = 50, requesterId } = {}) {
     const memberChannelIds = requesterId ? await ChannelMember.getChannelIdsForUser(requesterId, workspaceId) : [];
+    const memberObjIds = memberChannelIds
+      .filter((id) => mongoose.isValidObjectId(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    const userObjId = requesterId && mongoose.isValidObjectId(requesterId) ? new mongoose.Types.ObjectId(requesterId) : null;
+
     const filter = injectWorkspaceFilter({
       isArchived: false,
       type: { $ne: 'dm' },
@@ -169,7 +174,11 @@ class DirectoriesRepository {
         {
           $or: [
             { visibility: 'public', type: { $ne: 'private' } },
-            ...(memberChannelIds.length > 0 ? [{ _id: { $in: memberChannelIds } }] : []),
+            { type: 'public' },
+            { type: 'project' },
+            { 'flowTaskRef.entityType': 'board' },
+            ...(memberChannelIds.length > 0 ? [{ _id: { $in: [...memberChannelIds, ...memberObjIds] } }] : []),
+            ...(userObjId ? [{ 'members.userId': userObjId }] : []),
             ...(requesterId ? [{ 'members.userId': requesterId }] : []),
           ],
         },
@@ -177,8 +186,10 @@ class DirectoriesRepository {
     }, workspaceId);
 
     if (search) {
-      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$or = [{ name: regex }, { description: regex }];
+      const cleanSearch = search.replace(/^[#@]+/, '').trim();
+      const escaped = cleanSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'i');
+      filter.$or = [{ name: regex }, { slug: regex }, { description: regex }, { topic: regex }];
     }
 
     if (type && type !== 'all') {

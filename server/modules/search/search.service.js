@@ -18,12 +18,12 @@ const SEARCH_OPERATOR_PATTERN = /(?:^|\s)(in|from):(?:"([^"]+)"|(\S+))/gi;
 
 const SECTION_LIMITS = {
   topMatches: 5,
-  users: 5,
-  messages: 5,
-  channels: 5,
-  dms: 5,
-  files: 5,
-  links: 5,
+  users: 10,
+  messages: 10,
+  channels: 25,
+  dms: 25,
+  files: 10,
+  links: 10,
   pages: 5,
 };
 
@@ -300,22 +300,49 @@ async function resolveScopedAuthorId(scopeValue, workspaceId) {
 }
 
 async function getAccessibleChannelIds(userId, workspaceId) {
+  const membership = await WorkspaceMembership.findOne({ userId, workspaceId, isActive: true }).lean();
+  const role = membership?.role || 'member';
+  const isAdmin = role === 'admin' || role === 'owner';
+  const isGuest = role === 'guest';
+
   const memberChannelIds = await ChannelMember.getChannelIdsForUser(userId, workspaceId);
+  const memberObjIds = memberChannelIds
+    .filter((id) => mongoose.isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const userObjId = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
+
+  const accessOrConditions = [
+    { visibility: 'public', type: { $ne: CHANNEL_TYPES.DM } },
+    { type: CHANNEL_TYPES.PUBLIC },
+    { _id: { $in: [...memberChannelIds, ...memberObjIds] } },
+    ...(userObjId ? [{ 'members.userId': userObjId }] : []),
+    { 'members.userId': userId },
+    { dmParticipants: userId.toString() },
+  ];
+
+  if (isAdmin) {
+    accessOrConditions.push(
+      { type: CHANNEL_TYPES.PROJECT },
+      { 'flowTaskRef.entityType': 'board' },
+      { type: CHANNEL_TYPES.SYSTEM },
+    );
+  } else if (!isGuest) {
+    accessOrConditions.push(
+      { type: CHANNEL_TYPES.PROJECT },
+      { 'flowTaskRef.entityType': 'board' },
+      { type: CHANNEL_TYPES.SYSTEM, visibility: { $ne: 'private' } },
+    );
+  }
+
   const channels = await Channel.find({
     workspaceId,
     isArchived: false,
-    $or: [
-      { visibility: 'public', type: { $ne: CHANNEL_TYPES.DM } },
-      { _id: { $in: memberChannelIds } },
-      { 'members.userId': userId },
-      { dmParticipants: userId.toString() },
-    ],
+    $or: accessOrConditions,
   })
-    .select('_id name slug type visibility description topic memberCount lastMessageAt dmParticipants recipientOnly nameFromMembers members workspaceId flowTaskRef')
+    .select('_id name slug type visibility description topic memberCount lastMessageAt dmParticipants recipientOnly nameFromMembers members workspaceId flowTaskRef flowTaskMetadata')
     .lean();
 
   const { default: channelService } = await import('../channels/channel.service.js');
-  const membership = await WorkspaceMembership.findOne({ userId, workspaceId, isActive: true }).lean();
   const authorized = channels.filter(channel => !isReportingChannel(channel) || hasReportingAccess(channel, membership));
   const decorated = await channelService._decorateRecipientGroups(authorized, workspaceId);
   return { channelIds: decorated.map((channel) => channel._id), channels: decorated };
@@ -489,15 +516,42 @@ async function searchMessages(query, regex, workspaceId, userId, channelIds, cha
 }
 
 function searchChannels(query, regex, channels, channelSignals) {
+  const cleanTerm = (query || '').replace(/^[#@]+/, '').trim();
+  const termRegex = cleanTerm ? new RegExp(escapeRegex(cleanTerm), 'i') : regex;
+  const normQuery = normalizeText(cleanTerm);
+  const queryTokens = normQuery.split(' ').filter(Boolean);
+
   const matches = channels
-    .filter((channel) => (
-      channel.type !== CHANNEL_TYPES.DM && (
-        regex.test(channel.name || '')
+    .filter((channel) => {
+      if (channel.type === CHANNEL_TYPES.DM) return false;
+
+      const directMatch = regex.test(channel.name || '')
         || regex.test(channel.slug || '')
         || regex.test(channel.description || '')
-        || regex.test(channel.topic || '')
-      )
-    ))
+        || regex.test(channel.topic || '');
+
+      const cleanMatch = termRegex.test(channel.name || '')
+        || termRegex.test(channel.slug || '')
+        || termRegex.test(channel.description || '')
+        || termRegex.test(channel.topic || '');
+
+      const normName = normalizeText(channel.name);
+      const normSlug = normalizeText(channel.slug);
+      const normDesc = normalizeText(channel.description);
+      const normTopic = normalizeText(channel.topic);
+
+      const normMatch = normQuery.length > 0 && (
+        normName.includes(normQuery)
+        || normSlug.includes(normQuery)
+        || normDesc.includes(normQuery)
+        || normTopic.includes(normQuery)
+        || (queryTokens.length > 1 && queryTokens.every((token) =>
+          normName.includes(token) || normSlug.includes(token) || normDesc.includes(token) || normTopic.includes(token)
+        ))
+      );
+
+      return directMatch || cleanMatch || normMatch;
+    })
     .map((channel) => ({
       id: channel._id.toString(),
       name: channel.name,
@@ -510,18 +564,30 @@ function searchChannels(query, regex, channels, channelSignals) {
       visibility: channel.visibility,
       memberCount: channel.memberCount || 0,
       lastMessageAt: channel.lastMessageAt,
+      flowTaskRef: channel.flowTaskRef,
     }));
 
   const ranked = sortByRank(matches, (item) => (
-    scoreText(query, item.name, item.slug, item.description, item.topic)
+    scoreText(cleanTerm || query, item.name, item.slug, item.description, item.topic)
     + scoreRecency(item.lastMessageAt, 14)
     + Math.min(Math.floor((item.memberCount || 0) / 25), 6)
     + scoreChannelSignal(channelSignals, item.id)
   ));
 
+  const regularMatches = [];
+  const projectMatches = [];
+
+  for (const item of ranked) {
+    if (item.channelType === CHANNEL_TYPES.PROJECT || item.flowTaskRef?.entityType === 'board') {
+      projectMatches.push(item);
+    } else {
+      regularMatches.push(item);
+    }
+  }
+
   return {
-    channels: applyLimit(ranked, SECTION_LIMITS.channels),
-    dms: applyLimit([], SECTION_LIMITS.dms),
+    channels: applyLimit(regularMatches, SECTION_LIMITS.channels),
+    dms: applyLimit(projectMatches, SECTION_LIMITS.dms),
   };
 }
 
@@ -741,7 +807,8 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
     });
   }
 
-  const regex = new RegExp(escapeRegex(activeQuery), 'i');
+  const cleanSearchTerm = activeQuery.replace(/^[#@]+/, '').trim();
+  const regex = new RegExp(escapeRegex(cleanSearchTerm || activeQuery), 'i');
 
   if (hasScopedFilters) {
     const scopedLimits = {
@@ -856,7 +923,18 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
     }
   }
 
-  const dmsLimitResult = applyLimit(projectsForUsers, SECTION_LIMITS.dms);
+  const combinedProjects = [
+    ...channelResults.dms.items,
+    ...projectsForUsers,
+  ];
+  const seenProjectIds = new Set();
+  const dedupedProjects = combinedProjects.filter((item) => {
+    if (seenProjectIds.has(item.id)) return false;
+    seenProjectIds.add(item.id);
+    return true;
+  });
+
+  const dmsLimitResult = applyLimit(dedupedProjects, SECTION_LIMITS.dms);
   const dms = dmsLimitResult.items;
 
   const topMatches = buildTopMatches({ users, channels: regularChannels, messages, files, links, pages, dms });

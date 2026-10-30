@@ -300,7 +300,15 @@ async function resolveScopedAuthorId(scopeValue, workspaceId) {
 }
 
 async function getAccessibleChannelIds(userId, workspaceId) {
-  const membership = await WorkspaceMembership.findOne({ userId, workspaceId, isActive: true }).lean();
+  const wsObjectId = mongoose.isValidObjectId(workspaceId)
+    ? new mongoose.Types.ObjectId(workspaceId)
+    : null;
+  const wsFilter = wsObjectId ? { $in: [workspaceId, wsObjectId] } : workspaceId;
+
+  const membership = await WorkspaceMembership.findOne({ userId, workspaceId: wsFilter, isActive: true }).lean();
+  if (!membership) {
+    return { channelIds: [], channels: [] };
+  }
   const role = membership?.role || 'member';
   const isAdmin = role === 'admin' || role === 'owner';
   const isGuest = role === 'guest';
@@ -328,14 +336,14 @@ async function getAccessibleChannelIds(userId, workspaceId) {
     );
   } else if (!isGuest) {
     accessOrConditions.push(
-      { type: CHANNEL_TYPES.PROJECT },
-      { 'flowTaskRef.entityType': 'board' },
+      { type: CHANNEL_TYPES.PROJECT, visibility: 'public' },
+      { 'flowTaskRef.entityType': 'board', visibility: 'public' },
       { type: CHANNEL_TYPES.SYSTEM, visibility: { $ne: 'private' } },
     );
   }
 
   const channels = await Channel.find({
-    workspaceId,
+    workspaceId: wsFilter,
     isArchived: false,
     $or: accessOrConditions,
   })
@@ -748,6 +756,21 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
 
   if (!rawQuery || (!activeQuery && !hasScopedFilters)) {
     return buildEmptyResults('', parsedQuery.filters);
+  }
+
+  const wsObjectId = mongoose.isValidObjectId(workspaceId)
+    ? new mongoose.Types.ObjectId(workspaceId)
+    : null;
+  const wsFilter = wsObjectId ? { $in: [workspaceId, wsObjectId] } : workspaceId;
+
+  const userMembership = await WorkspaceMembership.findOne({
+    userId,
+    workspaceId: wsFilter,
+    isActive: true,
+  }).lean();
+
+  if (!userMembership) {
+    return buildEmptyResults(activeQuery, parsedQuery.filters);
   }
 
   const [{ channelIds, channels: accessibleChannels }, pins] = await Promise.all([

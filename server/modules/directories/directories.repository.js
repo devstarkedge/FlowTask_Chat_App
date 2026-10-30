@@ -175,8 +175,8 @@ class DirectoriesRepository {
           $or: [
             { visibility: 'public', type: { $ne: 'private' } },
             { type: 'public' },
-            { type: 'project' },
-            { 'flowTaskRef.entityType': 'board' },
+            { type: 'project', visibility: 'public' },
+            { 'flowTaskRef.entityType': 'board', visibility: 'public' },
             ...(memberChannelIds.length > 0 ? [{ _id: { $in: [...memberChannelIds, ...memberObjIds] } }] : []),
             ...(userObjId ? [{ 'members.userId': userObjId }] : []),
             ...(requesterId ? [{ 'members.userId': requesterId }] : []),

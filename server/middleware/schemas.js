@@ -23,15 +23,15 @@ export const sendMessageSchema = z
       .array(
         z.object({
           fileName: z.string().min(1).max(255),
-          originalName: z.string().min(1).max(255).optional(),
+          originalName: z.string().max(255).optional().nullable(),
           mimeType: z.string().min(1).max(100),
           fileSize: z
             .number()
             .int()
-            .positive()
+            .nonnegative()
             .max(50 * 1024 * 1024),
-          url: z.string().url(),
-          thumbnailUrl: z.string().url().optional(),
+          url: z.union([z.string().url(), z.string().startsWith("/")]),
+          thumbnailUrl: z.string().nullish(),
           source: z.enum(["chat_upload", "flowtask_link"]).optional(),
         }),
       )
@@ -66,8 +66,8 @@ export const sendMessageSchema = z
     videoMeta: z
       .object({
         duration: z.number().optional(),
-        videoUrl: z.string().url().optional(),
-        thumbnailUrl: z.string().url().optional(),
+        videoUrl: z.union([z.string().url(), z.string().startsWith("/")]).optional(),
+        thumbnailUrl: z.string().nullish(),
         width: z.number().optional(),
         height: z.number().optional(),
       })

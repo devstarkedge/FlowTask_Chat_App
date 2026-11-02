@@ -134,7 +134,6 @@ const CategoryGroup = ({
       key={`cat_${category._id}`}
       icon={category.icon || <Folder size={15} />}
       title={category.name}
-      count={categoryChannels.length}
       expanded={expanded}
       onToggle={onToggle}
       actionMenu={actionMenu}

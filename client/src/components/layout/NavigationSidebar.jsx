@@ -9,7 +9,7 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useLaterStore } from '../../stores/laterStore';
 import { useScheduledStore } from '../../stores/scheduledStore';
 import { useFavoritesStore } from '../../stores/favoritesStore';
-import { Hash, Lock, MessageCircle, Users, Volume2, X, MessageSquareText, Globe, Compass, AppWindow, BookMarked, Clock, Star, ChevronDown, ChevronRight } from "lucide-react";
+import { Hash, Lock, MessageCircle, Users, Volume2, X, MessageSquareText, Globe, Compass, AppWindow, BookMarked, Clock, Star, ChevronDown, ChevronRight, Filter } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
 import CreateCategoryModal from "../chat/CreateCategoryModal";
@@ -108,6 +108,7 @@ export default function NavigationSidebar({
   };
 
   const [expandedSections, setExpandedSections] = useState({
+    unreads: true,
     starred: true,
     channels: true,
     privateChannels: true,
@@ -361,6 +362,25 @@ export default function NavigationSidebar({
     return resolved;
   }, [favorites, channels]);
 
+  // Channels and DMs with unread messages
+  const unreadConversations = useMemo(() => {
+    const dmMap = new Map(dmChannels.map((dm) => [dm._id, dm]));
+    const unreadList = channels
+      .filter((c) => {
+        if (c.isArchived) return false;
+        const cid = c._id?.toString ? c._id.toString() : String(c._id);
+        return (unreads[cid] || 0) > 0;
+      })
+      .map((c) => {
+        if (c.type === "dm" && dmMap.has(c._id)) {
+          return dmMap.get(c._id);
+        }
+        return c;
+      });
+
+    return sortChannels(unreadList);
+  }, [channels, unreads, dmChannels]);
+
   const handleSelectChannel = (channelId) => {
     // Don't proceed if we're on the Later page - user needs to explicitly navigate away
     if (isLaterPage) {
@@ -594,12 +614,61 @@ export default function NavigationSidebar({
           </div>
         )}
 
+        {/* ── Unread Section ── */}
+        {!isDMMode && unreadConversations.length > 0 && (
+          <SidebarSection
+            title="Unread"
+            icon={<Filter size={15} />}
+            expanded={expandedSections.unreads}
+            onToggle={() => toggleSection("unreads")}
+          >
+            {unreadConversations.map((channel) => {
+              if (channel.type === "dm") {
+                return (
+                  <DMListItem
+                    key={channel._id}
+                    channel={channel}
+                    isActive={!isLaterPage && channel._id === activeChannelId}
+                    unread={unreads[channel._id] || 0}
+                    onClick={() => handleSelectChannel(channel._id)}
+                    hasDraft={hasDraft(channel._id)}
+                  />
+                );
+              }
+              if (channel.type === "self" || channel.isSelf || channel.isSelfDM) {
+                return (
+                  <SavedMessagesItem
+                    key={channel._id}
+                    user={user}
+                    channel={channel}
+                    isActive={!isLaterPage && channel._id === activeChannelId}
+                    unread={unreads[channel._id] || 0}
+                    isLoading={selfDmLoading}
+                    hasDraft={hasDraft(channel._id)}
+                    onClick={() => handleSelectChannel(channel._id)}
+                  />
+                );
+              }
+              return (
+                <ChannelListItem
+                  key={channel._id}
+                  channel={channel}
+                  isActive={!isLaterPage && channel._id === activeChannelId}
+                  unread={unreads[channel._id] || 0}
+                  onClick={() => handleSelectChannel(channel._id)}
+                  onlineUsers={onlineUsers}
+                  hasDraft={hasDraft(channel._id)}
+                />
+              );
+            })}
+          </SidebarSection>
+        )}
+
         {/* ── Favorites Section ── */}
         {!isDMMode && favoriteChannels.length > 0 && (
           <SidebarSection
             title="Starred"
             icon={<Star size={15} />}
-            count={favoriteChannels.length}
             expanded={expandedSections.starred}
             onToggle={() => toggleSection("starred")}
           >
@@ -652,7 +721,6 @@ export default function NavigationSidebar({
             <SidebarSection
               title="System"
               icon={<Volume2 size={15} />}
-              count={systemChannels.length}
               expanded={expandedSections.system}
               onToggle={() => toggleSection("system")}
             >
@@ -695,9 +763,6 @@ export default function NavigationSidebar({
             <SidebarSection
               title="Channels"
               icon={<Hash size={15} />}
-              count={
-                [...publicChannels, ...projectChannels, ...deptChannels].length
-              }
               expanded={expandedSections.channels}
               onToggle={() => toggleSection("channels")}
               showAdd
@@ -737,7 +802,6 @@ export default function NavigationSidebar({
             <SidebarSection
               title="Private Channels"
               icon={<Lock size={15} />}
-              count={privateChannels.length}
               expanded={expandedSections.privateChannels}
               onToggle={() => toggleSection("privateChannels")}
             >
@@ -758,7 +822,6 @@ export default function NavigationSidebar({
           <SidebarSection
             title={isDMMode ? "Direct messages" : "Direct Messages"}
             icon={<MessageCircle size={15} />}
-            count={dmChannels.length}
             expanded={expandedSections.dms}
             onToggle={() => toggleSection("dms")}
             showAdd

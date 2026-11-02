@@ -3089,6 +3089,15 @@ body {
   border-color: color-mix(in srgb, var(--sidebar-text, #fff) 30%, transparent);
 }
 
+.workspace-sidebar-reconnecting {
+  color: var(--sidebar-bg-inner, var(--bg-sidebar, var(--sidebar-bg))) !important;
+  margin-bottom: 2px;
+}
+
+.workspace-sidebar-reconnecting:hover {
+  background: transparent !important;
+}
+
 .workspace-sidebar-avatar {
   position: relative;
   cursor: pointer;

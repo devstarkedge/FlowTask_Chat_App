@@ -12,8 +12,6 @@ import ChatHeader from "./ChatHeader";
 import TypingIndicator from "./TypingIndicator";
 import FilesTab from "./FilesTab";
 import PinnedBar from "./PinnedBar";
-import { WifiOff } from 'lucide-react';
-import Loader from '../shared/Loader';
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import CanvasPanel from "../canvas/CanvasPanel";
 import { canvasAPI } from "../../services/api";
@@ -44,22 +42,7 @@ export default function ChatPanel({
   const legacyMessages = useChatStore((s) => s.messagesByChannel?.[channelId] || EMPTY_LIST);
   const channelMessageIds = useChatStore((s) => s.channelMessageIds?.[channelId] || EMPTY_LIST);
   const messagesById = useChatStore((s) => s.messagesById);
-  const connectionStatus = useChatStore((s) => s.connectionStatus);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
-
-  // Debounce the connection banner: only show if status stays non-connected
-  // for more than 1.5s. This prevents brief reconnect blips from flashing a banner.
-  const [showConnectionBanner, setShowConnectionBanner] = useState(false);
-  useEffect(() => {
-    if (connectionStatus === "connected") {
-      setShowConnectionBanner(false);
-      return;
-    }
-    // Debounce the connection banner: only show if status stays non-connected
-    // for more than 4s. This prevents brief reconnect blips from flashing a banner.
-    const timer = setTimeout(() => setShowConnectionBanner(true), 4000);
-    return () => clearTimeout(timer);
-  }, [connectionStatus]);
 
   // Canvas store: split selectors for the same reasons as above.
   const activeCanvas = useCanvasStore((s) => s.activeCanvas);
@@ -299,26 +282,6 @@ export default function ChatPanel({
       />
 
       <HuddlePanel channelId={channelId} />
-
-      {/* Connection status banners — only shown after 1.5s debounce */}
-      {showConnectionBanner && connectionStatus === "connecting" && (
-        <div
-          className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: "var(--warning-color)", color: "var(--text-inverse)" }}
-        >
-          <Loader size={12} />
-          Reconnecting…
-        </div>
-      )}
-      {showConnectionBanner && connectionStatus === "disconnected" && (
-        <div
-          className="flex items-center justify-center gap-2 py-1.5 text-xs font-medium animate-fade-in"
-          style={{ background: "var(--danger-color)", color: "var(--text-white)" }}
-        >
-          <WifiOff size={12} />
-          Connection lost. Trying to reconnect…
-        </div>
-      )}
 
       {/* ── Tab Content ── */}
       {String(activeTab).startsWith("canvas:") ? (

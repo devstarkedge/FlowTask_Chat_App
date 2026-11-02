@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useRef, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Home, MessageSquare, Bell, FolderOpen, Bookmark, Wrench } from "lucide-react";
+import { Home, MessageSquare, Bell, FolderOpen, Bookmark, Wrench, Loader2 } from "lucide-react";
+import { useChatStore } from "../../stores/chatStore";
 import { useUIStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useNotificationStore } from "../../stores/notificationStore";
@@ -37,6 +38,17 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
   const presenceMap = usePresenceStore((s) => s.presence);
   const unreads = useChannelStore((s) => s.unreads);
   const allChannels = useChannelStore((s) => s.channels);
+  const connectionStatus = useChatStore((s) => s.connectionStatus);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      setIsReconnecting(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsReconnecting(true), 800);
+    return () => clearTimeout(timer);
+  }, [connectionStatus]);
   // Total unread DM count — badge on the DMs nav icon
   const dmUnreadCount = Object.entries(unreads).reduce((sum, [channelId, count]) => {
     const ch = allChannels.find((c) => c._id === channelId);
@@ -244,6 +256,22 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
         ))}
 
         <div className="flex-1" />
+
+        {/* Reconnecting Loader */}
+        {isReconnecting && (
+          <div
+            className="workspace-sidebar-icon workspace-sidebar-reconnecting"
+            style={{
+              color: "var(--sidebar-bg-inner, var(--bg-sidebar, var(--sidebar-bg)))",
+              cursor: "default",
+            }}
+            data-tooltip="Reconnecting…"
+            role="status"
+            aria-label="Reconnecting…"
+          >
+            <Loader2 size={20} className="animate-spin" />
+          </div>
+        )}
 
         {/* Create Button */}
         <div className="workspace-sidebar-divider" />

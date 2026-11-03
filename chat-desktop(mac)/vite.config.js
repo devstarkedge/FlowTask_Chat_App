@@ -65,10 +65,10 @@ export default ({ mode }) => {
       {
         name: 'html-csp-transform',
         transformIndexHtml(html) {
-          if (mode === 'production') {
-            const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src 'self' blob: https:; child-src 'self' blob: https:; connect-src 'self' https: wss: http: ws:;";
-            return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`);
-          }
+          // NOTE: Electron apps load via file:// protocol.
+          // strict 'self' CSP blocks ES module scripts on file:// → blank screen.
+          // CSP is handled by Electron's session.setPermissionRequestHandler
+          // and webSecurity settings in main.cjs instead.
           return html;
         }
       }

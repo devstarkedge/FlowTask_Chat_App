@@ -16,6 +16,7 @@ import { emitToUser, joinChannelRoom, leaveChannelRoom, reconcileChannelRoomAcce
 import { messageSocketPayload } from '../../utils/socketPayload.js';
 import { ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { hasReportingAccess } from './reportingAccess.js';
+import { withReportingMemberCounts } from './reportingMemberCounts.js';
 import { REPORT_TYPES, DIRECTORY_TYPES, reportingChannelName, formatReportingMessage } from './reportingFormat.js';
 
 const validId = value => typeof value === 'string' && /^[a-f\d]{24}$/i.test(value);
@@ -76,7 +77,8 @@ async function syncChannelMember(channel, userId, membership) {
   if (allowed) {
     await ChannelMember.addMember(channel._id, userId, channel.workspaceId);
     if (!previous) {
-      emitToUser(String(userId), 'channel:added', { channel: channel.toObject ? channel.toObject() : channel }, String(channel.workspaceId));
+      const [presented] = await withReportingMemberCounts([channel], channel.workspaceId);
+      emitToUser(String(userId), 'channel:added', { channel: presented }, String(channel.workspaceId));
       await joinChannelRoom(String(userId), String(channel._id), String(channel.workspaceId));
     } else emitToUser(String(userId), 'channel:updated', { channelId: String(channel._id), updates: { name: channel.name, isArchived: channel.isArchived } }, String(channel.workspaceId));
   } else if (previous) {

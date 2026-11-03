@@ -1,4 +1,5 @@
 import { isReportingChannel, hasReportingAccess, canAccessReportingChannel } from '../reporting/reportingAccess.js';
+import { withReportingMemberCounts } from '../reporting/reportingMemberCounts.js';
 import { decryptPreview } from '../../services/encryption/messageEncryption.service.js';
 import Channel from "./Channel.model.js";
 import crypto from "crypto";
@@ -1134,7 +1135,7 @@ class ChannelService {
     // Guests only see channels they are explicit members of
     if (isGuest) {
       if (!includeSidebarDetails) return channels;
-      const decorated = await this._decorateDMChannels(channels, userId, workspaceId);
+      const decorated = await this._decorateDMChannels(await withReportingMemberCounts(channels, workspaceId), userId, workspaceId);
 
       // Merge per-user pin/star state
       const pins = await ChannelPin.getPinsForUser(userId, workspaceId);
@@ -1188,7 +1189,7 @@ class ChannelService {
     if (!includeSidebarDetails) return visibleChannels;
     const channelIdsStr = visibleChannels.map(c => String(c._id));
     const [decorated, pins, latestMessagesMap] = await Promise.all([
-      this._decorateDMChannels(visibleChannels, userId, workspaceId),
+      withReportingMemberCounts(visibleChannels, workspaceId).then(channels => this._decorateDMChannels(channels, userId, workspaceId)),
       ChannelPin.getPinsForUser(userId, workspaceId),
       messageRepository.getLatestMessagesForChannels(channelIdsStr, workspaceId).catch(() => new Map()),
     ]);
@@ -1339,7 +1340,7 @@ class ChannelService {
 
     if (isReportingChannel(channel) && userId) {
       if (!await canAccessReportingChannel(channel, userId, workspaceId)) throw new ForbiddenError('Reporting channel access denied');
-      return channel;
+      return (await withReportingMemberCounts([channel], workspaceId))[0];
     }
 
     // Permission-based access check (default-deny)

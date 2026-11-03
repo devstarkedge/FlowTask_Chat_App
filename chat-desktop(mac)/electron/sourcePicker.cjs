@@ -32,7 +32,7 @@ function installDisplayCapture(window,deps){
   window.once('closed',()=>deps.ipcMain.removeHandler('huddle-capture:result'));
   const indicator=deps.screen?installSharingIndicator(window,deps):null;
   window.webContents.session.setDisplayMediaRequestHandler(async(request,callback)=>{
-    const owner=[...windows].find(item=>!item.isDestroyed() && request.frame===item.webContents.mainFrame);
+    const owner=[...windows].find(item=>!item.isDestroyed() && (request.frame===item.webContents.mainFrame || request.frame?.routingId===item.webContents.mainFrame?.routingId || !request.frame));
     if(choosing || !owner || !request.videoRequested){callback(null);return;}
     choosing=true;outcome=null;attemptedAt=Date.now();
     try {

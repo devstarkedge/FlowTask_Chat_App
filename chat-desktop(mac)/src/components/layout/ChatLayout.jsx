@@ -77,7 +77,7 @@ import { onPreviewRequest } from "../../services/previewService";
 import { CHAT_FEATURE_FLAGS } from "../../config/featureFlags";
 import { handleDownload } from "../../utils/handleDownload";
 import { useAppHistory } from "../../hooks/useAppHistory";
-import { setWindowControlsColor, hasNativeWindowControls, isDesktopApp, updateWindowControlsContrast } from "../../services/desktopService";
+import { setWindowControlsColor, hasNativeWindowControls, isDesktopApp, updateWindowControlsContrast, isMac } from "../../services/desktopService";
 
 const EMPTY_LIST = [];
 
@@ -1998,6 +1998,7 @@ function GlobalTopBar({
 
   const hasNativeControls = typeof window !== 'undefined' && Boolean(window.electronAPI?.hasNativeWindowControls);
   const isDesktop = isDesktopApp();
+  const isMacPlatform = isMac();
 
   return (
     <>
@@ -2071,7 +2072,7 @@ function GlobalTopBar({
             <CircleHelp size={16} />
           </button>
 
-          {!hasNativeControls && isDesktop && (
+          {!hasNativeControls && !isMacPlatform && isDesktop && (
             <div className="cl-topbar__window-controls">
               <button
                 className="cl-topbar__action-btn cl-topbar__win-btn cl-topbar__window-control"

@@ -13,6 +13,13 @@ export class HuddleMediaManager {
     const epoch=this.epoch;
     const audio={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
     const pending=(async()=>{
+      if (globalThis.electronAPI?.requestMediaAccess) {
+        try {
+          await globalThis.electronAPI.requestMediaAccess('microphone');
+        } catch (e) {
+          console.warn('[HuddleMediaManager] requestMediaAccess error:', e);
+        }
+      }
       let stream;
       try {
         stream=await this.capture({audio:{...audio,...(deviceId?{deviceId:{exact:deviceId}}:{})},video:false});

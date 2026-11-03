@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { notificationAPI } from '../../services/api'
 import logger from '../../utils/logger'
 import usePushSubscription from '../../hooks/usePushSubscription'
+import { isDesktopApp } from '../../services/desktopService'
 
 const TABS = [
   { id: 'general', label: 'General', icon: Bell },
@@ -198,10 +199,17 @@ export default function NotificationSettingsModal({ onClose }) {
 function GeneralTab({ prefs, onUpdateGlobal, isPaused, onPause, onResume, saving, pushSub }) {
   const global = prefs?.global || {}
   const { permission, requestPermissionAndSubscribe } = pushSub || {}
+  const isDesktop = isDesktopApp()
 
-  const isDesktopPushOn = permission === 'granted' && global.desktopPush !== false
+  const isDesktopPushOn = isDesktop
+    ? global.desktopPush !== false
+    : (permission === 'granted' && global.desktopPush !== false)
 
   const handleDesktopPushChange = async (v) => {
+    if (isDesktop) {
+      onUpdateGlobal('desktopPush', v)
+      return
+    }
     if (v) {
       if (permission === 'default') {
         const result = await requestPermissionAndSubscribe({ silent: false })
@@ -243,8 +251,8 @@ function GeneralTab({ prefs, onUpdateGlobal, isPaused, onPause, onResume, saving
         />
         <ToggleRow
           icon={Monitor}
-          label="Desktop push notifications"
-          description="Show browser push notifications on desktop"
+          label={isDesktop ? "Desktop notifications" : "Desktop push notifications"}
+          description={isDesktop ? "Show native notifications on desktop" : "Show browser push notifications on desktop"}
           checked={isDesktopPushOn}
           onChange={handleDesktopPushChange}
         />

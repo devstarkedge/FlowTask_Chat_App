@@ -11,6 +11,7 @@ import {
   useThemeStore,
 } from '../../stores/themeStore'
 import { authAPI } from '../../services/api'
+import { isDesktopApp } from '../../services/desktopService'
 import logger from '../../utils/logger'
 import toast from 'react-hot-toast'
 
@@ -52,8 +53,9 @@ export default function PreferencesModal({ onClose }) {
     sidebarTheme,
     customTheme,
   })
+  const isDesktop = isDesktopApp()
   const [notifPermission, setNotifPermission] = useState(
-    typeof Notification !== 'undefined' ? Notification.permission : 'denied',
+    isDesktopApp() ? 'granted' : (typeof Notification !== 'undefined' ? Notification.permission : 'denied'),
   )
 
   // ─── Delete account (danger zone) ────────────────────────────────────
@@ -371,21 +373,23 @@ export default function PreferencesModal({ onClose }) {
                   icon={prefs.desktopNotifications ? Bell : BellOff}
                   label="Desktop notifications"
                   description={
-                    notifPermission === 'denied'
-                      ? 'Blocked by browser settings'
-                      : notifPermission === 'default'
-                        ? 'Ask before showing browser notifications'
-                        : 'Show browser notifications for new messages'
+                    isDesktop
+                      ? 'Show desktop notifications for new messages'
+                      : notifPermission === 'denied'
+                        ? 'Blocked by browser settings'
+                        : notifPermission === 'default'
+                          ? 'Ask before showing browser notifications'
+                          : 'Show browser notifications for new messages'
                   }
-                  checked={prefs.desktopNotifications && notifPermission === 'granted'}
+                  checked={isDesktop ? prefs.desktopNotifications : (prefs.desktopNotifications && notifPermission === 'granted')}
                   onChange={() => {
-                    if (notifPermission !== 'granted') {
+                    if (!isDesktop && notifPermission !== 'granted') {
                       requestNotifPermission()
                     } else {
                       handleToggle('desktopNotifications')
                     }
                   }}
-                  disabled={notifPermission === 'denied'}
+                  disabled={!isDesktop && notifPermission === 'denied'}
                 />
                 <ToggleRow
                   icon={prefs.notificationSound ? Volume2 : VolumeX}

@@ -316,7 +316,7 @@ ipcMain.on('update-taskbar-badge', (event, { count, dataUrl, description }) => {
       try {
         if (numCount > 0 && dataUrl) {
           const img = nativeImage.createFromDataURL(dataUrl);
-          const desc = description || `${numCount} unread notification${numCount > 1 ? 's' : ''}`;
+          const desc = description || `${numCount} unread chat${numCount > 1 ? 's' : ''}`;
           win.setOverlayIcon(img, desc);
         } else {
           win.setOverlayIcon(null, '');

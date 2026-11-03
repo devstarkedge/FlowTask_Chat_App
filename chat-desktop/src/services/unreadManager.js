@@ -192,13 +192,17 @@ class UnreadManager {
    * Calculate total unread count across all channels.
    * 
    * @param {Object} unreads - { [channelId]: count }
-   * @returns {number} Total unread count
+   * Calculate current aggregate count of chats with unread messages.
+   * Total = number of distinct conversations with unreads (each chat counts as 1).
+   * @param {Record<string, number>} unreads 
+   * @returns {number} Count of chats with unread messages
    */
   calculateTotalUnread(unreads) {
     if (!unreads || typeof unreads !== 'object') return 0;
     
     return Object.values(unreads).reduce((sum, count) => {
-      return sum + (typeof count === 'number' ? count : 0);
+      const hasUnread = typeof count === 'number' && Number.isFinite(count) && count > 0;
+      return hasUnread ? sum + 1 : sum;
     }, 0);
   }
 

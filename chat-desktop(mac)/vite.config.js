@@ -47,10 +47,13 @@ export default ({ mode }) => {
 
   let validatedBackend = env.VITE_BACKEND_URL;
   if (!validatedBackend) {
+    const fallback = mode === "production"
+      ? "https://chat-app-api-cyyl.onrender.com"
+      : "http://localhost:3200";
     console.warn(
-      "VITE_BACKEND_URL is missing in environment variables. Falling back to https://chat-app-api-cyyl.onrender.com",
+      `VITE_BACKEND_URL is missing in environment variables. Falling back to ${fallback}`,
     );
-    validatedBackend = "https://chat-app-api-cyyl.onrender.com";
+    validatedBackend = fallback;
   }
 
   return defineConfig({

@@ -30,6 +30,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('notification-clicked', handler);
     return () => ipcRenderer.removeListener('notification-clicked', handler);
   },
+  requestMediaAccess: (type) => ipcRenderer.invoke('request-media-access', type),
+  getMediaAccessStatus: (type) => ipcRenderer.invoke('get-media-access-status', type),
+  onNotificationFailed: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('notification-failed', handler);
+    return () => ipcRenderer.removeListener('notification-failed', handler);
+  },
+  onDesktopNotificationFailed: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('notification-failed', handler);
+    return () => ipcRenderer.removeListener('notification-failed', handler);
+  },
   getNotificationStatus: () => ipcRenderer.invoke('get-notification-status'),
   getAppVersion: () => process.env.npm_package_version || '1.0.0',
   setTitleBarOverlay: (options) => ipcRenderer.send('set-title-bar-overlay', options),

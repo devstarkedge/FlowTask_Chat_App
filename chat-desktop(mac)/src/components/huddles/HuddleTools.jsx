@@ -30,8 +30,9 @@ export default function HuddleTools({state,session,audio,controlsHost,notesHost,
   const perform=(action,payload)=>updateHuddleFeature(action,payload).catch(error=>setFeedback(error.message));
   const openNotes=()=>{setFeedback('');setNotesOpen(!notesOpen);};
   const save=async()=>{setSaving(true);setFeedback('');try {if(await notes.save())setFeedback('Notes saved');}catch(error){setFeedback(error.message);}finally{setSaving(false);}};
+  const isSharing=Boolean(audio.localScreenStream || audio.localScreenShare);
   const controls=(<div className="huddle-tools-bar">
-      {!audio.localScreenShare && <button onClick={toggleHuddleScreen} disabled={audio.screenBusy || (!audio.localScreenStream && Boolean(presenter))} aria-pressed={Boolean(audio.localScreenStream)}><MonitorUp size={19}/>{audio.screenBusy?'Opening…':audio.localScreenStream?'Stop sharing':'Share screen'}</button>}
+      <button onClick={toggleHuddleScreen} disabled={audio.screenBusy || (!isSharing && Boolean(presenter))} aria-pressed={isSharing} className={isSharing ? 'is-active is-sharing' : ''}><MonitorUp size={19}/>{audio.screenBusy?'Opening…':isSharing?'Stop sharing':'Share screen'}</button>
       <button onClick={()=>perform('hand',{raised:!own?.handRaised})} aria-pressed={Boolean(own?.handRaised)}><Hand size={19}/>{own?.handRaised?'Lower hand':'Raise hand'}</button>
       <button onClick={()=>setReactionsOpen(!reactionsOpen)} aria-expanded={reactionsOpen}><Smile size={19}/>React</button>
       <button ref={notesButton} onClick={openNotes} aria-expanded={notesOpen}><NotebookPen size={19}/>Notes</button>

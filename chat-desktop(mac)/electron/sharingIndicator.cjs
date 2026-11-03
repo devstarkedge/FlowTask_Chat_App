@@ -15,30 +15,45 @@ function installSharingIndicator(parent,{BrowserWindow,ipcMain,screen,platform=p
  const secure=window=>{window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',event=>event.preventDefault());};
  const options={frame:false,transparent:true,focusable:false,skipTaskbar:true,alwaysOnTop:true,hasShadow:false,resizable:false,movable:false,show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}};
  const protect=window=>{if(platform==='win32')window.setContentProtection(true);};
- const show=window=>{if(window.isDestroyed())return;window.setAlwaysOnTop(true,'screen-saver');window.showInactive();};
+ const show=(window,level='screen-saver',relativeLevel=0)=>{
+  if(!window || window.isDestroyed())return;
+  if(platform==='darwin'){
+   window.setAlwaysOnTop(true,level,relativeLevel);
+  }else{
+   window.setAlwaysOnTop(true,level);
+  }
+  window.showInactive();
+  if(relativeLevel>0)window.moveTop?.();
+ };
+ const raiseToolbar=()=>{
+  if(toolbar && !toolbar.isDestroyed()){
+   show(toolbar,'screen-saver',1);
+   toolbar.moveTop?.();
+  }
+ };
  const sendState=()=>{
   const state=current?{...current,sourceToken:undefined,source:undefined,tracked:Boolean(bounds)}:null;
   if(toolbar && !toolbar.isDestroyed())toolbar.webContents.send('huddle-share:state',state?{...state,strokes:undefined}:null);
   if(ink && !ink.isDestroyed())ink.webContents.send('huddle-share:state',state);
  };
  const annotationWindow=()=>{
-  if(!bounds || !current || current.tool==='pointer'){destroy(ink);ink=null;return;}
+  if(!bounds || !current || current.tool==='pointer'){destroy(ink);ink=null;raiseToolbar();return;}
   if(!ink){
    ink=new BrowserWindow({...options,...captureBounds,title:'TaskChat Share Annotation Overlay',webPreferences:{...options.webPreferences,preload:path.join(__dirname,'share-toolbar-preload.cjs')}});
-   const target=ink;secure(target);protect(target);target.once('ready-to-show',()=>{if(ink===target){sendState();show(target);if(toolbar)show(toolbar);}});
-   target.loadFile(path.join(__dirname,'share-annotation.html')).catch(()=>{if(ink===target){destroy(ink);ink=null;}});
-  }else ink.setBounds(captureBounds);
+   const target=ink;secure(target);protect(target);target.once('ready-to-show',()=>{if(ink===target){sendState();show(target,'screen-saver',0);raiseToolbar();}});
+   target.loadFile(path.join(__dirname,'share-annotation.html')).catch(()=>{if(ink===target){destroy(ink);ink=null;raiseToolbar();}});
+  }else{ink.setBounds(captureBounds);raiseToolbar();}
  };
  const position=rect=>{
   if(!current)return;bounds=rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null;captureBounds=rect?.captureBounds || bounds;
   if(!rect){border?.hide();ink?.hide();sendState();return;}
   if(!border){
    border=new BrowserWindow({...options,...rect,title:'TaskChat Share Source Outline'});const target=border;secure(target);protect(target);target.setIgnoreMouseEvents(true);
-   target.once('ready-to-show',()=>{if(border===target && bounds){show(target);target.setBounds(bounds);}});
+   target.once('ready-to-show',()=>{if(border===target && bounds){show(target,'screen-saver',0);target.setBounds(bounds);raiseToolbar();}});
    target.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}body{box-sizing:border-box;border:3px solid #36d17d;pointer-events:none}</style>')).catch(()=>{if(border===target){destroy(border);border=null;}});
-  }else {border.setBounds(rect);show(border);}
+  }else {border.setBounds(rect);show(border,'screen-saver',0);}
   if(toolbar && !toolbar.isDestroyed())toolbar.setBounds(toolbarBounds(rect,screen,420,86));
-  annotationWindow();if(ink)show(ink);if(toolbar)show(toolbar);sendState();
+  annotationWindow();if(ink)show(ink,'screen-saver',0);raiseToolbar();sendState();
  };
  const begin=value=>{
   hide();current={...value,source:candidate.source,sourceLabel:candidate.source.name.slice(0,160),sourceType:candidate.source.id.startsWith('screen:')?'screen':'window',audioAvailable:candidate.audioAvailable,tool:'pointer',color:'#facc15',strokes:[]};
@@ -46,7 +61,7 @@ function installSharingIndicator(parent,{BrowserWindow,ipcMain,screen,platform=p
   // full-monitor green border. Only Electron-owned windows expose their bounds.
   const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   toolbar=new BrowserWindow({...options,...toolbarBounds(display.workArea,screen,420,86),title:'TaskChat Screen Share Controls',focusable:true,movable:true,webPreferences:{...options.webPreferences,preload:path.join(__dirname,'share-toolbar-preload.cjs')}});
-  const target=toolbar;secure(target);protect(target);target.once('ready-to-show',()=>{if(toolbar===target){sendState();show(target);}});
+  const target=toolbar;secure(target);protect(target);target.once('ready-to-show',()=>{if(toolbar===target){sendState();raiseToolbar();}});
   target.loadFile(path.join(__dirname,'share-toolbar.html')).catch(()=>{if(toolbar!==target)return;const id=current?.id;stop();if(alive())contents.send('huddle-share:action',{sessionId:id,action:'stop',reason:'toolbar_failed'});});
   const shareId=current.id;
   const release=adapter.track(current.source,rect=>{if(current?.id===shareId)position(rect);},()=>{if(current?.id!==shareId)return;stop();if(alive())contents.send('huddle-share:action',{sessionId:shareId,action:'stop',reason:'source_closed'});});

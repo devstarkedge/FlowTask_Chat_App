@@ -3,7 +3,7 @@ const {createIncomingCallWindow}=require('./incomingCallWindow.cjs');
 const {installHuddlePopout}=require('./huddlePopout.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification, desktopCapturer, screen, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification, desktopCapturer, screen, clipboard, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -11,6 +11,24 @@ const startTime = performance.now();
 const isDev = !app.isPackaged;
 const isMac = process.platform === 'darwin';
 const BUNDLE_ID = isDev ? 'com.taskchat.dev' : 'com.taskchat.app';
+
+function getNotificationIconPath() {
+  const defaultDevIcon = path.join(__dirname, '../public/logo.png');
+  if (isDev) return defaultDevIcon;
+  try {
+    const extractedPath = path.join(app.getPath('userData'), 'notification-icon.png');
+    if (!fs.existsSync(extractedPath)) {
+      const bundledPath = path.join(__dirname, '../dist/logo.png');
+      if (fs.existsSync(bundledPath)) {
+        fs.writeFileSync(extractedPath, fs.readFileSync(bundledPath));
+      }
+    }
+    if (fs.existsSync(extractedPath)) return extractedPath;
+  } catch (err) {
+    console.error('[TaskChat] Failed to extract notification icon:', err);
+  }
+  return path.join(__dirname, '../dist/logo.png');
+}
 
 // Explicitly set the app name for macOS menu, dock, and notification center
 app.name = 'TaskChat';
@@ -197,14 +215,11 @@ function createWindow() {
     createCallAlert:(invitation,onAction,onUnavailable)=>createIncomingCallWindow({BrowserWindow,ipcMain,screen,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png')},invitation,onAction,onUnavailable),
     showWindow:()=>{if(callWindow.isDestroyed())return;if(callWindow.isMinimized())callWindow.restore();callWindow.show();if(isMac && app.dock)app.dock.show();callWindow.focus();}});
 
-  // Prevent closing, hide to tray instead
+  // Prevent closing, hide window instead (keep dock presence on macOS so system notifications and badges work)
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
       mainWindow.hide();
-      if (isMac && app.dock) {
-        app.dock.hide();
-      }
     }
   });
 
@@ -355,6 +370,41 @@ app.whenReady().then(() => {
 
   const isSupported = Notification.isSupported();
   console.log(`[Notifications] platform: ${process.platform} | appUserModelId: ${BUNDLE_ID} | supported: ${isSupported} | notificationInitialized: true`);
+
+  // Prompt for macOS microphone access early so calls are not muted by OS
+  if (isMac && typeof systemPreferences?.askForMediaAccess === 'function') {
+    systemPreferences.askForMediaAccess('microphone').catch((e) => {
+      console.warn('[Permissions] Early microphone access check error:', e);
+    });
+  }
+});
+
+// IPC handlers for macOS media access (microphone/camera)
+ipcMain.handle('request-media-access', async (event, mediaType = 'microphone') => {
+  if (!isMac) return true;
+  try {
+    if (typeof systemPreferences?.askForMediaAccess === 'function') {
+      const status = systemPreferences.getMediaAccessStatus(mediaType);
+      if (status === 'granted') return true;
+      return await systemPreferences.askForMediaAccess(mediaType);
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[Permissions] Error requesting media access for ${mediaType}:`, err);
+    return true;
+  }
+});
+
+ipcMain.handle('get-media-access-status', (event, mediaType = 'microphone') => {
+  if (!isMac) return 'granted';
+  try {
+    if (typeof systemPreferences?.getMediaAccessStatus === 'function') {
+      return systemPreferences.getMediaAccessStatus(mediaType);
+    }
+    return 'granted';
+  } catch (err) {
+    return 'granted';
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -371,12 +421,14 @@ ipcMain.on('show-notification', (event, { title, body, data, icon }) => {
       return;
     }
 
-    const iconPath = path.join(__dirname, isDev ? '../public/logo.png' : '../dist/logo.png');
+    const iconPath = getNotificationIconPath();
     const hasIcon = fs.existsSync(iconPath);
 
     const notificationOptions = {
       title: title || 'TaskChat',
       body: body || '',
+      silent: false,
+      urgency: 'critical',
     };
     if (hasIcon) {
       notificationOptions.icon = iconPath;
@@ -425,7 +477,7 @@ ipcMain.on('show-notification', (event, { title, body, data, icon }) => {
 
     notification.show();
 
-    if (isMac && app.dock && (!mainWindow || !mainWindow.isFocused())) {
+    if (isMac && app.dock && (!mainWindow || !mainWindow.isFocused() || !mainWindow.isVisible())) {
       try {
         app.dock.bounce('informational');
       } catch {}
@@ -463,7 +515,7 @@ ipcMain.on('update-taskbar-badge', (event, { count, dataUrl, description }) => {
       try {
         if (numCount > 0 && dataUrl) {
           const img = nativeImage.createFromDataURL(dataUrl);
-          const desc = description || `${numCount} unread message${numCount > 1 ? 's' : ''}`;
+          const desc = description || `${numCount} unread chat${numCount > 1 ? 's' : ''}`;
           win.setOverlayIcon(img, desc);
         } else {
           win.setOverlayIcon(null, '');

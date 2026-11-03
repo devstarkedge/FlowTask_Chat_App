@@ -18,11 +18,20 @@ function installWindowSecurity(window, options) {
   const contents = window.webContents;
   const children = new Set();
   const allowed = new Set(['media', 'display-capture', 'notifications', 'speaker-selection', 'fullscreen', 'clipboard-sanitized-write']);
-  const permitted = (sender, permission, details) => !contents.isDestroyed() && trusted(contents.getURL()) &&
-    details?.isMainFrame === true && allowed.has(permission) &&
-    (sender === contents ? trusted(details.requestingUrl) : children.has(sender) && !sender.isDestroyed() && sender.getURL()==='about:blank' && (details.requestingUrl==='about:blank' || trusted(details.requestingUrl)));
-  contents.session.setPermissionCheckHandler((sender, permission, _origin, details) => permitted(sender, permission, details));
-  contents.session.setPermissionRequestHandler((sender, permission, callback, details) => callback(permitted(sender, permission, details)));
+  const permitted = (sender, permission, origin, details) => {
+    if (contents.isDestroyed() || !trusted(contents.getURL())) return false;
+    if (!allowed.has(permission)) return false;
+    // Disallow if explicitly a subframe
+    if (details && details.isMainFrame === false) return false;
+    const reqUrl = details?.requestingUrl || details?.securityOrigin || origin || (typeof sender?.getURL === 'function' ? sender.getURL() : '');
+    if (sender === contents) {
+      return !reqUrl || trusted(reqUrl);
+    }
+    return children.has(sender) && !sender.isDestroyed() && sender.getURL() === 'about:blank' &&
+      (!reqUrl || reqUrl === 'about:blank' || trusted(reqUrl));
+  };
+  contents.session.setPermissionCheckHandler((sender, permission, origin, details) => permitted(sender, permission, origin, details));
+  contents.session.setPermissionRequestHandler((sender, permission, callback, details) => callback(permitted(sender, permission, details?.requestingUrl, details)));
   contents.on('will-navigate', (event, url) => { if (!trusted(url)) event.preventDefault(); });
   // Embedded web pages must not inherit this app's capture privileges.
   contents.on('will-attach-webview', event => event.preventDefault());

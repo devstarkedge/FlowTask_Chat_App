@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { handleDownload } from '../../utils/handleDownload'
 import { copyImageToClipboard } from '../../utils/clipboardUtils'
+import { isMac } from '../../services/desktopService'
 import FilePreviewRenderer, {
   FilePreviewKindIcon,
   getFileDisplayName,
@@ -246,7 +247,7 @@ export default function FilePreviewModal({ file, files = [], onClose }) {
             <ToolbarBtn title="Close Preview" icon={X} onClick={onClose} />
           </div>
 
-          {isDesktop && !window.electronAPI?.hasNativeWindowControls && (
+          {isDesktop && !isMac() && !window.electronAPI?.hasNativeWindowControls && (
             <div className="file-preview-window-controls" style={{ marginLeft: 12 }}>
               <div className="file-preview-divider" />
               <ToolbarBtn title="Minimize" icon={Minus} onClick={handleMinimizeWindow} />

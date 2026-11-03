@@ -8,4 +8,9 @@ canvas.onpointermove=e=>{if(state?.tool==='laser' && state.state!=='paused'){poi
 canvas.onpointerleave=()=>{if(state?.tool==='laser'){pointer=null;paint();send('pointer-hide',[]);}};
 function flush(){if(pending.length){const points=pending;pending=[];send('move',points.length<=32?points:Array.from({length:32},(_,i)=>points[Math.round(i*(points.length-1)/31)]));}}
 canvas.onpointerup=canvas.onpointercancel=canvas.onlostpointercapture=()=>{if(drawing){flush();send('end',[]);}drawing=false;};
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && state) {
+    window.shareToolbar.action({sessionId:state.id,action:'pointer',color:state.color});
+  }
+});
 setInterval(flush,50);

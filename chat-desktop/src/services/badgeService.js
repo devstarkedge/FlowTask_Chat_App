@@ -124,8 +124,9 @@ export class BadgeService {
   }
 
   /**
-   * Calculate current aggregate unread count.
-   * Total = all unread messages from channels and DMs.
+   * Calculate current aggregate count of chats with unread messages.
+   * Total = number of distinct channels and DMs that have at least one unread message.
+   * Each chat with unread messages counts as 1 regardless of how many messages it contains.
    * Activity notifications are NOT included to prevent duplicate counting.
    * 
    * @returns {number}
@@ -141,12 +142,15 @@ export class BadgeService {
       return Object.entries(unreads).reduce((sum, [cid, count]) => {
         const ch = channelMap.get(cid)
         if (ch && ch.isArchived) return sum
-        const validCount = typeof count === 'number' && Number.isFinite(count) && count > 0 ? count : 0
-        return sum + validCount
+        const hasUnread = typeof count === 'number' && Number.isFinite(count) && count > 0
+        return hasUnread ? sum + 1 : sum
       }, 0)
     }
 
-    return unreadManager.calculateTotalUnread(unreads)
+    return Object.values(unreads).reduce((sum, count) => {
+      const hasUnread = typeof count === 'number' && Number.isFinite(count) && count > 0
+      return hasUnread ? sum + 1 : sum
+    }, 0)
   }
 
   /**
@@ -169,7 +173,7 @@ export class BadgeService {
     }
 
     const dataUrl = generateBadgeDataUrl(total)
-    const description = `${total} unread message${total > 1 ? 's' : ''}`
+    const description = `${total} unread chat${total > 1 ? 's' : ''}`
     updateTaskbarBadge(total, dataUrl, description)
   }
 

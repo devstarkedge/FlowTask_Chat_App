@@ -33,6 +33,7 @@ import ChatPanel from "../chat/ChatPanel";
 import ThreadPanel from "../chat/ThreadPanel";
 import ChannelInfoPanel from "../chat/ChannelInfoPanel";
 import PreferencesModal from "../chat/PreferencesModal";
+import UpdateNotificationBanner from "../notifications/UpdateNotificationBanner";
 import ProfileSidePanel from "../chat/ProfileSidePanel";
 import UnifiedSearch from "../search/UnifiedSearch";
 import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
@@ -1918,13 +1919,17 @@ export default function ChatLayout() {
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
       {showTopPreferences && (
-        <PreferencesModal onClose={() => setShowTopPreferences(false)} />
+        <PreferencesModal
+          defaultTab={typeof showTopPreferences === 'string' ? showTopPreferences : 'appearance'}
+          onClose={() => setShowTopPreferences(false)}
+        />
       )}
       {showTopSetStatus && (
         <SetStatusModal onClose={() => setShowTopSetStatus(false)} />
       )}
       <DownloadsModalWrapper channelId={activeChannelId} />
       <PushNotificationPrompt prompt={prompt} />
+      <UpdateNotificationBanner onOpenAbout={() => setShowTopPreferences('about')} />
     </div>
   );
 }

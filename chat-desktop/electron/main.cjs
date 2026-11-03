@@ -3,6 +3,7 @@ const { createIncomingCallWindow } = require('./incomingCallWindow.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
 const { installHuddlePopout } = require('./huddlePopout.cjs');
+const { initUpdater } = require('./updater.cjs');
 const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen, clipboard, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -127,6 +128,7 @@ function createWindow() {
 
   const security=installWindowSecurity(mainWindow, {isDev, indexPath:path.join(__dirname, '../dist/index.html')});
   installHuddlePopout(mainWindow,{BrowserWindow,ipcMain,capture,security,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),openExternal:url=>shell.openExternal(url)});
+  initUpdater(mainWindow);
 
   // Notify renderer when window maximize state changes
   mainWindow.on('maximize', () => {

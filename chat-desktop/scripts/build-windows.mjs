@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, open, readFile, unlink, copyFile, rename } from 'node:fs/promises';
+import { mkdir, open, readFile, unlink, copyFile, rename, readdir, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -39,11 +39,12 @@ try {
   const { build: packageApp, Platform } = createRequire(import.meta.url)('electron-builder');
   await build({ root, mode: 'production' });
   // Never replace the unpacked executable users may currently be running.
+  const packageDir = path.join(cache, 'taskchat-windows-package');
   const artifacts = await packageApp({
     projectDir: root,
     targets: Platform.WINDOWS.createTarget(),
     config: {
-      directories: { output: path.join(cache, 'taskchat-windows-package') },
+      directories: { output: packageDir },
       // Electron 43 no longer downloads its runtime during npm install.
       // Let electron-builder fetch its verified distribution when it is absent.
       ...(existsSync(path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe'))
@@ -51,12 +52,20 @@ try {
     },
   });
   await mkdir(output, { recursive: true });
-  for (const artifact of artifacts) {
-    const destination = path.join(output, path.basename(artifact));
-    const temporary = `${destination}.tmp`;
-    await copyFile(artifact, temporary);
-    await rename(temporary, destination);
-    console.info(`[TaskChat] Created ${destination}`);
+  // Copy all generated files (installer, blockmap, latest.yml) to output
+  if (existsSync(packageDir)) {
+    const files = await readdir(packageDir);
+    for (const file of files) {
+      const src = path.join(packageDir, file);
+      const fileStat = await stat(src);
+      if (fileStat.isFile()) {
+        const destination = path.join(output, file);
+        const temporary = `${destination}.tmp`;
+        await copyFile(src, temporary);
+        await rename(temporary, destination);
+        console.info(`[TaskChat] Created ${destination}`);
+      }
+    }
   }
 } catch (error) {
   console.error(`[TaskChat] Windows build failed: ${error.message}`);

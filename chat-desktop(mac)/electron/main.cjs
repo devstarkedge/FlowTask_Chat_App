@@ -3,6 +3,7 @@ const {createIncomingCallWindow}=require('./incomingCallWindow.cjs');
 const {installHuddlePopout}=require('./huddlePopout.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
+const { initUpdater } = require('./updater.cjs');
 const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification, desktopCapturer, screen, clipboard, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -210,6 +211,7 @@ function createWindow() {
 
 
   installHuddlePopout(mainWindow,{BrowserWindow,ipcMain,capture,security,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),openExternal:url=>shell.openExternal(url)});
+  initUpdater(mainWindow);
   const callWindow=mainWindow;
   installHuddleInvitations(callWindow,{ipcMain,Notification,
     createCallAlert:(invitation,onAction,onUnavailable)=>createIncomingCallWindow({BrowserWindow,ipcMain,screen,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png')},invitation,onAction,onUnavailable),

@@ -1,0 +1,250 @@
+name: Desktop Release
+
+on:
+  push:
+    branches:
+      - main
+      - production
+    paths:
+      - 'chat-desktop/**'
+      - 'chat-desktop(mac)/**'
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ─── Job 1: Detect Version Change ──────────────────────────────────────────
+  detect-version:
+    name: Detect Version Change
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version_check.outputs.should_release }}
+      version: ${{ steps.version_check.outputs.version }}
+      previous_version: ${{ steps.version_check.outputs.previous_version }}
+      tag_name: ${{ steps.version_check.outputs.tag_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check version change
+        id: version_check
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-version-change.mjs
+
+  # ─── Job 2: Build Windows Application ──────────────────────────────────────
+  build-windows:
+    name: Build Windows Application
+    needs: detect-version
+    if: needs.detect-version.outputs.should_release == 'true'
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: chat-desktop/package-lock.json
+
+      - name: Synchronize package versions
+        run: node scripts/sync-versions.mjs ${{ needs.detect-version.outputs.version }}
+
+      - name: Install dependencies (chat-desktop)
+        run: |
+          cd chat-desktop
+          npm ci
+
+      - name: Build Windows installer & updater metadata
+        run: |
+          cd chat-desktop
+          npm run build:win
+
+      - name: Verify Windows output files
+        shell: bash
+        run: |
+          echo "=== Windows Dist Files ==="
+          ls -la chat-desktop/dist-electron
+          if ! ls chat-desktop/dist-electron/*.exe 1> /dev/null 2>&1; then
+            echo "ERROR: Windows .exe installer not found!"
+            exit 1
+          fi
+          if [ ! -f "chat-desktop/dist-electron/latest.yml" ]; then
+            echo "ERROR: Windows latest.yml not found!"
+            exit 1
+          fi
+          echo "Windows build verified successfully."
+
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-assets
+          path: |
+            chat-desktop/dist-electron/*.exe
+            chat-desktop/dist-electron/*.exe.blockmap
+            chat-desktop/dist-electron/latest.yml
+          if-no-files-found: error
+          retention-days: 1
+
+  # ─── Job 3: Build macOS Application ────────────────────────────────────────
+  build-macos:
+    name: Build macOS Application
+    needs: detect-version
+    if: needs.detect-version.outputs.should_release == 'true'
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: chat-desktop(mac)/package-lock.json
+
+      - name: Synchronize package versions
+        run: node scripts/sync-versions.mjs ${{ needs.detect-version.outputs.version }}
+
+      - name: Install dependencies (chat-desktop(mac))
+        run: |
+          cd "chat-desktop(mac)"
+          npm ci
+
+      - name: Build macOS packages (DMG, ZIP, updater manifest)
+        run: |
+          cd "chat-desktop(mac)"
+          npm run build:mac
+
+      - name: Verify macOS output files
+        shell: bash
+        run: |
+          echo "=== macOS Dist Files ==="
+          ls -la "chat-desktop(mac)/dist-electron"
+          if ! ls "chat-desktop(mac)/dist-electron"/*.dmg 1> /dev/null 2>&1; then
+            echo "ERROR: macOS .dmg not found!"
+            exit 1
+          fi
+          if ! ls "chat-desktop(mac)/dist-electron"/*.zip 1> /dev/null 2>&1; then
+            echo "ERROR: macOS .zip update archive not found!"
+            exit 1
+          fi
+          if [ ! -f "chat-desktop(mac)/dist-electron/latest-mac.yml" ]; then
+            echo "ERROR: macOS latest-mac.yml not found!"
+            exit 1
+          fi
+          echo "macOS build verified successfully."
+
+      - name: Upload macOS release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-assets
+          path: |
+            chat-desktop(mac)/dist-electron/*.dmg
+            chat-desktop(mac)/dist-electron/*.dmg.blockmap
+            chat-desktop(mac)/dist-electron/*.zip
+            chat-desktop(mac)/dist-electron/*.zip.blockmap
+            chat-desktop(mac)/dist-electron/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 1
+
+  # ─── Job 4: Validate and Publish GitHub Release ────────────────────────────
+  publish-release:
+    name: Validate and Publish Release
+    needs: [detect-version, build-windows, build-macos]
+    if: needs.detect-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Create release directory
+        run: mkdir -p release-assets
+
+      - name: Download Windows release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release-assets
+          path: release-assets
+
+      - name: Download macOS release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-release-assets
+          path: release-assets
+
+      - name: Validate all release assets
+        run: node scripts/validate-release-assets.mjs release-assets ${{ needs.detect-version.outputs.version }}
+
+      - name: Generate Release Notes
+        id: release_notes
+        shell: bash
+        run: |
+          PREV_TAG="${{ needs.detect-version.outputs.previous_version }}"
+          VERSION="${{ needs.detect-version.outputs.version }}"
+          TAG="${{ needs.detect-version.outputs.tag_name }}"
+
+          cat << 'EOF' > release-notes.md
+          ## What's New in TaskChat ${{ needs.detect-version.outputs.tag_name }}
+
+          ### Downloads & Installers
+          - **Windows:** `TaskChat Setup ${{ needs.detect-version.outputs.version }}.exe` (Automatic NSIS installer with delta update support)
+          - **macOS:** `TaskChat-${{ needs.detect-version.outputs.version }}.dmg` and `.zip` (Universal macOS installer and auto-updater package)
+
+          ### Changes
+          EOF
+
+          if [ "$PREV_TAG" != "none" ] && git rev-parse "v$PREV_TAG" >/dev/null 2>&1; then
+            echo "" >> release-notes.md
+            git log --pretty=format:"* %s (%h)" "v$PREV_TAG..HEAD" >> release-notes.md
+          else
+            echo "" >> release-notes.md
+            git log -n 10 --pretty=format:"* %s (%h)" >> release-notes.md
+          fi
+
+          echo "" >> release-notes.md
+
+      - name: Create and Publish GitHub Release
+        shell: bash
+        run: |
+          TAG="${{ needs.detect-version.outputs.tag_name }}"
+          echo "Publishing release $TAG with assets in release-assets..."
+
+          gh release create "$TAG" release-assets/* \
+            --title "TaskChat $TAG" \
+            --notes-file release-notes.md \
+            --latest

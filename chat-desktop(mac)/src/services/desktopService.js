@@ -136,6 +136,40 @@ export const getAppVersion = () => {
   return 'Web Version';
 };
 
+export const checkForUpdates = () => {
+  if (isDesktopApp() && window.electronAPI?.updater?.checkForUpdates) {
+    return window.electronAPI.updater.checkForUpdates();
+  }
+  return Promise.resolve({ status: 'not-available' });
+};
+
+export const startDownloadUpdate = () => {
+  if (isDesktopApp() && window.electronAPI?.updater?.startDownload) {
+    return window.electronAPI.updater.startDownload();
+  }
+  return Promise.resolve({ success: false });
+};
+
+export const quitAndInstallUpdate = () => {
+  if (isDesktopApp() && window.electronAPI?.updater?.quitAndInstall) {
+    return window.electronAPI.updater.quitAndInstall();
+  }
+};
+
+export const getUpdateStatus = () => {
+  if (isDesktopApp() && window.electronAPI?.updater?.getStatus) {
+    return window.electronAPI.updater.getStatus();
+  }
+  return Promise.resolve({ status: 'idle', currentVersion: getAppVersion() });
+};
+
+export const onUpdateStatusChange = (callback) => {
+  if (isDesktopApp() && window.electronAPI?.updater?.onStatusChange) {
+    return window.electronAPI.updater.onStatusChange(callback);
+  }
+  return () => {};
+};
+
 
 export const updateTaskbarBadge = (count, dataUrl, description) => {
   if (isDesktopApp() && window.electronAPI?.updateTaskbarBadge) {

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
-import { Smile, Moon, BellOff, User, Settings, Download, LogOut } from "lucide-react";
+import { Smile, Moon, BellOff, User, Settings, Download, LogOut, Info } from "lucide-react";
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import toast from 'react-hot-toast'
 import { useProfileStore } from '../../stores/profileStore'
@@ -11,6 +11,7 @@ import { dndAPI } from '../../services/api'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from "../../stores/uiStore";
 import { usePresenceStore } from '../../stores/presenceStore'
+import { useUpdateStore } from '../../stores/updateStore'
 
 export default function UserProfileMenu({
   anchorRef,
@@ -25,6 +26,8 @@ export default function UserProfileMenu({
   const [isSigningOut, setIsSigningOut] = useState(false);
   const { profileUser, openProfile } = useProfileStore();
   const openDownloads = useUIStore((s) => s.openDownloads);
+  const updateStatus = useUpdateStore((s) => s.status);
+  const hasUpdate = updateStatus === 'available' || updateStatus === 'downloaded';
 
 
 
@@ -399,6 +402,28 @@ export default function UserProfileMenu({
       >
         <Settings size={16} style={{ color: "var(--text-muted)" }} />
         <span>Preferences</span>
+      </button>
+
+      <button
+        className="user-menu-item"
+        onClick={() => {
+          onOpenPreferences?.('about');
+          onClose();
+        }}
+      >
+        <Info size={16} style={{ color: "var(--text-muted)" }} />
+        <span>About TaskChat</span>
+        {hasUpdate && (
+          <span
+            style={{
+              marginLeft: "auto",
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              background: "#10b981",
+            }}
+          />
+        )}
       </button>
 
       <div className="user-menu-divider" />

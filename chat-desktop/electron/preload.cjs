@@ -1,4 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const pkg = require('../package.json');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getHuddleShareSource: () => ipcRenderer.invoke('huddle-share:source'),
@@ -29,7 +30,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateTaskbarBadge: (count, dataUrl, description) => ipcRenderer.send('update-taskbar-badge', { count, dataUrl, description }),
   clearTaskbarBadge: () => ipcRenderer.send('update-taskbar-badge', { count: 0, dataUrl: null, description: '' }),
   flashFrame: (flag) => ipcRenderer.send('flash-frame', Boolean(flag)),
-  getAppVersion: () => process.env.npm_package_version || '1.0.0',
+  getAppVersion: () => {
+    try {
+      return ipcRenderer.sendSync('get-app-version-sync') || pkg.version;
+    } catch {
+      return pkg.version;
+    }
+  },
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('updater:check-for-updates'),
+    startDownload: () => ipcRenderer.invoke('updater:start-download'),
+    quitAndInstall: () => ipcRenderer.invoke('updater:quit-and-install'),
+    getStatus: () => ipcRenderer.invoke('updater:get-status'),
+    onStatusChange: (callback) => {
+      const handler = (_event, state) => callback(state);
+      ipcRenderer.on('updater:status-changed', handler);
+      return () => ipcRenderer.removeListener('updater:status-changed', handler);
+    },
+  },
   setTitleBarOverlay: (options) => ipcRenderer.send('set-title-bar-overlay', options),
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),

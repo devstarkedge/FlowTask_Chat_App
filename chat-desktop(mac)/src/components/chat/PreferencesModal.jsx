@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Sidebar, MessageSquare, ClipboardList, Inbox, AlertTriangle, Trash2 } from "lucide-react";
+import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Moon, Sun, AlignLeft, Check, RotateCcw, Sidebar, MessageSquare, ClipboardList, Inbox, AlertTriangle, Trash2, Info, Sparkles } from "lucide-react";
 import Loader from '../shared/Loader';
+import AboutUpdateSection from './AboutUpdateSection';
+import { useUpdateStore } from '../../stores/updateStore';
 import { useAuthStore } from '../../stores/authStore'
 import {
   getSidebarThemeColors,
@@ -28,7 +30,10 @@ const COLOR_FIELDS = [
   // { key: 'sidebarActive', label: 'Active item color' },
 ]
 
-export default function PreferencesModal({ onClose }) {
+export default function PreferencesModal({ onClose, defaultTab = 'appearance' }) {
+  const [activeTab, setActiveTab] = useState(defaultTab)
+  const updateStatus = useUpdateStore((s) => s.status)
+  const hasUpdate = updateStatus === 'available' || updateStatus === 'downloaded'
   const { user, deleteAccount } = useAuthStore()
   const mode = useThemeStore((s) => s.mode)
   const sidebarTheme = useThemeStore((s) => s.sidebarTheme)
@@ -263,18 +268,84 @@ export default function PreferencesModal({ onClose }) {
       >
         <header className="appearance-modal__header">
           <div>
-            <p className="appearance-modal__eyebrow">Preferences</p>
-            <h2 id="appearance-modal-title">Appearance</h2>
+            <p className="appearance-modal__eyebrow">Settings</p>
+            <h2 id="appearance-modal-title">{activeTab === 'about' ? 'About TaskChat' : 'Preferences'}</h2>
           </div>
           <div className="appearance-modal__header-actions">
-            <SaveStateIndicator state={appearanceSaveState} />
+            {activeTab === 'appearance' && <SaveStateIndicator state={appearanceSaveState} />}
             <button className="appearance-icon-btn" onClick={onClose} aria-label="Close preferences">
               <X size={18} />
             </button>
           </div>
         </header>
 
+        {/* Tab switcher */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '8px',
+            padding: '10px 24px',
+            borderBottom: '1px solid var(--border-primary, rgba(255, 255, 255, 0.08))',
+            background: 'var(--bg-secondary, rgba(0, 0, 0, 0.12))',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab('appearance')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '7px',
+              border: 'none',
+              background: activeTab === 'appearance' ? 'var(--accent-primary, #3b82f6)' : 'transparent',
+              color: activeTab === 'appearance' ? '#ffffff' : 'var(--text-muted, #94a3b8)',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Preferences
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('about')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '7px',
+              border: 'none',
+              background: activeTab === 'about' ? 'var(--accent-primary, #3b82f6)' : 'transparent',
+              color: activeTab === 'about' ? '#ffffff' : 'var(--text-muted, #94a3b8)',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>About</span>
+            {hasUpdate && (
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: '#10b981',
+                }}
+              />
+            )}
+          </button>
+        </div>
+
         <div className="appearance-modal__body">
+          {activeTab === 'about' ? (
+            <div style={{ padding: '24px', width: '100%', overflowY: 'auto' }}>
+              <AboutUpdateSection onRemindLater={onClose} />
+            </div>
+          ) : (
+            <>
           <main className="appearance-modal__main">
             <section className="appearance-section">
               <SectionTitle
@@ -476,25 +547,40 @@ export default function PreferencesModal({ onClose }) {
               sidebarColors={sidebarColors}
             />
           </aside>
+            </>
+          )}
         </div>
 
-        <footer className="appearance-modal__footer">
-          <button className="appearance-secondary-btn" onClick={handleResetAppearance}>
-            <RotateCcw size={16} />
-            Reset to default
-          </button>
-          <div className="appearance-footer-actions">
-            <span>
-              {hasPendingChanges
-                ? 'Changes are pending'
-                : 'No unsaved changes. Save changes will close this dialog.'}
-            </span>
-            <button className="appearance-primary-btn appearance-save-btn" onClick={handleSaveChanges} disabled={savingPrefs}>
-              {savingPrefs && <Loader size={15} />}
-              Save changes
+        {activeTab === 'appearance' ? (
+          <footer className="appearance-modal__footer">
+            <button className="appearance-secondary-btn" onClick={handleResetAppearance}>
+              <RotateCcw size={16} />
+              Reset to default
             </button>
-          </div>
-        </footer>
+            <div className="appearance-footer-actions">
+              <span>
+                {hasPendingChanges
+                  ? 'Changes are pending'
+                  : 'No unsaved changes. Save changes will close this dialog.'}
+              </span>
+              <button className="appearance-primary-btn appearance-save-btn" onClick={handleSaveChanges} disabled={savingPrefs}>
+                {savingPrefs && <Loader size={15} />}
+                Save changes
+              </button>
+            </div>
+          </footer>
+        ) : (
+          <footer className="appearance-modal__footer" style={{ justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="appearance-primary-btn"
+              onClick={onClose}
+              style={{ minWidth: '90px' }}
+            >
+              Close
+            </button>
+          </footer>
+        )}
 
         {/* ── Delete account confirmation ── */}
         {showDeleteConfirm && (

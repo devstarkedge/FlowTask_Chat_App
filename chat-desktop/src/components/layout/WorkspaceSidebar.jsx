@@ -334,9 +334,9 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
         <UserProfileMenu
           anchorRef={avatarBtnRef}
           onClose={() => setShowUserMenu(false)}
-          onOpenPreferences={() => {
+          onOpenPreferences={(tab) => {
             setShowUserMenu(false);
-            setShowPreferences(true);
+            setShowPreferences(tab || true);
           }}
           onOpenSetStatus={() => {
             setShowUserMenu(false);
@@ -346,7 +346,10 @@ const WorkspaceSidebar = memo(function WorkspaceSidebar() {
       )}
 
       {showPreferences && (
-        <PreferencesModal onClose={() => setShowPreferences(false)} />
+        <PreferencesModal
+          defaultTab={typeof showPreferences === 'string' ? showPreferences : 'appearance'}
+          onClose={() => setShowPreferences(false)}
+        />
       )}
       {showSetStatus && (
         <SetStatusModal onClose={() => setShowSetStatus(false)} />

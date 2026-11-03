@@ -1,5 +1,5 @@
 import { attachReportingHistory } from '../reporting/reportingHistory.service.js';
-import { isReportingChannel, reportingRecipients } from '../reporting/reportingAccess.js';
+import { isReportingChannel, canAccessReportingChannel, reportingRecipients } from '../reporting/reportingAccess.js';
 import { authorizeFileReferences } from '../files/fileAccess.service.js';
 import canvasRepository from '../canvas/canvas.repository.js';
 import { canvasAttachmentIds } from '../canvas/canvasAttachments.js';
@@ -69,7 +69,12 @@ class MessageService {
     const channel = await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
-    if (isReportingChannel(channel)) throw new ForbiddenError('Only the verified FlowTask integration can post attendance reports');
+    if (isReportingChannel(channel)) {
+      if (!await canAccessReportingChannel(channel, authorId, workspaceId)) throw new ForbiddenError('Reporting channel access denied');
+      if (contentType && !['text', 'file', 'gif', 'audio', 'video', 'canvas_share'].includes(contentType)) {
+        throw new ForbiddenError('Only the verified FlowTask integration can post attendance reports');
+      }
+    }
 
     await authorizeFileReferences(fileReferences, authorId, workspaceId || channel.workspaceId);
     const canvasFiles = [];
@@ -1378,7 +1383,11 @@ class MessageService {
     ])));
 
     for (const destination of destinations.values()) {
-      if (isReportingChannel(destination)) throw new ForbiddenError('Attendance reporting channels only accept verified integration reports');
+      if (!isReportingChannel(destination)) continue;
+      if (destination.isArchived || !await canAccessReportingChannel(destination, userId, workspaceId)) throw new ForbiddenError('Reporting channel access denied');
+      if (originals.some(original => original.reportingEventId || ['system', 'bot', 'task_update', 'activity'].includes(original.contentType))) {
+        throw new ForbiddenError('Only the verified FlowTask integration can post attendance reports');
+      }
     }
 
     // Validate every source before creating any forwarded message.

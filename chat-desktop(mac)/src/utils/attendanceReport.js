@@ -23,7 +23,8 @@ export function reportPresentation(message) {
     group = null
   }
   for (const line of lines.slice(1)) {
-    if (/^Tracking: Not started$/i.test(line)) { details.push({ label: '', value: 'Tracking has not started.' }); continue }
+    // Hide this informational status in both current and legacy report cards.
+    if (/^(Tracking: Not started|Tracking has not started\.?)$/i.test(line)) continue
     if (/^(Employee|Department|Workday|Time|Status|Tracking):/i.test(line)) continue
     if (line === 'Previous Work' || line === 'New Work') {
       flush()
@@ -49,8 +50,6 @@ export function reportPresentation(message) {
     const work = details.find(row => row.label === 'Work')
     if (work?.value === 'Attendance only') {
       work.value = message.reportingHistory.initialWork.label
-      const pending = details.findIndex(row => row.value === 'Tracking has not started.')
-      if (pending !== -1) details.splice(pending, 1)
     }
   }
   if (message.reportingMeta?.eventType === 'tracking.break_started') details.length = 0

@@ -16,6 +16,7 @@ import { emitToUser, joinChannelRoom, leaveChannelRoom, reconcileChannelRoomAcce
 import { messageSocketPayload } from '../../utils/socketPayload.js';
 import { ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { hasReportingAccess } from './reportingAccess.js';
+import { withReportingMemberCounts } from './reportingMemberCounts.js';
 import { REPORT_TYPES, DIRECTORY_TYPES, reportingChannelName, formatReportingMessage } from './reportingFormat.js';
 
 const validId = value => typeof value === 'string' && /^[a-f\d]{24}$/i.test(value);
@@ -31,6 +32,16 @@ export async function ensureAttendanceReportingIndexes() {
 }
 
 const reportFilter = workspaceId => ({ workspaceId, 'flowTaskRef.entityType': 'attendance_department' });
+
+// Memberships/channels are independent reconciliation targets. Bound the DB
+// fan-out so a department with many members can finish within the webhook lease.
+async function reconcileInBatches(rows, reconcile) {
+  for (let offset = 0; offset < rows.length; offset += 4) {
+    const results = await Promise.allSettled(rows.slice(offset, offset + 4).map(reconcile));
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed) throw failed.reason;
+  }
+}
 
 export async function provisionReportingChannel(workspaceId, department, version = null) {
   if (!validId(department?.id) || typeof department.name !== 'string' || !department.name.trim()) throw new ValidationError('Invalid reporting department');
@@ -66,7 +77,8 @@ async function syncChannelMember(channel, userId, membership) {
   if (allowed) {
     await ChannelMember.addMember(channel._id, userId, channel.workspaceId);
     if (!previous) {
-      emitToUser(String(userId), 'channel:added', { channel: channel.toObject ? channel.toObject() : channel }, String(channel.workspaceId));
+      const [presented] = await withReportingMemberCounts([channel], channel.workspaceId);
+      emitToUser(String(userId), 'channel:added', { channel: presented }, String(channel.workspaceId));
       await joinChannelRoom(String(userId), String(channel._id), String(channel.workspaceId));
     } else emitToUser(String(userId), 'channel:updated', { channelId: String(channel._id), updates: { name: channel.name, isArchived: channel.isArchived } }, String(channel.workspaceId));
   } else if (previous) {
@@ -86,11 +98,11 @@ async function syncDirectory(payload, workspaceId) {
     const memberships = await WorkspaceMembership.find({ workspaceId, isActive: true, 'attendanceReportingAccess.active': true, $or: [
       { 'attendanceReportingAccess.allDepartments': true }, { 'attendanceReportingAccess.departmentIds': payload.department.id },
     ] }).lean();
-    for (const member of memberships) await syncChannelMember(channel, member.userId, member);
+    await reconcileInBatches(memberships, member => syncChannelMember(channel, member.userId, member));
     // Archival also revokes stale channel rooms and persists history.
     if (channel.isArchived) {
       const old = await ChannelMember.find({ workspaceId, channelId: channel._id, isActive: true }).lean();
-      for (const member of old) await syncChannelMember(channel, member.userId, null);
+      await reconcileInBatches(old, member => syncChannelMember(channel, member.userId, null));
     }
     await Channel.updateOne({ _id: channel._id, workspaceId, reportingDirectoryVersion: version }, { $set: { reportingDirectoryHash: departmentHash } });
   } else if (payload.eventType === 'reporting.departments_reconciled') {
@@ -131,7 +143,7 @@ async function syncDirectory(payload, workspaceId) {
     const previousChannels = await ChannelMember.find({ workspaceId, userId: user._id, isActive: true }).select('channelId').lean();
     const channelFilter = reportFilter(workspaceId);
     if (!access.allDepartments) channelFilter.$or = [{ 'flowTaskRef.entityId': { $in: access.departmentIds } }, { _id: { $in: previousChannels.map(m => m.channelId) } }];
-    for (const channel of await Channel.find(channelFilter)) await syncChannelMember(channel, user._id, updated);
+    await reconcileInBatches(await Channel.find(channelFilter), channel => syncChannelMember(channel, user._id, updated));
     emitToUser(String(user._id), 'reporting:leave-access-updated', { workspaceId: String(workspaceId) }, String(workspaceId));
     await reconcileLeaveUnread(user._id, workspaceId);
     await WorkspaceMembership.updateOne({ workspaceId, userId: user._id, 'attendanceReportingAccess.version': version }, { $set: { 'attendanceReportingAccess.membershipHash': membershipHash } });

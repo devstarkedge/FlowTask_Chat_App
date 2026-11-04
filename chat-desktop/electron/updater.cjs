@@ -51,7 +51,7 @@ ipcMain.handle('get-app-version', () => {
   }
 });
 
-function initUpdater(mainWindow) {
+function initUpdater(mainWindow, options = {}) {
   if (isInitialized) return;
   isInitialized = true;
 
@@ -143,6 +143,9 @@ function initUpdater(mainWindow) {
   });
 
   ipcMain.handle('updater:quit-and-install', () => {
+    if (typeof options?.setQuitting === 'function') {
+      options.setQuitting();
+    }
     if (!app.isPackaged) {
       console.log('[Updater] Restart requested in dev mode.');
       app.relaunch();
@@ -151,7 +154,14 @@ function initUpdater(mainWindow) {
     }
     const au = getAutoUpdater();
     if (au) {
-      au.quitAndInstall(false, true);
+      try {
+        console.log('[Updater] Calling quitAndInstall...');
+        au.quitAndInstall(false, true);
+      } catch (err) {
+        console.error('[Updater] quitAndInstall threw error:', err);
+        app.relaunch();
+        app.exit(0);
+      }
     }
   });
 
@@ -163,7 +173,7 @@ function initUpdater(mainWindow) {
   }
 
   // Configure autoUpdater
-  au.autoDownload = false; // Manual download initiation per specification
+  au.autoDownload = true; // Automatically download new updates in background
   au.autoInstallOnAppQuit = true;
 
   // Logger
@@ -253,8 +263,9 @@ function initUpdater(mainWindow) {
     broadcastStatus(mainWindow);
   });
 
-  // Background check on startup for packaged production apps
+  // Background check on startup and periodically for packaged production apps
   if (app.isPackaged) {
+    // Initial check shortly after startup (5 seconds)
     setTimeout(() => {
       try {
         console.log('[Updater] Performing initial background update check...');
@@ -264,7 +275,19 @@ function initUpdater(mainWindow) {
       } catch (err) {
         console.warn('[Updater] Background check failed to start:', err);
       }
-    }, 10000);
+    }, 5000);
+
+    // Periodic check every 30 minutes
+    setInterval(() => {
+      try {
+        console.log('[Updater] Performing periodic background update check...');
+        au.checkForUpdates().catch((err) => {
+          console.warn('[Updater] Periodic update check error:', err.message);
+        });
+      } catch (err) {
+        console.warn('[Updater] Periodic check failed to start:', err);
+      }
+    }, 30 * 60 * 1000);
   }
 }
 

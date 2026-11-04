@@ -373,12 +373,9 @@ app.whenReady().then(() => {
   const isSupported = Notification.isSupported();
   console.log(`[Notifications] platform: ${process.platform} | appUserModelId: ${BUNDLE_ID} | supported: ${isSupported} | notificationInitialized: true`);
 
-  // Prompt for macOS microphone access early so calls are not muted by OS
-  if (isMac && typeof systemPreferences?.askForMediaAccess === 'function') {
-    systemPreferences.askForMediaAccess('microphone').catch((e) => {
-      console.warn('[Permissions] Early microphone access check error:', e);
-    });
-  }
+  // Microphone permission is now requested on-demand when the user joins a Huddle/call
+  // via the 'request-media-access' IPC handler below (triggered by media.service.js).
+  // Removed early prompt to avoid surprising users at app startup.
 });
 
 // IPC handlers for macOS media access (microphone/camera)

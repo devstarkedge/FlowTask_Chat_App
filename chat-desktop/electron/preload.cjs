@@ -1,5 +1,4 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const pkg = require('../package.json');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getHuddleShareSource: () => ipcRenderer.invoke('huddle-share:source'),
@@ -32,9 +31,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   flashFrame: (flag) => ipcRenderer.send('flash-frame', Boolean(flag)),
   getAppVersion: () => {
     try {
-      return ipcRenderer.sendSync('get-app-version-sync') || pkg.version;
+      return ipcRenderer.sendSync('get-app-version-sync') || '';
     } catch {
-      return pkg.version;
+      return '';
     }
   },
   updater: {

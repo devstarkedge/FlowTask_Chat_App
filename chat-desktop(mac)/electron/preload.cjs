@@ -1,5 +1,4 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const pkg = require('../package.json');
 
 const isMac = process.platform === 'darwin';
 
@@ -46,9 +45,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getNotificationStatus: () => ipcRenderer.invoke('get-notification-status'),
   getAppVersion: () => {
     try {
-      return ipcRenderer.sendSync('get-app-version-sync') || pkg.version;
+      return ipcRenderer.sendSync('get-app-version-sync') || '';
     } catch {
-      return pkg.version;
+      return '';
     }
   },
   updater: {

@@ -34,6 +34,23 @@ function broadcastStatus(win) {
   }
 }
 
+// Register version IPC handlers immediately so preload can query version synchronously anytime
+ipcMain.on('get-app-version-sync', (event) => {
+  try {
+    event.returnValue = app.isReady() ? app.getVersion() : pkg.version;
+  } catch {
+    event.returnValue = pkg.version;
+  }
+});
+
+ipcMain.handle('get-app-version', () => {
+  try {
+    return app.isReady() ? app.getVersion() : pkg.version;
+  } catch {
+    return pkg.version;
+  }
+});
+
 function initUpdater(mainWindow) {
   if (isInitialized) return;
   isInitialized = true;
@@ -43,23 +60,6 @@ function initUpdater(mainWindow) {
   } catch {
     updateStatus.currentVersion = pkg.version;
   }
-
-  // Register version IPC handlers immediately
-  ipcMain.on('get-app-version-sync', (event) => {
-    try {
-      event.returnValue = app.getVersion();
-    } catch {
-      event.returnValue = updateStatus.currentVersion;
-    }
-  });
-
-  ipcMain.handle('get-app-version', () => {
-    try {
-      return app.getVersion();
-    } catch {
-      return updateStatus.currentVersion;
-    }
-  });
 
   ipcMain.handle('updater:get-status', () => {
     return {

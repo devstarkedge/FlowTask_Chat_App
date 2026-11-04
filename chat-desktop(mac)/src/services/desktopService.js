@@ -130,7 +130,7 @@ export const onDesktopNotificationClicked = (callback) => {
 };
 
 export const getAppVersion = () => {
-  if (isDesktopApp()) {
+  if (isDesktopApp() && window.electronAPI?.getAppVersion) {
     return window.electronAPI.getAppVersion();
   }
   return 'Web Version';

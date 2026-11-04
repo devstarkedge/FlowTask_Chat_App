@@ -116,7 +116,7 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                 padding: '2px 8px',
                 borderRadius: '6px',
                 background: 'rgba(59, 130, 246, 0.15)',
-                color: '#60a5fa',
+                // color: '#60a5fa',
                 border: '1px solid rgba(59, 130, 246, 0.25)',
               }}
             >

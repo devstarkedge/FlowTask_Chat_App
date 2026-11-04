@@ -334,11 +334,10 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
             {canManageMembership && (
               <button
                 onClick={() => setShowAddMember(true)}
-                className="btn-ghost"
-                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                className="btn-ghost cip-action-btn"
               >
                 <UserPlus size={13} />
-                Add Member
+                <span>Add Member</span>
               </button>
             )}
 
@@ -354,11 +353,10 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                         : "channel";
                   toggleFavorite(targetType, channelId);
                 }}
-                className="btn-ghost"
-                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                className="btn-ghost cip-action-btn"
               >
                 <Star size={13} fill={isStarred ? "currentColor" : "none"} />
-                {isStarred ? "Unstar" : "Star Channel"}
+                <span>{isStarred ? "Unstar" : "Star Channel"}</span>
               </button>
             )}
 
@@ -366,27 +364,25 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
             {canEditChannel && (
               <button
                 onClick={() => setShowEditModal(true)}
-                className="btn-ghost"
-                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                className="btn-ghost cip-action-btn"
               >
                 <Settings size={13} />
-                Edit
+                <span>Edit</span>
               </button>
             )}
 
             {/* Move to Category — Chat App channels and custom categories only */}
             {canMoveToCategory && (
-              <div ref={categoryDropdownRef} style={{ position: "relative", flex: 1, display: "flex" }}>
+              <div ref={categoryDropdownRef} className="cip-action-dropdown-wrap">
                 <button
                   type="button"
                   onClick={() => setShowCategoryDropdown((prev) => !prev)}
-                  className="btn-ghost"
-                  style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                  className="btn-ghost cip-action-btn"
                   aria-expanded={showCategoryDropdown}
                   aria-haspopup="true"
                 >
                   <FolderInput size={13} />
-                  Move To
+                  <span>Move To</span>
                 </button>
                 {showCategoryDropdown && (
                   <div
@@ -481,11 +477,11 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
             {canLeaveChannel && (
               <button
                 onClick={askLeave}
-                className="btn-danger"
-                style={{ fontSize: 12, padding: "6px 12px", gap: 6 }}
+                className="btn-danger cip-action-btn"
                 title="Leave channel"
               >
                 <LogOut size={13} />
+                <span>Leave</span>
               </button>
             )}
 
@@ -493,12 +489,11 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
             {canDeleteChannel && (
               <button
                 onClick={askDelete}
-                className="btn-danger"
-                style={{ fontSize: 12, padding: "6px 12px", gap: 6, flex: 1, justifyContent: "center" }}
+                className="btn-danger cip-action-btn"
                 title="Delete channel"
               >
                 <Trash2 size={13} />
-                Delete
+                <span>Delete</span>
               </button>
             )}
           </div>

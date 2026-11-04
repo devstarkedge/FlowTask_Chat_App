@@ -92,6 +92,10 @@
     "appId": "com.taskchat.app",
     "productName": "TaskChat",
     "icon": "build/icon.ico",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/",
+      "isVerifyChecksum": false
+    },
     "directories": {
       "output": "dist-electron"
     },

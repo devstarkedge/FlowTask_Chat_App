@@ -109,8 +109,8 @@
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns",
       "target": [
-        "dmg",
-        "zip"
+        { "target": "dmg", "arch": "universal" },
+        { "target": "zip", "arch": "universal" }
       ],
       "extendInfo": {
         "NSMicrophoneUsageDescription": "TaskChat uses your microphone when you join a Huddle.",

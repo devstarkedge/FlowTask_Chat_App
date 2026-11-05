@@ -319,6 +319,31 @@ function initUpdater(mainWindow, options = {}) {
       error: null,
     };
     broadcastStatus(mainWindow);
+
+    // Show native macOS notification and dock bounce when update is ready
+    try {
+      const { Notification } = require('electron');
+      if (Notification && Notification.isSupported()) {
+        const notif = new Notification({
+          title: 'TaskChat Update Ready',
+          body: `TaskChat v${info.version} has finished downloading. Restart now to apply update.`,
+          silent: false,
+        });
+        notif.on('click', () => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+          }
+        });
+        notif.show();
+      }
+      if (process.platform === 'darwin' && app.dock) {
+        app.dock.bounce('informational');
+      }
+    } catch (notifErr) {
+      console.warn('[Updater] Could not display update notification:', notifErr);
+    }
   });
 
   au.on('error', (err) => {
@@ -346,17 +371,17 @@ function initUpdater(mainWindow, options = {}) {
       }
     }, 5000);
 
-    // Periodic check every 30 minutes
+    // Periodic check every 4 hours
     setInterval(() => {
       try {
-        console.log('[Updater] Performing periodic background update check...');
+        console.log('[Updater] Performing periodic background update check (every 4 hours)...');
         au.checkForUpdates().catch((err) => {
           console.warn('[Updater] Periodic update check error:', err.message);
         });
       } catch (err) {
         console.warn('[Updater] Periodic check failed to start:', err);
       }
-    }, 30 * 60 * 1000);
+    }, 4 * 60 * 60 * 1000);
   }
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import taskChatLogo from '../../assets/logo.png';
 import {
   Sparkles,
   RefreshCw,
@@ -95,9 +96,14 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
           }}
         >
           <img
-            src="/logo.png"
+            src={taskChatLogo}
             alt="TaskChat Logo"
             onError={(e) => {
+              if (!e.currentTarget.dataset.retried) {
+                e.currentTarget.dataset.retried = 'true';
+                e.currentTarget.src = `${import.meta.env.BASE_URL || './'}logo.png`;
+                return;
+              }
               e.currentTarget.style.display = 'none';
             }}
             style={{ width: '38px', height: '38px', objectFit: 'contain' }}

@@ -202,16 +202,39 @@ export class NotificationService {
     try {
       if (typeof window !== 'undefined' && window.Audio) {
         if (!this.audioCache) {
-          this.audioCache = new Audio('/sounds/notification.mp3')
+          const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './'
+          this.audioCache = new Audio(`${base}sounds/notification.mp3`)
         }
         this.audioCache.currentTime = 0
         this.audioCache.play().catch(() => {
-          // Ignore autoplay restriction errors in browsers
+          this.playSyntheticChime()
         })
+      } else {
+        this.playSyntheticChime()
       }
     } catch {
-      // Audio playback silent fallback
+      this.playSyntheticChime()
     }
+  }
+
+  playSyntheticChime() {
+    try {
+      if (typeof window === 'undefined') return
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1)
+      gain.gain.setValueAtTime(0.12, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.3)
+    } catch {}
   }
 
   /**

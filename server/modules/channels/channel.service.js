@@ -63,6 +63,19 @@ import {
  *   - System channels bootstrapped on first server boot
  */
 
+/**
+ * Determine if a channel is a custom workspace channel (not sourced from FlowTask or system).
+ */
+export function isCustomChannel(channel) {
+  if (!channel) return false;
+  if (channel.systemManaged) return false;
+  if (channel.flowTaskRef && (channel.flowTaskRef.entityType || channel.flowTaskRef.entityId)) return false;
+  if (['project', 'department', 'team', 'system'].includes(channel.type)) return false;
+  if (channel.type === 'dm' || channel.type === 'self' || channel.recipientOnly) return false;
+  if (channel.slug && typeof channel.slug === 'string' && channel.slug.startsWith('flowtask-')) return false;
+  return true;
+}
+
 class ChannelService {
   // ──────────────────── Channel Creation ────────────────────────────────────
 
@@ -2253,7 +2266,7 @@ class ChannelService {
     const allowed = {};
     if (channel.recipientOnly && updates.name !== undefined) allowed.nameFromMembers = false;
     if (updates.name !== undefined) {
-      allowed.name = isCustomChannel(channel)
+      allowed.name = this.isCustomChannel(channel)
         ? (slugify(updates.name) || sanitizeHtml(updates.name))
         : sanitizeHtml(updates.name);
     }

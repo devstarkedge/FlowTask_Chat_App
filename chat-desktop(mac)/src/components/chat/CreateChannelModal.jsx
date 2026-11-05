@@ -977,8 +977,20 @@ export default function CreateChannelModal({ onClose }) {
                     className="ccm-input"
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value.replace(/\s{2,}/g, " "))}
-                    onKeyDown={(e) => { if (e.key === " " && name.endsWith(" ")) e.preventDefault(); }}
+                    onChange={(e) => {
+                      const val = e.target.value
+                        .toLowerCase()
+                        .replace(/[\s_]+/g, "-")
+                        .replace(/[^a-z0-9-]/g, "")
+                        .replace(/-{2,}/g, "-")
+                        .replace(/^-+/g, "");
+                      setName(val);
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.key === " " || e.key === "-") && (!name || name.endsWith("-"))) {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="e.g. marketing-team"
                     maxLength={80}
                     autoComplete="off"

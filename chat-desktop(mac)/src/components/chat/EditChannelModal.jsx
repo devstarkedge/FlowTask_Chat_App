@@ -218,6 +218,7 @@ export default function EditChannelModal({ channel, onClose }) {
   const [description,  setDescription]  = useState(channel.description || '')
   const [topic,        setTopic]        = useState(channel.topic || '')
   const [visibility,   setVisibility]   = useState(channel.visibility || 'public')
+  const [allowAllMembersEditCanvas, setAllowAllMembersEditCanvas] = useState(channel.allowAllMembersEditCanvas !== false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error,        setError]        = useState('')
   const [focused,      setFocused]      = useState(null)
@@ -235,6 +236,7 @@ export default function EditChannelModal({ channel, onClose }) {
     || description !== (channel.description || '')
     || topic !== (channel.topic || '')
     || visibility !== (channel.visibility || 'public')
+    || allowAllMembersEditCanvas !== (channel.allowAllMembersEditCanvas !== false)
 
   const isCustom = isChatAppChannel(channel)
   const isWsAdmin = ['owner', 'admin'].includes(activeWorkspace?.role)
@@ -267,7 +269,7 @@ export default function EditChannelModal({ channel, onClose }) {
     setIsSubmitting(true)
     setError('')
     try {
-      const data = { description: description.trim(), topic: topic.trim() }
+      const data = { description: description.trim(), topic: topic.trim(), allowAllMembersEditCanvas }
       if (!isLocked) { data.name = name.trim(); data.visibility = visibility }
       await editChannel(channel._id, data)
       onClose()
@@ -558,9 +560,10 @@ export default function EditChannelModal({ channel, onClose }) {
                     }}>
                       <input
                         type="checkbox"
-                        checked={channel.allowAllMembersEditCanvas !== false}
+                        checked={allowAllMembersEditCanvas}
                         onChange={async (e) => {
                           const newValue = e.target.checked;
+                          setAllowAllMembersEditCanvas(newValue);
                           try {
                             await editChannel(channel._id, { allowAllMembersEditCanvas: newValue });
                             toast.success(newValue
@@ -568,6 +571,7 @@ export default function EditChannelModal({ channel, onClose }) {
                               : 'Only admins can now edit canvases'
                             );
                           } catch (err) {
+                            setAllowAllMembersEditCanvas(!newValue);
                             toast.error('Failed to update canvas permissions');
                           }
                         }}

@@ -2310,6 +2310,9 @@ class ChannelService {
     if (updates.flowTaskMetadata !== undefined && userId === null) {
       allowed.flowTaskMetadata = updates.flowTaskMetadata;
     }
+    if (updates.allowAllMembersEditCanvas !== undefined) {
+      allowed.allowAllMembersEditCanvas = Boolean(updates.allowAllMembersEditCanvas);
+    }
 
     // Detect visibility change for workspace-wide broadcast
     const visibilityChanged =

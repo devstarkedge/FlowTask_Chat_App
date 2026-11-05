@@ -3,6 +3,7 @@ const pkg = require('../package.json');
 
 let isInitialized = false;
 let autoUpdater = null;
+let downloadedFilePath = null;
 let updateStatus = {
   status: 'idle', // 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
   info: null,
@@ -152,6 +153,73 @@ function initUpdater(mainWindow, options = {}) {
       app.exit(0);
       return;
     }
+
+    // On macOS, unsigned apps are blocked from restarting by Squirrel.Mac.
+    // Use native ditto helper script to cleanly extract, replace .app, and relaunch.
+    if (process.platform === 'darwin') {
+      const fs = require('fs');
+      const path = require('path');
+      const { spawn } = require('child_process');
+
+      const pendingDir = path.join(app.getPath('userCache'), 'client-updater', 'pending');
+      let pendingZips = [];
+      try {
+        if (fs.existsSync(pendingDir)) {
+          pendingZips = fs.readdirSync(pendingDir)
+            .filter((f) => f.endsWith('.zip'))
+            .map((f) => path.join(pendingDir, f))
+            .sort((a, b) => {
+              try { return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs; } catch { return 0; }
+            });
+        }
+      } catch {}
+
+      const possibleZipPaths = [
+        downloadedFilePath,
+        path.join(app.getPath('userCache'), 'client-updater', 'update.zip'),
+        path.join(pendingDir, `TaskChat-${updateStatus?.info?.version || ''}-universal-mac.zip`),
+        ...pendingZips,
+      ].filter(Boolean);
+
+      const zipPath = possibleZipPaths.find((p) => {
+        try { return fs.existsSync(p) && fs.statSync(p).size > 1000000; } catch { return false; }
+      });
+      const appBundlePath = path.resolve(process.execPath, '../../..');
+
+      if (zipPath && appBundlePath.endsWith('.app') && fs.existsSync(appBundlePath)) {
+        console.log(`[Updater] Applying update via macOS helper from ${zipPath} to ${appBundlePath}`);
+        const script = `
+          while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done
+          TEMP_DIR=$(mktemp -d /tmp/taskchat_update_XXXXXX)
+          if /usr/bin/ditto -xk "${zipPath}" "$TEMP_DIR"; then
+            NEW_APP=$(find "$TEMP_DIR" -maxdepth 1 -name "*.app" | head -n 1)
+            if [ -d "$NEW_APP" ]; then
+              /usr/bin/xattr -rd com.apple.quarantine "$NEW_APP" 2>/dev/null
+              rm -rf "${appBundlePath}"
+              mv "$NEW_APP" "${appBundlePath}"
+              /usr/bin/open -n "${appBundlePath}"
+              rm -rf "$TEMP_DIR"
+              exit 0
+            fi
+          fi
+          rm -rf "$TEMP_DIR"
+          /usr/bin/open -n "${appBundlePath}"
+        `;
+
+        try {
+          const child = spawn('/bin/sh', ['-c', script], {
+            detached: true,
+            stdio: 'ignore',
+          });
+          child.unref();
+          app.exit(0);
+          return;
+        } catch (spawnErr) {
+          console.error('[Updater] Failed to launch macOS update helper:', spawnErr);
+        }
+      }
+    }
+
     const au = getAutoUpdater();
     if (au) {
       try {
@@ -238,7 +306,8 @@ function initUpdater(mainWindow, options = {}) {
   });
 
   au.on('update-downloaded', (info) => {
-    console.log(`[Updater] Update downloaded: v${info.version}`);
+    downloadedFilePath = info?.downloadedFile || null;
+    console.log(`[Updater] Update downloaded: v${info.version}, file: ${downloadedFilePath}`);
     updateStatus = {
       ...updateStatus,
       status: 'downloaded',

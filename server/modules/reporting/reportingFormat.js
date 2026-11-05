@@ -30,7 +30,6 @@ export function formatReportingMessage(payload) {
     case 'tracking.work_started':
       if (payload.workMode) lines.push('Work mode: ' + clean(payload.workMode));
       lines.push('Work: ' + contextLabel(payload.current));
-      if (!payload.trackingStarted) lines.push('Tracking has not started.');
       break;
     case 'tracking.work_switched':
       lines.push('From: ' + contextLabel(payload.previous) + ' · ' + time(payload.previous?.startedAt) + '–' + time(payload.previous?.endedAt || payload.occurredAt) + ' · ' + duration(payload.previousSeconds),

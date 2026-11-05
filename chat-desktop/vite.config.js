@@ -59,38 +59,15 @@ export default ({ mode }) => {
 
     plugins: [
       taskChatDevServer(__dirname),
-      (() => {
-        const plugins = react({ disableOxcRecommendation: true });
-        plugins.forEach((p) => {
-          if (p.name === "vite:react-babel" && p.config) {
-            const origConfig = p.config;
-            p.config = (...args) => {
-              const res = origConfig(...args);
-              if (res) {
-                delete res.esbuild;
-                delete res.optimizeDeps;
-              }
-              return {
-                ...res,
-                oxc: {
-                  jsx: {
-                    runtime: "automatic",
-                  },
-                },
-              };
-            };
-          }
-        });
-        return plugins;
-      })(),
+      react(),
       tailwindcss(),
       {
         name: 'html-csp-transform',
         transformIndexHtml(html) {
-          if (mode === 'production') {
-            const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src 'self' blob: https:; child-src 'self' blob: https:; connect-src 'self' https: wss: http: ws:;";
-            return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`);
-          }
+          // NOTE: Electron apps load via file:// protocol.
+          // strict 'self' CSP blocks ES module scripts on file:// → blank screen.
+          // CSP is handled by Electron's session.setPermissionRequestHandler
+          // and webSecurity settings in main.cjs instead.
           return html;
         }
       }
@@ -144,15 +121,7 @@ export default ({ mode }) => {
     },
 
     build: {
-      minify: "terser",
-      terserOptions: {
-        compress: {
-          // Keep console.error and console.warn so production issues are
-          // visible in the browser DevTools console. Only strip verbose logs.
-          pure_funcs: ["console.log", "console.debug", "console.info"],
-          drop_debugger: true,
-        },
-      },
+      minify: "oxc",
       rollupOptions: {
         output: {
           manualChunks(id) {

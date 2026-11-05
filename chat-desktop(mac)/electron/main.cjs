@@ -54,6 +54,7 @@ let tray = null;
 let isQuitting = false;
 const hasTitleBarOverlay = process.platform === 'win32' || process.platform === 'linux';
 const overlayWindows = new WeakSet();
+app.on('before-quit', () => { isQuitting = true; });
 
 // Persistent Set to retain Notification instances and prevent V8 garbage collection on macOS
 const activeNotifications = new Set();
@@ -211,7 +212,7 @@ function createWindow() {
 
 
   installHuddlePopout(mainWindow,{BrowserWindow,ipcMain,capture,security,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),openExternal:url=>shell.openExternal(url)});
-  initUpdater(mainWindow);
+  initUpdater(mainWindow, { setQuitting: () => { isQuitting = true; } });
   const callWindow=mainWindow;
   installHuddleInvitations(callWindow,{ipcMain,Notification,
     createCallAlert:(invitation,onAction,onUnavailable)=>createIncomingCallWindow({BrowserWindow,ipcMain,screen,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png')},invitation,onAction,onUnavailable),

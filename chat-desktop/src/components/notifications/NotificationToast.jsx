@@ -25,9 +25,10 @@ export default function NotificationToast({ notification, onClick, onDismiss, pl
     // Play sound if enabled
     if (playSound) {
       try {
-        const audio = new Audio('/notification.mp3')
-        audio.volume = 1
-        audio.play().catch(() => {})
+        const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './';
+        const audio = new Audio(`${base}notification.mp3`);
+        audio.volume = 1;
+        audio.play().catch(() => {});
       } catch {
         // Audio not available
       }

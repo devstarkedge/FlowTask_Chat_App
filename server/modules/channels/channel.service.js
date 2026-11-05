@@ -2286,6 +2286,12 @@ class ChannelService {
         normalizedVisibility === CHANNEL_VISIBILITY.PRIVATE
       ) {
         allowed.visibility = normalizedVisibility;
+        if (this.isCustomChannel(channel)) {
+          allowed.type =
+            normalizedVisibility === CHANNEL_VISIBILITY.PUBLIC
+              ? CHANNEL_TYPES.PUBLIC
+              : CHANNEL_TYPES.PRIVATE;
+        }
       }
     }
     if (updates.adminOverrides !== undefined) {

@@ -228,8 +228,7 @@ export default function NavigationSidebar({
   
   const publicChannels = channels.filter(
     (c) =>
-      ((c.type === "public" && c.visibility !== "private") ||
-        (c.type !== "public" && c.visibility === "public")) &&
+      (c.visibility === "public" || (c.type === "public" && c.visibility !== "private")) &&
       !c.isArchived &&
       c.type !== "project" &&
       c.type !== "department" &&
@@ -242,9 +241,14 @@ export default function NavigationSidebar({
   
   const privateChannels = channels.filter(
     (c) =>
-      c.type === "private" &&
+      (c.visibility === "private" || (c.type === "private" && c.visibility !== "public")) &&
       !c.isArchived &&
       c.type !== "project" &&
+      c.type !== "department" &&
+      c.type !== "team" &&
+      c.type !== "dm" &&
+      c.type !== "system" &&
+      c.type !== "self" &&
       !categorizedChannelIds.has(String(c._id)),
   );
 

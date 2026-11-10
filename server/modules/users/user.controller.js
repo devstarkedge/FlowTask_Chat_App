@@ -481,7 +481,7 @@ export const updateUser = asyncHandler(async (req, res, next) => {
     return res.status(403).json({ success: false, error: 'Not authorized to update this profile' });
   }
 
-  const { name, displayName, title, email, phone } = req.body;
+  const { name, displayName, title, email, phone, avatar } = req.body;
   const target = await userRepository.findById(id);
   if (target?.flowTaskUserId && name !== undefined && name !== target.name) {
     return res.status(400).json({ success: false, error: 'Update your username in FlowTask.' });
@@ -492,7 +492,9 @@ export const updateUser = asyncHandler(async (req, res, next) => {
   if (title !== undefined) updates.title = title;
   if (email !== undefined) updates.email = email.toLowerCase();
   if (phone !== undefined) updates.phone = phone;
+  if (avatar !== undefined) updates.avatar = avatar ? String(avatar).trim() : null;
 
+  const oldAvatar = target?.avatar || null;
   const updatedUser = await userRepository.update(id, updates);
   if (!updatedUser) {
     return res.status(404).json({ success: false, error: 'User not found' });
@@ -500,5 +502,201 @@ export const updateUser = asyncHandler(async (req, res, next) => {
 
   await broadcastPresenceUpdate(updatedUser._id, updatedUser);
 
+  if (avatar !== undefined && oldAvatar !== updatedUser.avatar) {
+    try {
+      const { emitToWorkspace, emitToUser } = await import('../../sockets/socketManager.js');
+      const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
+      const { SOCKET_EVENTS } = await import('../../config/constants.js');
+
+      const userMemberships = await WorkspaceMembership.find({ userId: updatedUser._id, isActive: true }).distinct('workspaceId');
+      const payload = {
+        userId: String(updatedUser._id),
+        flowTaskUserId: String(updatedUser.flowTaskUserId || ''),
+        updates: { avatar: updatedUser.avatar, name: updatedUser.name, email: updatedUser.email },
+        profileUpdatedAt: new Date(),
+      };
+
+      emitToUser(String(updatedUser._id), SOCKET_EVENTS.USER_PROFILE_UPDATED, payload);
+      for (const wsId of userMemberships) {
+        emitToWorkspace(wsId.toString(), SOCKET_EVENTS.USER_PROFILE_UPDATED, {
+          workspaceId: wsId.toString(),
+          ...payload,
+        });
+      }
+
+      const { announceUserProfileUpdated } = await import('../flowtask/flowtaskInboundSync.service.js');
+      announceUserProfileUpdated({
+        chatUser: updatedUser,
+        changes: { avatar: { old: oldAvatar, new: updatedUser.avatar } },
+      }).catch((err) => {
+        logger.error('Failed to announce avatar update to FlowTask', { error: err.message, userId: id });
+      });
+    } catch (broadcastErr) {
+      logger.error('Profile update sync error', { error: broadcastErr.message });
+    }
+  }
+
   res.status(200).json({ success: true, data: updatedUser });
+});
+
+/**
+ * POST /users/avatar
+ * Upload user profile photo.
+ */
+export const uploadAvatar = asyncHandler(async (req, res, next) => {
+  const file = req.file || req.files?.avatar?.[0] || req.files?.file?.[0];
+  if (!file) {
+    return res.status(400).json({ success: false, error: 'Please upload an image file' });
+  }
+
+  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+  if (!allowedMimeTypes.includes(file.mimetype)) {
+    return res.status(400).json({ success: false, error: 'Invalid file type. Allowed: JPG, PNG, WEBP, GIF' });
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    return res.status(400).json({ success: false, error: 'File too large. Maximum size is 5MB' });
+  }
+
+  const user = await userRepository.findById(req.user._id);
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+
+  const oldAvatar = user.avatar || null;
+  let newAvatarUrl = null;
+
+  try {
+    const { v2: cloudinary } = await import('cloudinary');
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: `chat-app/users/${user._id}/avatar`,
+          resource_type: 'image',
+          transformation: [
+            { width: 512, height: 512, crop: 'limit' },
+            { quality: 'auto' },
+            { fetch_format: 'auto' },
+          ],
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      stream.end(file.buffer);
+    });
+
+    newAvatarUrl = uploadResult.secure_url;
+  } catch (uploadError) {
+    logger.error('Failed to upload avatar to Cloudinary', { error: uploadError.message, userId: user._id });
+    return res.status(500).json({ success: false, error: 'Failed to upload profile photo' });
+  }
+
+  user.avatar = newAvatarUrl;
+  await user.save();
+
+  // Realtime broadcast to workspaces & user
+  try {
+    const { emitToWorkspace, emitToUser } = await import('../../sockets/socketManager.js');
+    const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
+    const { SOCKET_EVENTS } = await import('../../config/constants.js');
+
+    const userMemberships = await WorkspaceMembership.find({ userId: user._id, isActive: true }).distinct('workspaceId');
+    const payload = {
+      userId: String(user._id),
+      flowTaskUserId: String(user.flowTaskUserId || ''),
+      updates: { avatar: user.avatar, name: user.name, email: user.email },
+      profileUpdatedAt: new Date(),
+    };
+
+    emitToUser(String(user._id), SOCKET_EVENTS.USER_PROFILE_UPDATED, payload);
+    for (const wsId of userMemberships) {
+      emitToWorkspace(wsId.toString(), SOCKET_EVENTS.USER_PROFILE_UPDATED, {
+        workspaceId: wsId.toString(),
+        ...payload,
+      });
+    }
+  } catch (socketErr) {
+    logger.warn('Socket broadcast error after avatar upload', { error: socketErr.message });
+  }
+
+  // Reverse sync to FlowTask
+  try {
+    const { announceUserProfileUpdated } = await import('../flowtask/flowtaskInboundSync.service.js');
+    announceUserProfileUpdated({
+      chatUser: user,
+      changes: { avatar: { old: oldAvatar, new: user.avatar } },
+    }).catch((err) => {
+      logger.error('Failed to announce avatar upload to FlowTask', { error: err.message, userId: user._id });
+    });
+  } catch (syncErr) {
+    logger.error('FlowTask reverse sync error', { error: syncErr.message });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      avatar: user.avatar,
+      user,
+    },
+  });
+});
+
+/**
+ * DELETE /users/avatar
+ * Remove profile photo.
+ */
+export const removeAvatar = asyncHandler(async (req, res, next) => {
+  const user = await userRepository.findById(req.user._id);
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+
+  const oldAvatar = user.avatar || null;
+  user.avatar = null;
+  await user.save();
+
+  // Realtime broadcast
+  try {
+    const { emitToWorkspace, emitToUser } = await import('../../sockets/socketManager.js');
+    const { default: WorkspaceMembership } = await import('../workspaces/WorkspaceMembership.model.js');
+    const { SOCKET_EVENTS } = await import('../../config/constants.js');
+
+    const userMemberships = await WorkspaceMembership.find({ userId: user._id, isActive: true }).distinct('workspaceId');
+    const payload = {
+      userId: String(user._id),
+      flowTaskUserId: String(user.flowTaskUserId || ''),
+      updates: { avatar: null, name: user.name, email: user.email },
+      profileUpdatedAt: new Date(),
+    };
+
+    emitToUser(String(user._id), SOCKET_EVENTS.USER_PROFILE_UPDATED, payload);
+    for (const wsId of userMemberships) {
+      emitToWorkspace(wsId.toString(), SOCKET_EVENTS.USER_PROFILE_UPDATED, {
+        workspaceId: wsId.toString(),
+        ...payload,
+      });
+    }
+  } catch (socketErr) {
+    logger.warn('Socket broadcast error after avatar removal', { error: socketErr.message });
+  }
+
+  // Reverse sync to FlowTask
+  try {
+    const { announceUserProfileUpdated } = await import('../flowtask/flowtaskInboundSync.service.js');
+    announceUserProfileUpdated({
+      chatUser: user,
+      changes: { avatar: { old: oldAvatar, new: null } },
+    }).catch((err) => {
+      logger.error('Failed to announce avatar removal to FlowTask', { error: err.message, userId: user._id });
+    });
+  } catch (syncErr) {
+    logger.error('FlowTask reverse sync error', { error: syncErr.message });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Avatar removed successfully',
+  });
 });

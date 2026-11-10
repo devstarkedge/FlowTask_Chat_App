@@ -35,7 +35,7 @@ export const useUserProfileStore = create((set) => ({
       const profiles = state.profilesByWorkspace[workspaceId] || {};
       const current = profiles[userId];
       if (current?.profileUpdatedAt && (!profileUpdatedAt || new Date(profileUpdatedAt) < new Date(current.profileUpdatedAt))) return state;
-      const profile = { ...updates, _id: userId, flowTaskUserId, profileUpdatedAt };
+      const profile = { ...(current || {}), ...updates, _id: userId, flowTaskUserId: flowTaskUserId || current?.flowTaskUserId, profileUpdatedAt };
       applied = true;
       return { profilesByWorkspace: { ...state.profilesByWorkspace, [workspaceId]: {
         ...profiles, [userId]: profile, ...(flowTaskUserId ? { [flowTaskUserId]: profile } : {}),

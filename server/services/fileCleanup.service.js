@@ -108,13 +108,19 @@ class FileCleanupService {
         // Only delete from Cloudinary if the asset actually has a cloud ID
         const cloudinaryIds = batch
           .filter((a) => a.storageProvider === 'cloudinary' && a.publicId && !a.publicId.startsWith('pending_'))
-          .map((a) => a.publicId);
+          .flatMap((a) =>
+            a.metadata?.isChunked && Array.isArray(a.metadata?.parts) && a.metadata.parts.length > 0
+              ? a.metadata.parts.map((p) => p.publicId).filter(Boolean)
+              : [a.publicId]
+          );
 
         if (cloudinaryIds.length > 0) {
           try {
-            await cloudinary.api.delete_resources(cloudinaryIds, {
-              resource_type: resourceType === 'raw' ? 'raw' : resourceType,
-            });
+            for (let k = 0; k < cloudinaryIds.length; k += BATCH_SIZE) {
+              await cloudinary.api.delete_resources(cloudinaryIds.slice(k, k + BATCH_SIZE), {
+                resource_type: resourceType === 'raw' ? 'raw' : resourceType,
+              });
+            }
           } catch (cloudErr) {
             logger.error('Cloudinary batch delete failed', {
               resourceType,
@@ -187,10 +193,16 @@ registerQueue('storage-cleanup', async (job) => {
   // 3. Delete from Cloudinary
   if (asset.storageProvider === 'cloudinary' && asset.publicId && !asset.publicId.startsWith('pending_')) {
     try {
-      await cloudinary.api.delete_resources([asset.publicId], {
-        resource_type: asset.resourceType === 'raw' ? 'raw' : asset.resourceType,
-      });
-      logger.info('file.cleanup.job.cloudinary_deleted', { fileId, publicId: asset.publicId });
+      const publicIdsToDelete =
+        asset.metadata?.isChunked && Array.isArray(asset.metadata?.parts) && asset.metadata.parts.length > 0
+          ? asset.metadata.parts.map((p) => p.publicId).filter(Boolean)
+          : [asset.publicId];
+      for (let k = 0; k < publicIdsToDelete.length; k += BATCH_SIZE) {
+        await cloudinary.api.delete_resources(publicIdsToDelete.slice(k, k + BATCH_SIZE), {
+          resource_type: asset.resourceType === 'raw' ? 'raw' : asset.resourceType,
+        });
+      }
+      logger.info('file.cleanup.job.cloudinary_deleted', { fileId, publicId: asset.publicId, partCount: publicIdsToDelete.length });
     } catch (cloudErr) {
       logger.error('file.cleanup.job.cloudinary_failed', { fileId, error: cloudErr.message });
       throw cloudErr; // Re-throw for BullMQ retry policy

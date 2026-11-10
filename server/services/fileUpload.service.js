@@ -40,6 +40,13 @@ const UPLOAD_RETRY = {
   BACKOFF_FACTOR: 3, // 1s, 3s, 9s
 };
 
+// Cloudinary Free Tier caps single 'raw' and 'image' assets at 10,485,760 bytes (10MB).
+// Files exceeding 9MB (non-video, or if single upload hits Cloudinary's size limit) are
+// split into 8MB raw parts and stored in metadata.parts, then streamed seamlessly on download.
+const CLOUDINARY_SINGLE_FILE_LIMIT = 9 * 1024 * 1024; // 9MB
+const CHUNK_PART_SIZE = 8 * 1024 * 1024; // 8MB per part
+const CHUNK_UPLOAD_CONCURRENCY = 3;
+
 class FileUploadService {
   constructor() {
     this.uploadQueue = [];
@@ -221,6 +228,107 @@ class FileUploadService {
   }
 
   /**
+   * Upload a single byte-range chunk of a large file to Cloudinary via upload_stream with retries.
+   */
+  async _uploadStreamPartWithRetry(filePath, start, end, partOptions) {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= UPLOAD_RETRY.MAX_ATTEMPTS; attempt++) {
+      try {
+        const result = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(partOptions, (err, res) => {
+            if (err) reject(err);
+            else resolve(res);
+          });
+          const readStream = fs.createReadStream(filePath, { start, end });
+          readStream.on('error', (err) => {
+            uploadStream.destroy(err);
+            reject(err);
+          });
+          readStream.pipe(uploadStream);
+        });
+        return result;
+      } catch (error) {
+        lastError = error;
+        if (attempt < UPLOAD_RETRY.MAX_ATTEMPTS && this._isRetryableError(error)) {
+          const delay = UPLOAD_RETRY.BASE_DELAY_MS * Math.pow(UPLOAD_RETRY.BACKOFF_FACTOR, attempt - 1);
+          logger.warn("Cloudinary chunk part upload retry", {
+            metric: "upload_retry",
+            attempt,
+            publicId: partOptions.public_id,
+            delayMs: delay,
+            error: error.message,
+          });
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        } else {
+          break;
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Split a large file (>9MB) into <=8MB raw chunks and upload each part to Cloudinary.
+   * Circumvents Cloudinary's 10MB raw/image per-asset cap while keeping all bytes in Cloudinary.
+   */
+  async _uploadChunkedParts(filePath, asset, fileSize) {
+    const totalParts = Math.ceil(fileSize / CHUNK_PART_SIZE);
+    const results = new Array(totalParts);
+
+    logger.info("Starting multi-part Cloudinary upload", {
+      assetId: asset._id.toString(),
+      originalName: asset.originalName,
+      fileSize,
+      totalParts,
+      chunkSize: CHUNK_PART_SIZE,
+    });
+
+    const uploadPart = async (index) => {
+      const start = index * CHUNK_PART_SIZE;
+      const end = Math.min(start + CHUNK_PART_SIZE - 1, fileSize - 1);
+      const partOptions = {
+        folder: asset.folderPath,
+        resource_type: 'raw',
+        public_id: `${asset._id}_part_${index}`,
+      };
+      const res = await this._uploadStreamPartWithRetry(filePath, start, end, partOptions);
+      results[index] = {
+        index,
+        publicId: res.public_id,
+        secureUrl: res.secure_url,
+        size: end - start + 1,
+      };
+    };
+
+    try {
+      for (let i = 0; i < totalParts; i += CHUNK_UPLOAD_CONCURRENCY) {
+        const batch = [];
+        for (let j = i; j < Math.min(i + CHUNK_UPLOAD_CONCURRENCY, totalParts); j++) {
+          batch.push(uploadPart(j));
+        }
+        const settled = await Promise.allSettled(batch);
+        const failed = settled.find((s) => s.status === "rejected");
+        if (failed) throw failed.reason;
+      }
+    } catch (err) {
+      // Clean up any parts uploaded before failure so no orphaned chunks remain
+      const uploadedIds = results.filter(Boolean).map((p) => p.publicId);
+      if (uploadedIds.length > 0) {
+        await cloudinary.api.delete_resources(uploadedIds, { resource_type: 'raw' }).catch(() => {});
+      }
+      throw err;
+    }
+
+    return {
+      isChunked: true,
+      parts: results,
+      primaryResult: results[0],
+    };
+  }
+
+  /**
    * Upload a file to Cloudinary with retry logic.
    * @returns {object} Cloudinary upload result
    */
@@ -234,8 +342,15 @@ class FileUploadService {
             if (err) reject(err);
             else resolve(res);
           };
-          if (fileSize > 10 * 1024 * 1024) {
-            cloudinary.uploader.upload_large(filePath, uploadOptions, cb);
+          let actualSize = fileSize;
+          if (!actualSize) {
+            try { actualSize = fs.statSync(filePath).size; } catch (_) {}
+          }
+          if (actualSize > 8 * 1024 * 1024) {
+            cloudinary.uploader.upload_large(filePath, {
+              ...uploadOptions,
+              chunk_size: 6000000,
+            }, cb);
           } else {
             cloudinary.uploader.upload(filePath, uploadOptions, cb);
           }
@@ -329,18 +444,73 @@ class FileUploadService {
         throw new Error("Cloudinary is not configured. Local storage uploads are disabled.");
       }
 
-      try {
-        result = await this._uploadWithRetry(
-          file.path,
-          uploadOptions,
-          file.size,
-        );
-      } catch (cloudinaryErr) {
-        logger.error("Cloudinary upload failed", {
+      let actualSize = file.size;
+      if (!actualSize) {
+        try { actualSize = fs.statSync(file.path).size; } catch (_) {}
+      }
+
+      let chunkedUpload = null;
+      const shouldChunkDirectly =
+        actualSize > CLOUDINARY_SINGLE_FILE_LIMIT && asset.resourceType !== "video";
+
+      if (shouldChunkDirectly) {
+        chunkedUpload = await this._uploadChunkedParts(file.path, asset, actualSize);
+      } else {
+        try {
+          result = await this._uploadWithRetry(
+            file.path,
+            uploadOptions,
+            actualSize,
+          );
+        } catch (cloudinaryErr) {
+          const isSizeLimitError =
+            cloudinaryErr?.message?.includes("File size too large") ||
+            cloudinaryErr?.http_code === 400 && /maximum is/i.test(cloudinaryErr?.message || "");
+          if (isSizeLimitError && actualSize > CLOUDINARY_SINGLE_FILE_LIMIT) {
+            logger.warn("Cloudinary single-asset limit hit; falling back to multi-part chunked upload", {
+              assetId: asset._id.toString(),
+              fileSize: actualSize,
+              error: cloudinaryErr.message,
+            });
+            chunkedUpload = await this._uploadChunkedParts(file.path, asset, actualSize);
+          } else {
+            logger.error("Cloudinary upload failed", {
+              assetId: asset._id.toString(),
+              error: cloudinaryErr.message,
+            });
+            throw cloudinaryErr;
+          }
+        }
+      }
+
+      if (chunkedUpload) {
+        asset.publicId = chunkedUpload.primaryResult.publicId;
+        asset.secureUrl = chunkedUpload.primaryResult.secureUrl;
+        asset.status = "available";
+        asset.resourceType = "raw";
+        asset.metadata = {
+          securityScan: asset.metadata?.securityScan,
+          isChunked: true,
+          chunkCount: chunkedUpload.parts.length,
+          parts: chunkedUpload.parts,
+          resourceType: "raw",
+        };
+
+        await asset.save();
+
+        const durationMs = Math.round(performance.now() - startTime);
+        logger.info("Multi-part file uploaded successfully", {
+          metric: "upload_complete",
           assetId: asset._id.toString(),
-          error: cloudinaryErr.message,
+          resourceType: asset.resourceType,
+          fileSize: asset.fileSize,
+          chunkCount: chunkedUpload.parts.length,
+          durationMs,
         });
-        throw cloudinaryErr;
+
+        const { default: eventBus } = await import("./eventBus.js");
+        eventBus.emit("file:uploaded", { assetId: asset._id, asset });
+        return;
       }
 
       logger.info("Cloudinary upload response", {

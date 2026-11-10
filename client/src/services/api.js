@@ -301,13 +301,13 @@ export const messageAPI = {
   uploadFiles: (channelId, formData, onUploadProgress) =>
     api.post(`/channels/${channelId}/upload`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
-      timeout: 60000,
+      timeout: 600000,
       onUploadProgress,
     }),
   uploadFilesSync: (channelId, formData, onUploadProgress) =>
     api.post(`/channels/${channelId}/upload?sync=true`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
-      timeout: 60000,
+      timeout: 600000,
       onUploadProgress,
     }),
   // Direct Cloudinary upload support
@@ -367,7 +367,12 @@ export const userAPI = {
   getOnline: () => api.get("/users/online"),
   setCustomStatus: (status) => api.put("/users/status", status),
   clearCustomStatus: () => api.delete("/users/status"),
-  setPresence: (status) => api.put("/users/presence", { status }), // DM contacts: merged FlowTask + ChatApp users with availability badges
+  setPresence: (status) => api.put("/users/presence", { status }),
+  uploadAvatar: (formData) =>
+    api.post("/users/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  removeAvatar: () => api.delete("/users/avatar"), // DM contacts: merged FlowTask + ChatApp users with availability badges
   getDMContacts: (search) =>
     api.get("/users/dm-contacts", { params: { search } }),
 };

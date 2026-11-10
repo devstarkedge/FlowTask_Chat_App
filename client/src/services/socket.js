@@ -600,13 +600,11 @@ export function connectSocket() {
 
   socket.on(SOCKET_EVENTS.CATEGORY_REORDERED, (categoryOrders) => {
     if (categoryOrders) {
-      // If we have a method for reordering in channelStore, call it
       const store = useChannelStore.getState()
-      if (store.reorderCategories) {
-        store.reorderCategories(categoryOrders)
-      } else {
-        // Fallback: force a refetch if we don't have optimistic reordering
-        store.fetchCategories?.()
+      if (store.applyCategoryReorder) {
+        store.applyCategoryReorder(categoryOrders)
+      } else if (store.fetchCategories) {
+        store.fetchCategories()
       }
     }
   })

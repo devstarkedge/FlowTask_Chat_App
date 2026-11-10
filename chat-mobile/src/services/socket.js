@@ -336,6 +336,13 @@ export const connectSocket = async () => {
     socket.emit('channel:join', channel._id);
   });
 
+  const handleChannelRemovedOrDeleted = ({ channelId }) => {
+    invalidateReportingAccess({ channelId });
+    useChannelStore.getState().removeChannel(channelId);
+  };
+
+  socket.on('channel:deleted', handleChannelRemovedOrDeleted);
+
   socket.on('channel:removed', ({ channelId }) => {
     invalidateReportingAccess({ channelId });
     useChannelStore.getState().removeChannel(channelId);
@@ -439,8 +446,12 @@ export const connectSocket = async () => {
 
   socket.on('category:reordered', (categoryOrders) => {
     try {
-      // Re-fetch to get consistent server-ordered state
-      useChannelStore.getState().fetchCategories();
+      const store = useChannelStore.getState();
+      if (Array.isArray(categoryOrders) && store.applyCategoryReorder) {
+        store.applyCategoryReorder(categoryOrders);
+      } else {
+        store.fetchCategories();
+      }
     } catch (err) {
       logger.error('[Socket] category:reordered error:', err.message);
     }

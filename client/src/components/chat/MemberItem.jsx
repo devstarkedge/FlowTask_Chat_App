@@ -1,15 +1,16 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
 import React from 'react'
-import { X } from 'lucide-react'
+import { X, Crown } from 'lucide-react'
 import { Avatar } from './MemberAvatarGroup'
 import { usePresenceStore } from '../../stores/presenceStore'
 
-export default function MemberItem({ member, onOpenProfile, canRemove, onRemove }) {
+export default function MemberItem({ member, isHost = false, onOpenProfile, canRemove, onRemove }) {
   member = useLiveProfileData(member);
   const presenceMap = usePresenceStore((s) => s.presence);
   const id = member?._id || member?.userId;
   const status = presenceMap[id] || presenceMap[member?.flowTaskUserId] || presenceMap[member?.chatUserId] || member?.onlineStatus || 'offline';
   const isOnline = status === 'online'
+  const effectiveIsHost = Boolean(isHost || member?.isHost || member?.channelRole === 'owner');
   const displayRole = member.workspaceRole || member.role || member.channelRole;
 
   return (
@@ -20,6 +21,16 @@ export default function MemberItem({ member, onOpenProfile, canRemove, onRemove 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium truncate" style={{ color: 'var(--text-white)' }}>{member.name}</p>
+            {effectiveIsHost && member.registrationStatus !== 'faded' && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                style={{ background: 'color-mix(in srgb, var(--accent-color) 16%, transparent)', color: 'var(--accent-color)' }}
+                title="Channel Host"
+              >
+                <Crown size={10} />
+                Host
+              </span>
+            )}
             {member.registrationStatus === 'faded' && (
               <span className="text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider" style={{ background: 'var(--bg-active)', color: 'var(--text-muted)' }}>
                 Unregistered

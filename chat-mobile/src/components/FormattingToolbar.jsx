@@ -148,13 +148,15 @@ const FormattingToolbar = memo(function FormattingToolbar({
           <Link2 size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={btn(false)}
-          onPress={onInsertMention}
-          activeOpacity={0.7}
-        >
-          <AtSign size={16} color={colors.primary || colors.textSecondary} />
-        </TouchableOpacity>
+        {onInsertMention && (
+          <TouchableOpacity
+            style={btn(false)}
+            onPress={onInsertMention}
+            activeOpacity={0.7}
+          >
+            <AtSign size={16} color={colors.primary || colors.textSecondary} />
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );

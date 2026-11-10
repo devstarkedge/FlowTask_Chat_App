@@ -40,6 +40,7 @@ import { emitTyping } from "../services/socket";
 import ScheduleModal from "./ScheduleModal";
 import MentionDropdown from "./MentionDropdown";
 import FormattingToolbar from "./FormattingToolbar";
+import { dispatchRichTextCommand, mergeFormatState, resolveEditToolbarTransition } from "../utils/composerFormatting";
 import ChatRichTextEditor from "./chat/ChatRichTextEditor";
 import MediaPickerSheet from "./MediaPickerSheet";
 import GifPickerModal from "./GifPickerModal";
@@ -177,6 +178,10 @@ const MessageComposer = React.memo(function MessageComposer({
   const pendingFilesRef = useRef(pendingFiles);
   pendingFilesRef.current = pendingFiles;
   const [showToolbar, setShowToolbar] = useState(false);
+  const showToolbarRef = useRef(showToolbar);
+  showToolbarRef.current = showToolbar;
+  const toolbarBeforeEditRef = useRef(false);
+  const wasEditingRef = useRef(false);
   const [mentionVisible, setMentionVisible] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [pendingMentions, setPendingMentions] = useState([]);
@@ -231,6 +236,16 @@ const MessageComposer = React.memo(function MessageComposer({
 
   // ─── Draft restore on channel change ─────────────────────────────────────
   useEffect(() => {
+    const transition = resolveEditToolbarTransition({
+      wasEditing: wasEditingRef.current,
+      isEditing: Boolean(editingMessage),
+      currentShowToolbar: showToolbarRef.current,
+      savedBeforeEdit: toolbarBeforeEditRef.current,
+    });
+    toolbarBeforeEditRef.current = transition.savedBeforeEdit;
+    wasEditingRef.current = transition.wasEditing;
+    setShowToolbar(editingMessage ? true : transition.showToolbar);
+
     if (editingMessage) {
       const html =
         editingMessage.htmlContent ||
@@ -241,6 +256,7 @@ const MessageComposer = React.memo(function MessageComposer({
       };
       onChangeText(html);
       editorRef.current?.setContent(html, latestContentRef.current.text);
+      setTimeout(() => { editorRef.current?.focus?.(); }, 60);
       let existingFiles = [];
       const fileReferences = editingMessage.fileReferences?.filter((r) => r.fileId) || [];
       const rawFiles = editingMessage.files || editingMessage.attachments || [];
@@ -354,60 +370,11 @@ const MessageComposer = React.memo(function MessageComposer({
   }, [saveDraftNow]);
 
   const handleEditorSelection = useCallback((state) => {
-    setFormatState((prev) => {
-      const keys = [
-        'bold',
-        'italic',
-        'underline',
-        'strike',
-        'code',
-        'codeBlock',
-        'blockquote',
-        'bulletList',
-        'orderedList',
-      ];
-      const same = keys.every((k) => prev[k] === state[k]);
-      return same ? prev : { ...prev, ...state };
-    });
+    setFormatState((prev) => mergeFormatState(prev, state));
   }, []);
 
   const handleEditorCommand = useCallback((command, value = null) => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    switch (command) {
-      case 'toggleBold':
-        ed.toggleBold();
-        break;
-      case 'toggleItalic':
-        ed.toggleItalic();
-        break;
-      case 'toggleUnderline':
-        ed.toggleUnderline();
-        break;
-      case 'toggleStrike':
-        ed.toggleStrike();
-        break;
-      case 'toggleBulletList':
-        ed.toggleBulletList();
-        break;
-      case 'toggleOrderedList':
-        ed.toggleOrderedList();
-        break;
-      case 'toggleBlockquote':
-        ed.toggleBlockquote();
-        break;
-      case 'toggleCode':
-        ed.toggleCode();
-        break;
-      case 'toggleCodeBlock':
-        ed.toggleCodeBlock();
-        break;
-      case 'setLink':
-        ed.setLink(value);
-        break;
-      default:
-        break;
-    }
+    dispatchRichTextCommand(editorRef.current, command, value);
   }, []);
 
   const handleBlur = useCallback(() => {

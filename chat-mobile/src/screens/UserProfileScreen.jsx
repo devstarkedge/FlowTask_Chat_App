@@ -17,8 +17,9 @@ import { useChannelStore } from '../stores/channelStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useHuddleUiStore } from '../stores/huddleUiStore';
 import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import ENV from '../config/environment';
-import { MessageSquare, Clock, Mail, Headphones, UserX, Shield } from "lucide-react-native";
+import { MessageSquare, Clock, Mail, Headphones, UserX, Shield, Camera } from "lucide-react-native";
 import { formatMessageTime } from '../utils/dateUtils';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -29,6 +30,7 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isCustomStatusValid } from '../utils/statusUtils';
 
 import { usersAPI } from '../services/api';
+import { refreshProfileCaches } from '../services/userProfileEvents';
 
 
 import { useAuthStore } from '../stores/authStore';
@@ -95,6 +97,7 @@ const UserProfileScreen = ({ route, navigation }) => {
   }, [targetId, isCurrentUser]);
 
   const [loadingDM, setLoadingDM] = useState(false);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [localTime, setLocalTime] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -122,7 +125,65 @@ const UserProfileScreen = ({ route, navigation }) => {
     );
   }
 
-  const handleMessage = async () => {
+  const handlePickAvatar = async () => {
+    if (!isCurrentUser || isUpdatingAvatar) return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+      const asset = result.assets?.[0];
+      if (result.canceled || !asset?.uri) return;
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        Toast.show({ type: 'error', text1: 'Image size must be less than 5MB' });
+        return;
+      }
+
+      setIsUpdatingAvatar(true);
+      const filename = asset.fileName || asset.uri.split('/').pop() || 'avatar.jpg';
+      const res = await usersAPI.uploadAvatar({
+        uri: asset.uri,
+        name: filename,
+        type: asset.mimeType || 'image/jpeg',
+      });
+      const updatedUser = res.data?.data || res.data?.user;
+      const newAvatar = updatedUser?.avatar || res.data?.avatar || null;
+      if (newAvatar) {
+        useAuthStore.getState().updateUser({ avatar: newAvatar, profilePicture: newAvatar });
+        refreshProfileCaches(currentUser._id, { avatar: newAvatar });
+      }
+      Toast.show({ type: 'success', text1: 'Profile photo updated' });
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: err?.response?.data?.error || err?.message || 'Failed to update profile photo',
+      });
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!isCurrentUser || isUpdatingAvatar) return;
+    setIsUpdatingAvatar(true);
+    try {
+      await usersAPI.removeAvatar();
+      useAuthStore.getState().updateUser({ avatar: null, profilePicture: null });
+      refreshProfileCaches(currentUser._id, { avatar: null });
+      Toast.show({ type: 'success', text1: 'Profile photo removed' });
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: err?.response?.data?.error || err?.message || 'Failed to remove profile photo',
+      });
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  };
+
+    const handleMessage = async () => {
     setLoadingDM(true);
     try {
 
@@ -246,7 +307,46 @@ const UserProfileScreen = ({ route, navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Profile Image */}
         <View style={styles.imageContainer}>
-          <AppAvatar user={liveUser} size={imageSize} showStatus={false} />
+          <View style={styles.avatarEditWrap}>
+            <AppAvatar user={liveUser} size={imageSize} showStatus={false} />
+            {isCurrentUser && (
+              <TouchableOpacity
+                style={[styles.cameraBadgeBtn, { backgroundColor: colors.primary, borderColor: colors.background }]}
+                onPress={handlePickAvatar}
+                disabled={isUpdatingAvatar}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Change profile photo"
+              >
+                {isUpdatingAvatar ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Camera size={20} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+          {isCurrentUser && (
+            <View style={styles.photoActionRow}>
+              <TouchableOpacity
+                onPress={handlePickAvatar}
+                disabled={isUpdatingAvatar}
+                style={[styles.photoActionBtn, { backgroundColor: colors.backgroundSecondary }]}
+              >
+                <Text style={[styles.photoActionText, { color: colors.primary }]}>
+                  {isUpdatingAvatar ? 'Updating…' : (liveUser.avatar || liveUser.profilePicture) ? 'Change photo' : 'Upload photo'}
+                </Text>
+              </TouchableOpacity>
+              {Boolean(liveUser.avatar || liveUser.profilePicture) && !isUpdatingAvatar && (
+                <TouchableOpacity
+                  onPress={handleRemoveAvatar}
+                  style={[styles.photoActionBtn, { backgroundColor: colors.backgroundSecondary }]}
+                >
+                  <Text style={[styles.photoActionText, { color: colors.error || '#EF4444' }]}>Remove</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
 
         {/* User Info */}
@@ -494,6 +594,38 @@ const styles = StyleSheet.create({
   },
   contactLabel: {
     fontSize: moderateScale(14),
+  },
+  avatarEditWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadgeBtn: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: verticalScale(12),
+  },
+  photoActionBtn: {
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(7),
+    borderRadius: moderateScale(16),
+  },
+  photoActionText: {
+    fontSize: moderateScale(13),
+    fontWeight: '600',
   },
 });
 

@@ -2540,6 +2540,7 @@ class ChannelService {
     if (!channel) throw new NotFoundError("Channel not found");
 
     const effectiveWorkspaceId = channel.workspaceId?.toString() || workspaceId;
+    const creatorIdStr = channel.createdBy?._id?.toString() || channel.createdBy?.toString() || null;
 
     const [members, pendingParticipants] = await Promise.all([
       channelRepository.listActiveMembers(channelId, {
@@ -2596,6 +2597,10 @@ class ChannelService {
           registrationStatus: "active",
           source: ["channel"],
           channelRole: member.role,
+          isHost: Boolean(
+            member.role === 'owner' ||
+            (creatorIdStr && user._id.toString() === creatorIdStr)
+          ),
           joinedAt: member.joinedAt,
         };
       })
@@ -2618,6 +2623,8 @@ class ChannelService {
 
     return [...activeMembers, ...pendingMembers]
       .sort((a, b) => {
+      // Channel host first, then online status, then alphabetical
+      if (Boolean(a.isHost) !== Boolean(b.isHost)) return a.isHost ? -1 : 1;
       // Online first, then alphabetical
       const onlineOrder = { online: 0, away: 1, dnd: 2, offline: 3 };
       const aOrder = onlineOrder[a.onlineStatus] ?? 3;

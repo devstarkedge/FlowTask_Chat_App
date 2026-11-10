@@ -19,6 +19,8 @@ import FAB from "../components/common/FAB";
 import AccountDrawer from "../components/AccountDrawer";
 import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
 import CreateCategoryModal from "../components/CreateCategoryModal";
+import ReorderCategoriesModal from "../components/ReorderCategoriesModal";
+import { sortCategoriesByOrder } from "../utils/categoryOrder";
 import CreateChannelModal from "../components/CreateChannelModal";
 import ManageCategoryChannelsModal from "../components/ManageCategoryChannelsModal";
 import CategoryActionSheet from "../components/CategoryActionSheet";
@@ -81,6 +83,7 @@ const HomeScreen = ({ navigation }) => {
   const [createNewVisible, setCreateNewVisible] = useState(false);
   const [createChannelVisible, setCreateChannelVisible] = useState(false);
   const [createCategoryVisible, setCreateCategoryVisible] = useState(false);
+  const [reorderCategoryVisible, setReorderCategoryVisible] = useState(false);
   const [manageCategoryVisible, setManageCategoryVisible] = useState(false);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [activeCategory, setActiveCategory] = useState(null);
@@ -131,8 +134,8 @@ const HomeScreen = ({ navigation }) => {
       showAddChannel: false,
     });
 
-    // Categories sections
-    categories?.forEach(cat => {
+    // Categories sections (sorted by persisted drag-and-drop order)
+    sortCategoriesByOrder(categories).forEach(cat => {
       let catChannels = [];
       if (cat.type === 'department') {
         catChannels = channels.filter(c => {
@@ -218,6 +221,7 @@ const HomeScreen = ({ navigation }) => {
         isExpanded={sectionsExpanded[section.key] ?? true}
         onToggle={isCategoryHeader ? null : toggleSection}
         colors={colors}
+        onReorder={isCategoryHeader && categories?.length > 1 ? () => setReorderCategoryVisible(true) : undefined}
         onAdd={isCategoryHeader ? () => setCreateCategoryVisible(true) : undefined}
         addIconSize={isCategoryHeader ? 22 : 16}
         hideChevron={isCategoryHeader}
@@ -414,6 +418,7 @@ const HomeScreen = ({ navigation }) => {
       <AccountDrawer visible={accountDrawerVisible} onClose={() => setAccountDrawerVisible(false)} navigation={navigation} />
       <CreateNewBottomSheet visible={createNewVisible} onClose={() => setCreateNewVisible(false)} navigation={navigation} />
       <CreateCategoryModal visible={createCategoryVisible} onClose={() => setCreateCategoryVisible(false)} />
+      <ReorderCategoriesModal visible={reorderCategoryVisible} onClose={() => setReorderCategoryVisible(false)} />
       <CreateChannelModal visible={createChannelVisible} onClose={() => setCreateChannelVisible(false)} navigation={navigation} />
       <CategoryActionSheet
         visible={actionSheetVisible}
@@ -428,6 +433,7 @@ const HomeScreen = ({ navigation }) => {
           setCategoryModalMode('add');
           setManageCategoryVisible(true);
         }}
+        onReorderCategories={() => setReorderCategoryVisible(true)}
         onRemoveChannels={(cat) => {
           setActionSheetVisible(false);
           setActiveCategory(cat);

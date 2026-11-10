@@ -21,6 +21,7 @@ import {
   MicOff,
   Video as VideoIcon,
   VideoOff,
+  SwitchCamera,
   Volume2,
   VolumeX,
   Hand,
@@ -53,6 +54,7 @@ import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import {
   toggleHuddleMute,
   toggleHuddleCamera,
+  switchHuddleCamera,
   toggleHuddleScreen,
   updateHuddleFeature,
   retryHuddleAudio,
@@ -85,13 +87,16 @@ function getAvatarBg(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function Video({ stream, self = false, objectFit = 'cover', style }) {
+function Video({ stream, self = false, mirror, zOrder = 0, objectFit = 'cover', style }) {
   const RTCView = getNativeVideoView();
+  const shouldMirror = typeof mirror === 'boolean' ? mirror : self;
   return stream && RTCView ? (
     <RTCView
+      key={stream.id || stream.toURL()}
       streamURL={stream.toURL()}
       objectFit={objectFit}
-      mirror={self}
+      mirror={shouldMirror}
+      zOrder={zOrder}
       style={style || { flex: 1 }}
     />
   ) : null;
@@ -253,6 +258,27 @@ function MoreActionsSheet({
           <Text style={styles.sheetHeading}>Huddle Options</Text>
 
           <View style={styles.sheetList}>
+            {Boolean(audio.localCameraStream) && (
+              <Pressable
+                style={styles.sheetItem}
+                disabled={busy || audio.cameraBusy}
+                onPress={() => {
+                  onClose();
+                  switchHuddleCamera();
+                }}
+              >
+                <View style={[styles.sheetIconWrap, styles.sheetIconWrapActive]}>
+                  <SwitchCamera size={20} color="#A78BFA" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sheetItemTitle}>Switch camera</Text>
+                  <Text style={styles.sheetItemDesc}>
+                    {audio.cameraFacing === 'environment' ? 'Using rear camera · tap for front' : 'Using front camera · tap for rear'}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
             {/* Screen Share */}
             <Pressable
               style={styles.sheetItem}
@@ -462,6 +488,9 @@ export default function HuddleOverlay() {
   const joined = Boolean(session && session.channelId === panel?.channelId);
   const own = state?.participants?.find(p => p.id === session?.id);
   const people = huddlePeople(state?.participants, session?.id);
+  const remotePeople = people.filter(p => p.id !== session?.id);
+  const hasLocalCamera = Boolean(joined && audio.localCameraStream);
+  const showSelfPip = Boolean(hasLocalCamera && (remotePeople.length > 0 || screen));
   const screen = audio.localScreenStream || audio.remoteScreenStream;
 
   useEffect(() => {
@@ -520,6 +549,7 @@ export default function HuddleOverlay() {
     const isMuted = isSelf ? audio.muted : p.muted;
     const initials = (p.name || '?').trim().slice(0, 2).toUpperCase();
     const avatarColor = getAvatarBg(p.name);
+    const mirrorVideo = isSelf ? audio.cameraFacing !== 'environment' : false;
 
     return (
       <View
@@ -533,7 +563,7 @@ export default function HuddleOverlay() {
         {/* Background / Video Feed / Avatar */}
         {camera ? (
           <View style={styles.videoFill}>
-            <Video stream={camera} self={isSelf} objectFit="cover" />
+            <Video stream={camera} self={isSelf} mirror={mirrorVideo} zOrder={0} objectFit="cover" />
           </View>
         ) : (
           <View style={styles.avatarCenterWrap}>
@@ -561,11 +591,24 @@ export default function HuddleOverlay() {
             </View>
           ) : <View />}
 
-          {p.reaction && now - p.reaction.at < 4000 && (
-            <View style={styles.reactionBubble}>
-              <Text style={{ fontSize: 28 }}>{p.reaction.emoji}</Text>
-            </View>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {isSelf && Boolean(camera) && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Switch camera"
+                disabled={audio.cameraBusy}
+                onPress={switchHuddleCamera}
+                style={styles.cardSwitchCameraBtn}
+              >
+                <SwitchCamera size={16} color="#FFFFFF" />
+              </Pressable>
+            )}
+            {p.reaction && now - p.reaction.at < 4000 && (
+              <View style={styles.reactionBubble}>
+                <Text style={{ fontSize: 28 }}>{p.reaction.emoji}</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Bottom User Info Pill */}
@@ -743,7 +786,7 @@ export default function HuddleOverlay() {
                             },
                           ]}
                         >
-                          <Video stream={screen} objectFit="contain" />
+                          <Video stream={screen} zOrder={0} objectFit="contain" />
                           <View style={styles.screenShareBadge}>
                             <Text style={styles.screenShareBadgeText}>
                               {audio.localScreenStream ? 'Your Screen' : 'Shared Screen'}
@@ -764,7 +807,7 @@ export default function HuddleOverlay() {
                           contentContainerStyle={styles.screenThumbnailsRow}
                           style={{ flexGrow: 0, marginTop: 10 }}
                         >
-                          {people.map(p =>
+                          {(showSelfPip ? remotePeople : people).map(p =>
                             renderParticipant(p, { width: 110, height: 110, borderRadius: 14 })
                           )}
                         </ScrollView>
@@ -772,10 +815,17 @@ export default function HuddleOverlay() {
                     ) : (
                       /* Regular Audio / Video Grid */
                       <View style={styles.gridContainer}>
-                        {people.length === 1 ? (
-                          // Solo hero view
+                        {remotePeople.length === 0 ? (
+                          // Solo hero view (caller alone or waiting for remote participant)
                           <View style={styles.soloWrap}>
-                            {renderParticipant(people[0], styles.soloCard)}
+                            {renderParticipant(
+                              people[0] || {
+                                id: session?.id || 'self',
+                                name: user?.name || 'You',
+                                muted: audio.muted,
+                              },
+                              styles.soloCard
+                            )}
                             <View style={styles.soloTipPill}>
                               <Users size={15} color="#94A3B8" />
                               <Text style={styles.soloTipText}>
@@ -786,20 +836,56 @@ export default function HuddleOverlay() {
                               </Pressable>
                             </View>
                           </View>
-                        ) : people.length === 2 ? (
-                          // 2 participants: Vertical split (two large stacked hero cards)
+                        ) : remotePeople.length === 1 ? (
+                          // 1-on-1 call: Remote participant fills stage cleanly; local camera renders as floating PiP
+                          <View style={styles.soloWrap}>
+                            {renderParticipant(remotePeople[0], styles.soloCard)}
+                          </View>
+                        ) : remotePeople.length === 2 ? (
+                          // 2 remote participants: Vertical split; local camera renders as floating PiP when active
                           <View style={styles.twoUpWrap}>
-                            {people.map(p => renderParticipant(p, styles.twoUpCard, true))}
+                            {remotePeople.map(p => renderParticipant(p, styles.twoUpCard, true))}
                           </View>
                         ) : (
-                          // 3+ participants: Responsive grid
+                          // 3+ remote participants: Responsive grid
                           <ScrollView
                             contentContainerStyle={styles.multiGridWrap}
                             showsVerticalScrollIndicator={false}
                           >
-                            {people.map(p => renderParticipant(p, styles.multiGridCard))}
+                            {remotePeople.map(p => renderParticipant(p, styles.multiGridCard))}
                           </ScrollView>
                         )}
+                      </View>
+                    )}
+
+                    {/* Caller Live Local Camera Preview (floating PiP overlay when video is enabled) */}
+                    {showSelfPip && (
+                      <View
+                        accessibilityLabel="Your camera preview"
+                        style={styles.localPipContainer}
+                      >
+                        <Video
+                          stream={audio.localCameraStream}
+                          self
+                          mirror={audio.cameraFacing !== 'environment'}
+                          zOrder={1}
+                          objectFit="cover"
+                        />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Switch front or rear camera"
+                          disabled={audio.cameraBusy}
+                          onPress={switchHuddleCamera}
+                          style={styles.localPipSwitchBtn}
+                        >
+                          <SwitchCamera size={14} color="#FFFFFF" />
+                        </Pressable>
+                        <View style={styles.localPipBadgeRow}>
+                          <View style={styles.localPipNamePill}>
+                            <Text style={styles.localPipNameText}>You</Text>
+                            {audio.muted && <MicOff size={10} color="#F87171" />}
+                          </View>
+                        </View>
                       </View>
                     )}
                   </View>
@@ -1286,6 +1372,65 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.25)',
     padding: 3,
     borderRadius: 8,
+  },
+  cardSwitchCameraBtn: {
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    padding: 8,
+    borderRadius: 18,
+  },
+  localPipContainer: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 112,
+    height: 158,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#000000',
+    borderWidth: 1.5,
+    borderColor: 'rgba(129, 140, 248, 0.75)',
+    zIndex: 30,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  localPipSwitchBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 32,
+  },
+  localPipBadgeRow: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
+    zIndex: 32,
+  },
+  localPipNamePill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  localPipNameText: {
+    color: '#F8FAFC',
+    fontSize: 11,
+    fontWeight: '600',
   },
 
   // Screen Share Views

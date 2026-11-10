@@ -5,12 +5,12 @@ import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
 import { useChannelStore } from '../stores/channelStore';
 import { categoryAPI } from '../services/api';
-import { X, Edit2, Trash2, FolderInput, FolderOutput } from "lucide-react-native";
+import { X, Edit2, Trash2, FolderInput, FolderOutput, ArrowUpDown } from "lucide-react-native";
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemoveChannels }) => {
+const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemoveChannels, onReorderCategories }) => {
   const { colors } = useThemeStore();
-  const { fetchCategories } = useChannelStore();
+  const { fetchCategories, categories = [] } = useChannelStore();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showRenameInput, setShowRenameInput] = useState(false);
   const [newName, setNewName] = useState(category?.name || '');
@@ -131,6 +131,19 @@ const CategoryActionSheet = ({ visible, onClose, category, onAddChannels, onRemo
                 <FolderOutput size={18} color={colors.textPrimary} />
                 <Text style={[styles.optionText, { color: colors.textPrimary }]}>Remove Channels</Text>
               </TouchableOpacity>
+
+              {onReorderCategories && categories.length > 1 && (
+                <TouchableOpacity
+                  style={styles.option}
+                  onPress={() => {
+                    onClose();
+                    onReorderCategories();
+                  }}
+                >
+                  <ArrowUpDown size={18} color={colors.textPrimary} />
+                  <Text style={[styles.optionText, { color: colors.textPrimary }]}>Reorder Categories</Text>
+                </TouchableOpacity>
+              )}
               
               <TouchableOpacity 
                 style={[styles.option, styles.destructiveOption]} 

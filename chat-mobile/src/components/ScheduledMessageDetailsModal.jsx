@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import { formatRelativeTime, formatScheduledDate } from '../utils/dateUtils';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { useConversationDetails } from '../hooks/useConversationDetails';
 import ScheduleModal from './ScheduleModal';
+import FormattingToolbar from './FormattingToolbar';
+import ChatRichTextEditor from './chat/ChatRichTextEditor';
+import { dispatchRichTextCommand, mergeFormatState } from '../utils/composerFormatting';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 
@@ -26,6 +29,12 @@ const ScheduledMessageDetailsModal = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
+  const [editHtml, setEditHtml] = useState('');
+  const [formatState, setFormatState] = useState({});
+  const [linkModalVisible, setLinkModalVisible] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('https://');
+  const editorRef = useRef(null);
+  const latestEditRef = useRef({ html: '', text: '' });
   const [isUpdating, setIsUpdating] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
 
@@ -38,10 +47,23 @@ const ScheduledMessageDetailsModal = ({
 
   useEffect(() => {
     if (visible && message) {
-      setEditText(message.content || '');
+      const initialText = message.content || '';
+      const initialHtml = message.htmlContent || '';
+      setEditText(initialText);
+      setEditHtml(initialHtml);
+      latestEditRef.current = { html: initialHtml, text: initialText };
+      setFormatState({});
       setIsEditing(false);
     }
   }, [visible, message]);
+
+  const handleEditorCommand = useCallback((command, value = null) => {
+    dispatchRichTextCommand(editorRef.current, command, value);
+  }, []);
+
+  const handleSelectionChange = useCallback((state) => {
+    setFormatState((prev) => mergeFormatState(prev, state));
+  }, []);
 
   if (!visible || !message) return null;
 
@@ -49,13 +71,18 @@ const ScheduledMessageDetailsModal = ({
   const isPast = scheduledDate < new Date();
 
   const handleSaveEdit = async () => {
-    if (!editText.trim()) {
+    const edContent = editorRef.current?.getContent?.() || latestEditRef.current;
+    const plain = (edContent?.text || editText || '').trim();
+    const html = edContent?.html || editHtml || plain;
+    if (!plain) {
       Alert.alert('Error', 'Message content cannot be empty.');
       return;
     }
     setIsUpdating(true);
     try {
-      await editScheduledMessageText(message._id, editText, editText);
+      await editScheduledMessageText(message._id, plain, html);
+      setEditText(plain);
+      setEditHtml(html);
       setIsEditing(false);
     } catch (err) {
       Alert.alert('Error', 'Failed to update message.');
@@ -178,25 +205,50 @@ const ScheduledMessageDetailsModal = ({
 
               {isEditing ? (
                 <View>
-                  <TextInput
-                    style={[styles.textInput, { 
-                      color: colors.inputText, 
-                      backgroundColor: colors.inputBackground,
-                      borderColor: colors.border 
-                    }]}
-                    multiline
-                    value={editText}
-                    onChangeText={setEditText}
-                    placeholder="Message content..."
-                    placeholderTextColor={colors.inputPlaceholder}
-                    autoFocus
-                  />
+                  <View
+                    style={[
+                      styles.richEditBox,
+                      {
+                        backgroundColor: colors.inputBackground || colors.card,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <FormattingToolbar
+                      colors={colors}
+                      formatState={formatState}
+                      onCommand={handleEditorCommand}
+                      onLink={() => {
+                        setLinkUrl('https://');
+                        setLinkModalVisible(true);
+                      }}
+                    />
+                    <View style={styles.richEditorInner}>
+                      <ChatRichTextEditor
+                        ref={editorRef}
+                        placeholder="Message content..."
+                        colors={colors}
+                        initialHtml={editHtml || (editText ? `<p>${editText.replace(/</g, '&lt;')}</p>` : '')}
+                        onUpdate={(update) => {
+                          const html = update?.html ?? '';
+                          const plain = update?.text ?? '';
+                          latestEditRef.current = { html, text: plain };
+                          setEditText(plain);
+                          setEditHtml(html);
+                        }}
+                        onSelectionChange={handleSelectionChange}
+                        minHeight={verticalScale(90)}
+                        maxHeight={verticalScale(220)}
+                      />
+                    </View>
+                  </View>
                   <View style={styles.editActions}>
                     <TouchableOpacity 
                       style={[styles.btn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
                       onPress={() => {
                         setIsEditing(false);
                         setEditText(message.content || '');
+                        setEditHtml(message.htmlContent || '');
                       }}
                     >
                       <Text style={[styles.btnText, { color: colors.textSecondary }]}>Cancel</Text>
@@ -258,6 +310,48 @@ const ScheduledMessageDetailsModal = ({
           onSchedule={handleRescheduleSubmit}
           colors={colors}
         />
+
+        <Modal
+          visible={linkModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLinkModalVisible(false)}
+        >
+          <View style={styles.linkOverlay}>
+            <View style={[styles.linkDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.linkTitle, { color: colors.textPrimary }]}>Insert Link</Text>
+              <TextInput
+                style={[styles.linkInput, { color: colors.inputText || colors.textPrimary, borderColor: colors.border, backgroundColor: colors.inputBackground || colors.background }]}
+                value={linkUrl}
+                onChangeText={setLinkUrl}
+                placeholder="https://example.com"
+                placeholderTextColor={colors.inputPlaceholder || colors.textTertiary}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                autoFocus
+              />
+              <View style={styles.editActions}>
+                <TouchableOpacity
+                  style={[styles.btn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
+                  onPress={() => setLinkModalVisible(false)}
+                >
+                  <Text style={[styles.btnText, { color: colors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btn, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    const url = linkUrl.trim();
+                    if (url && url !== 'https://') handleEditorCommand('setLink', url);
+                    setLinkModalVisible(false);
+                  }}
+                >
+                  <Text style={[styles.btnText, { color: '#fff' }]}>Apply</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -351,6 +445,39 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: moderateScale(15),
     lineHeight: 22,
+  },
+  richEditBox: {
+    borderWidth: 1,
+    borderRadius: moderateScale(12),
+    overflow: "hidden",
+    marginBottom: verticalScale(12),
+  },
+  richEditorInner: {
+    paddingHorizontal: moderateScale(8),
+    paddingVertical: verticalScale(6),
+  },
+  linkOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    paddingHorizontal: scale(24),
+  },
+  linkDialog: {
+    borderRadius: moderateScale(14),
+    borderWidth: 1,
+    padding: moderateScale(16),
+    gap: 12,
+  },
+  linkTitle: {
+    fontSize: moderateScale(16),
+    fontWeight: "700",
+  },
+  linkInput: {
+    borderWidth: 1,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    fontSize: moderateScale(14),
   },
   textInput: {
     minHeight: verticalScale(120),

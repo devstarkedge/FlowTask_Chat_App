@@ -31,7 +31,14 @@ import {
   Lock,
   Volume2,
   Plus,
+  GripVertical,
 } from 'lucide-react-native';
+import Toast from 'react-native-toast-message';
+import DraggableOrderList from './DraggableOrderList';
+import {
+  buildCategoryOrdersFromDepts,
+  sortDepartmentsByCategoryOrder,
+} from '../utils/categoryOrder';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isChatAppChannel } from '../utils/channelOrigin';
 import Button from './common/Button';
@@ -78,7 +85,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const isWide = screenWidth > SHEET_MAX_WIDTH;
   const { activeWorkspace } = useWorkspaceStore();
   const { data: channels = [], isLoading: channelsLoading, refetch: fetchChannels } = useChannels(activeWorkspace?._id);
-  const { categories, fetchCategories } = useChannelStore();
+  const { categories, fetchCategories, reorderCategories } = useChannelStore();
 
   // ── State ──
   const [categoryType, setCategoryType] = useState('department');
@@ -86,6 +93,8 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const [loadingDepts, setLoadingDepts] = useState(false);
   const [deptError, setDeptError] = useState(null);
   const [expandedDepts, setExpandedDepts] = useState({});
+  const [deptList, setDeptList] = useState([]);
+  const [isDraggingDept, setIsDraggingDept] = useState(false);
   const deptSeq = useRef(0);
   const [customName, setCustomName] = useState('');
   const [customIcon, setCustomIcon] = useState('✨');
@@ -96,13 +105,23 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const chRefreshed = useRef(false);
 
   // ── Derived data ──
-  const existingDeptIds = useMemo(() => new Set(
-    categories
-      .filter(c => c.type === 'department')
-      .flatMap(c => [c.departmentId?._id, c.departmentId?.externalId, c.departmentId])
-      .filter(id => typeof id === 'string')
-      .map(String),
-  ), [categories]);
+  const existingDeptIds = useMemo(() => {
+    const ids = new Set();
+    categories.forEach((c) => {
+      if (c.type === 'department') {
+        if (c.departmentId) {
+          if (typeof c.departmentId === 'object') {
+            if (c.departmentId._id) ids.add(String(c.departmentId._id));
+            if (c.departmentId.externalId) ids.add(String(c.departmentId.externalId));
+          } else {
+            ids.add(String(c.departmentId));
+          }
+        }
+        if (c.name) ids.add(c.name.trim().toLowerCase());
+      }
+    });
+    return ids;
+  }, [categories]);
 
   const hasDeptCategory = existingDeptIds.size > 0;
 
@@ -118,19 +137,36 @@ export default function CreateCategoryModal({ visible, onClose }) {
     });
   }, [channels]);
 
-  const missingDepts = useMemo(() =>
-    departments.filter(d => {
-      const isMissing = !existingDeptIds.has(String(d._id)) && !existingDeptIds.has(String(d.externalId));
-      if (!isMissing) return false;
-      return getDeptChannels(d).length > 0;
-    }),
-    [departments, existingDeptIds, getDeptChannels],
-  );
-
   const departmentsWithChannels = useMemo(
     () => departments.filter(d => getDeptChannels(d).length > 0),
     [departments, getDeptChannels],
   );
+
+  const missingDepts = useMemo(() =>
+    departmentsWithChannels.filter(d => {
+      const nameKey = (d.name || "").trim().toLowerCase();
+      return !existingDeptIds.has(String(d._id))
+        && !(d.externalId && existingDeptIds.has(String(d.externalId)))
+        && !(nameKey && existingDeptIds.has(nameKey));
+    }),
+    [departmentsWithChannels, existingDeptIds],
+  );
+
+  useEffect(() => {
+    setDeptList(sortDepartmentsByCategoryOrder(departmentsWithChannels, categories));
+  }, [departmentsWithChannels, categories]);
+
+  const handleDeptReorder = async (nextDeptList) => {
+    setDeptList(nextDeptList);
+    const categoryOrders = buildCategoryOrdersFromDepts(nextDeptList, categories);
+    if (categoryOrders.length === 0) return;
+    try {
+      await reorderCategories(categoryOrders);
+      Toast.show({ type: 'success', text1: 'Category order updated' });
+    } catch {
+      setDeptList(sortDepartmentsByCategoryOrder(departmentsWithChannels, useChannelStore.getState().categories));
+    }
+  };
 
   const allImported = !loadingDepts && departmentsWithChannels.length > 0 && missingDepts.length === 0;
   const hideDeptAction = categoryType === 'department'
@@ -419,6 +455,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
 
           {/* ──────────── Body ──────────── */}
           <ScrollView
+            scrollEnabled={!isDraggingDept}
             style={{ flexShrink: 1 }}
             contentContainerStyle={styles.bodyPad}
             keyboardShouldPersistTaps="handled"
@@ -476,55 +513,94 @@ export default function CreateCategoryModal({ visible, onClose }) {
                   </View>
                 ) : (
                   <View style={styles.deptList}>
-                    {missingDepts.map((d, dIdx) => {
-                      const deptChannels = getDeptChannels(d);
-                      const isExp = expandedDepts[d._id];
-                      return (
-                        <View key={`${d._id}-${dIdx}`} style={[styles.deptCard, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
-                          <TouchableOpacity
-                            style={styles.deptHeader}
-                            onPress={() => setExpandedDepts(prev => ({ ...prev, [d._id]: !isExp }))}
-                            activeOpacity={0.7}
+                    <View style={styles.deptOrderHeader}>
+                      <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>FLOWTASK DEPARTMENTS</Text>
+                      {deptList.length > 1 && (
+                        <Text style={[styles.dragHintText, { color: colors.textTertiary }]}>Drag & drop to reorder</Text>
+                      )}
+                    </View>
+                    <DraggableOrderList
+                      items={deptList}
+                      keyExtractor={(d) => String(d._id)}
+                      onDragActiveChange={setIsDraggingDept}
+                      onDragStart={() => setExpandedDepts({})}
+                      onReorder={handleDeptReorder}
+                      renderItem={({ item: d, isDragging, dragHandleProps }) => {
+                        const deptChannels = getDeptChannels(d);
+                        const isExp = expandedDepts[d._id];
+                        const nameKey = (d.name || "").trim().toLowerCase();
+                        const isAlreadyImported =
+                          existingDeptIds.has(String(d._id)) ||
+                          (d.externalId && existingDeptIds.has(String(d.externalId))) ||
+                          (nameKey && existingDeptIds.has(nameKey));
+                        return (
+                          <View
+                            style={[
+                              styles.deptCard,
+                              {
+                                borderColor: isDragging ? colors.primary : colors.border,
+                                backgroundColor: isDragging ? colors.background : colors.backgroundSecondary,
+                              },
+                            ]}
                           >
-                            <View style={styles.deptTitleRow}>
-                              <FolderPlus size={18} color={colors.primary} />
-                              <Text style={[styles.deptName, { color: colors.textPrimary }]} numberOfLines={1}>
-                                {d.name}
-                              </Text>
-                            </View>
-                            <View style={styles.deptCountRow}>
-                              <Text style={[styles.deptCountText, { color: colors.textSecondary }]}>
-                                {deptChannels.length} {deptChannels.length === 1 ? 'channel' : 'channels'}
-                              </Text>
-                              <ChevronDown
-                                size={18}
-                                color={colors.textTertiary}
-                                style={{ transform: [{ rotate: isExp ? '180deg' : '0deg' }] }}
-                              />
-                            </View>
-                          </TouchableOpacity>
-
-                          {isExp && (
-                            <View style={[styles.deptBody, { borderTopColor: colors.border, borderTopWidth: 1, backgroundColor: colors.background }]}>
-                              {deptChannels.length === 0 ? (
-                                <Text style={[styles.deptEmpty, { color: colors.textTertiary }]}>
-                                  No channels are currently linked to this department.
+                            <TouchableOpacity
+                              style={styles.deptHeader}
+                              onPress={() => setExpandedDepts(prev => ({ ...prev, [d._id]: !isExp }))}
+                              activeOpacity={0.7}
+                            >
+                              <View style={styles.deptTitleRow}>
+                                <View
+                                  {...dragHandleProps}
+                                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                  style={styles.dragHandle}
+                                >
+                                  <GripVertical size={16} color={isDragging ? colors.primary : colors.textTertiary} />
+                                </View>
+                                <ChevronDown
+                                  size={16}
+                                  color={colors.textTertiary}
+                                  style={{ transform: [{ rotate: isExp ? '0deg' : '-90deg' }] }}
+                                />
+                                <Text style={styles.deptEmoji}>{d.icon || '\uD83D\uDCC1'}</Text>
+                                <Text style={[styles.deptName, { color: colors.textPrimary }]} numberOfLines={1}>
+                                  {d.name}
                                 </Text>
-                              ) : (
-                                deptChannels.map((ch, cIdx) => (
-                                  <View key={`${ch._id}-${cIdx}`} style={styles.deptChRow}>
-                                    <ChannelIcon channel={ch} color={colors.textTertiary} size={14} />
-                                    <Text style={[styles.deptChName, { color: colors.textSecondary }]} numberOfLines={1}>
-                                      {ch.name}
-                                    </Text>
+                              </View>
+                              <View style={styles.deptCountRow}>
+                                {isAlreadyImported ? (
+                                  <View style={[styles.badge, { backgroundColor: colors.primary + "1A" }]}>
+                                    <Text style={[styles.badgeText, { color: colors.primary }]}>Imported</Text>
                                   </View>
-                                ))
-                              )}
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })}
+                                ) : (
+                                  <Text style={[styles.deptCountText, { color: colors.textSecondary }]}>
+                                    {deptChannels.length} {deptChannels.length === 1 ? 'ch' : 'chs'}
+                                  </Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+
+                            {isExp && (
+                              <View style={[styles.deptBody, { borderTopColor: colors.border, borderTopWidth: 1, backgroundColor: colors.background }]}>
+                                {deptChannels.length === 0 ? (
+                                  <Text style={[styles.deptEmpty, { color: colors.textTertiary }]}>
+                                    No channels are currently linked to this department.
+                                  </Text>
+                                ) : (
+                                  deptChannels.map((ch, cIdx) => (
+                                    <View key={`${ch._id}-${cIdx}`} style={styles.deptChRow}>
+                                      <ChannelIcon channel={ch} color={colors.textTertiary} size={14} />
+                                      <Text style={[styles.deptChName, { color: colors.textSecondary }]} numberOfLines={1}>
+                                        {ch.name}
+                                      </Text>
+                                    </View>
+                                  ))
+                                )}
+                              </View>
+                            )}
+                          </View>
+                        );
+                      }}
+                    />
                   </View>
                 )}
               </View>
@@ -843,6 +919,24 @@ const styles = StyleSheet.create({
   },
 
   // ── Department Card ──
+  deptOrderHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: verticalScale(8),
+  },
+  dragHintText: {
+    fontSize: moderateScale(11.5),
+  },
+  dragHandle: {
+    paddingVertical: verticalScale(4),
+    paddingRight: scale(2),
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deptEmoji: {
+    fontSize: moderateScale(15),
+  },
   deptCard: {
     borderWidth: 1.5,
     borderRadius: moderateScale(10),

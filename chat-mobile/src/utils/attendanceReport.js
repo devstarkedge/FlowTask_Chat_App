@@ -16,6 +16,7 @@ const compact = value => value
 export function reportPresentation(message) {
   const lines = (message.content || '').split('\n').map(line => line.trim()).filter(Boolean)
   const field = label => lines.find(line => line.toLowerCase().startsWith(label.toLowerCase() + ':'))?.slice(label.length + 1).trim()
+  const auto = message.reportingMeta?.eventType === 'attendance.checked_out' && lines[0] === 'Auto Check-Out'
   const details = []
   let group = null
   const flush = () => {
@@ -42,7 +43,7 @@ export function reportPresentation(message) {
     if (/^Leave:\s*NONE$/i.test(line)) continue
     const match = line.match(/^([^:]+):\s*(.*)$/)
     const labels = { 'Check-In': 'Check-in', 'Check-Out': 'Check-out', 'Work Mode': 'Work mode', 'Previous Work': 'Work', 'Work Completed So Far': 'Worked', 'Break Started': 'Break started', 'Personal Break Duration': 'Break', 'Resuming': 'Work', 'Attendance Duration': 'Attendance', 'Attendance Status': 'Outcome', 'Total Tracked Work': 'Tracked work', 'Total Personal Pause': 'Personal breaks' }
-    if (match && (labels[match[1]] || ['Work mode', 'Work', 'From', 'Now', 'Worked', 'Break', 'Hours', 'Attendance', 'Tracked work', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads', 'Leave Type', 'Coverage'].includes(match[1]))) details.push({ label: labels[match[1]] || match[1], value: compact(match[2]) })
+    if (match && (labels[match[1]] || ['Work mode', 'Work', 'From', 'Now', 'Worked', 'Break', 'Hours', 'Attendance', 'Tracked work', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads', 'Leave Type', 'Coverage', 'Effective checkout', 'Last activity', 'Reason'].includes(match[1]))) details.push({ label: labels[match[1]] || match[1], value: compact(match[2]) })
     else details.push({ label: '', value: compact(line.replace(/^\d+\.\s*/, '')) })
   }
   flush()
@@ -67,7 +68,7 @@ export function reportPresentation(message) {
   // This is a calendar date, so avoid converting it through the viewer's zone.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate || '') ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(rawDate + 'T00:00:00Z')) : rawDate
   return {
-    title: titles[message.reportingMeta?.eventType] || lines[0] || 'Attendance',
+    title: auto ? lines[0] : titles[message.reportingMeta?.eventType] || lines[0] || 'Attendance',
     employee: field('Employee') || message.reportingMeta?.employeeName || 'Team member',
     date,
     time: compact((field('Time') || '').replace(/\s*\([^)]*\)$/, '')),

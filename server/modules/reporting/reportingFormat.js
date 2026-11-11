@@ -23,7 +23,8 @@ export function formatReportingMessage(payload) {
   const titles = { 'attendance.checked_in': 'Checked in', 'tracking.work_started': 'Work started',
     'tracking.work_switched': 'Switched work', 'tracking.break_started': 'On a break',
     'tracking.work_resumed': 'Work resumed', 'attendance.checked_out': 'Checked out' };
-  const lines = [titles[payload.eventType], 'Employee: ' + clean(payload.employee.name),
+  const auto = payload.eventType === 'attendance.checked_out' && payload.checkoutReason === 'POST_SHIFT_INACTIVITY';
+  const lines = [auto ? 'Auto Check-Out' : titles[payload.eventType], 'Employee: ' + clean(payload.employee.name),
     'Workday: ' + clean(payload.workDateKey), 'Time: ' + time(payload.occurredAt)];
   switch (payload.eventType) {
     case 'attendance.checked_in':
@@ -42,6 +43,8 @@ export function formatReportingMessage(payload) {
       lines.push('Break: ' + duration(payload.breakSeconds), 'Work: ' + contextLabel(payload.current));
       break;
     case 'attendance.checked_out':
+      if (auto) lines.push('Effective checkout: ' + time(payload.checkOutAt), 'Last activity: ' + time(payload.lastActivityAt),
+        'Reason: 30 minutes of inactivity after shift end.');
       lines.push('Hours: ' + time(payload.checkInAt) + '–' + time(payload.checkOutAt));
       for (const row of payload.summary?.rows || []) lines.push(contextLabel(row) + ' — ' + duration(row.seconds));
       lines.push('Total Tracked Work: ' + duration(payload.summary?.workSeconds));

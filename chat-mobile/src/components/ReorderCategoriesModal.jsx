@@ -25,7 +25,7 @@ import { moderateScale, scale, verticalScale } from '../utils/responsive';
  * ReorderCategoriesModal — Allows drag-and-drop reordering of all categories
  * (FlowTask departments and custom categories) on mobile, syncing to desktop/web.
  */
-export default function ReorderCategoriesModal({ visible, onClose }) {
+export default function ReorderCategoriesModal({ visible, onClose, visibleCategories }) {
   const { colors } = useThemeStore();
   const { width: screenWidth } = useWindowDimensions();
   const SHEET_MAX_WIDTH = 480;
@@ -36,24 +36,33 @@ export default function ReorderCategoriesModal({ visible, onClose }) {
 
   const [orderedList, setOrderedList] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const reorderableCategories = visibleCategories || categories;
 
   useEffect(() => {
     if (!visible) {
       setIsDragging(false);
       return;
     }
-    setOrderedList(sortCategoriesByOrder(categories));
-  }, [visible, categories]);
+    setOrderedList(sortCategoriesByOrder(reorderableCategories));
+  }, [visible, reorderableCategories]);
 
   const handleReorder = async (nextList) => {
     setOrderedList(nextList);
-    const categoryOrders = buildCategoryOrdersFromList(nextList);
+    const visibleIds = new Set(reorderableCategories.map((category) => String(category._id)));
+    let nextVisibleIndex = 0;
+    const mergedList = sortCategoriesByOrder(useChannelStore.getState().categories).map((category) => {
+      if (!visibleIds.has(String(category._id))) return category;
+      const reorderedCategory = nextList[nextVisibleIndex];
+      nextVisibleIndex += 1;
+      return reorderedCategory || category;
+    });
+    const categoryOrders = buildCategoryOrdersFromList(mergedList);
     if (categoryOrders.length === 0) return;
     try {
       await reorderCategories(categoryOrders);
       Toast.show({ type: 'success', text1: 'Category order updated' });
     } catch {
-      setOrderedList(sortCategoriesByOrder(useChannelStore.getState().categories));
+      setOrderedList(sortCategoriesByOrder(reorderableCategories));
     }
   };
 

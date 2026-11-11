@@ -207,7 +207,7 @@ function SectionDivider({ label }) {
 
 /* ─── Main component ──────────────────────────────────────────────── */
 export default function EditChannelModal({ channel, onClose }) {
-  const { editChannel, deleteChannel } = useChannelStore()
+  const { editChannel, deleteChannel, membersByChannel } = useChannelStore()
   const { user } = useAuthStore()
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -239,9 +239,16 @@ export default function EditChannelModal({ channel, onClose }) {
     || allowAllMembersEditCanvas !== (channel.allowAllMembersEditCanvas !== false)
 
   const isCustom = isChatAppChannel(channel)
-  const isWsAdmin = ['owner', 'admin'].includes(activeWorkspace?.role)
-  const isChannelOwner = channel.createdBy === user?._id || channel.isOwner?.(user?._id)
-  const canDeleteChannel = isCustom && (isChannelOwner || isWsAdmin)
+  const createdById = channel.createdBy?._id || channel.createdBy
+  const userIdStr = user?._id != null ? String(user._id) : null
+  const channelMembers = membersByChannel?.[channel._id] || []
+  const myMembership = channelMembers.find((m) => userIdStr && String(m._id || m.userId) === userIdStr)
+  const isChannelOwner =
+    myMembership?.channelRole === 'owner' ||
+    Boolean(myMembership?.isHost) ||
+    Boolean(createdById && userIdStr && String(createdById) === userIdStr) ||
+    Boolean(channel.isOwner?.(user?._id))
+  const canDeleteChannel = isCustom && isChannelOwner
 
   const handleDelete = async () => {
     const ok = await confirm({

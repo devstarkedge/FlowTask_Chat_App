@@ -3,6 +3,42 @@ export function sortCategoriesByOrder(categories = []) {
   return [...categories].sort((a, b) => (a?.order ?? 999) - (b?.order ?? 999));
 }
 
+export function getChannelsForDepartmentCategory(category, channels = []) {
+  if (category?.type !== 'department' || !Array.isArray(channels)) return [];
+
+  const departmentId = String(
+    category.departmentId?.externalId
+      || category.departmentId?._id
+      || category.departmentId
+      || '',
+  );
+  if (!departmentId || departmentId === 'undefined' || departmentId === 'null') return [];
+
+  return channels.filter((channel) => {
+    if (channel.type === 'dm' || channel.type === 'self' || channel.isArchived) return false;
+
+    const flowTaskDepartmentId = String(
+      channel.flowTaskRef?.entityId?._id || channel.flowTaskRef?.entityId || '',
+    );
+    const isDepartmentChannel = channel.flowTaskRef?.entityType === 'department'
+      && flowTaskDepartmentId === departmentId;
+    const channelDepartmentId = String(
+      channel.departmentRef?.departmentId?._id || channel.departmentRef?.departmentId || '',
+    );
+    const isProjectInDepartment = channel.departmentRef?.departmentId
+      && channelDepartmentId === departmentId;
+
+    return isDepartmentChannel || isProjectInDepartment;
+  });
+}
+
+export function getHomeVisibleCategories(categories = [], channels = []) {
+  return sortCategoriesByOrder(categories).filter((category) => (
+    category.type !== 'department'
+      || getChannelsForDepartmentCategory(category, channels).length > 0
+  ));
+}
+
 export function findCategoryForDept(dept, categoriesList = []) {
   if (!dept || !Array.isArray(categoriesList)) return null;
   const deptId = String(dept._id || '');

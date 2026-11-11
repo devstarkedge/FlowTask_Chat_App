@@ -106,6 +106,7 @@
       "@config-plugins/react-native-blob-util",
       "@config-plugins/react-native-pdf",
       "expo-asset",
+      "expo-sharing",
       "expo-media-library",
       [
         "expo-camera",

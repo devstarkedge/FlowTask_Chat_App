@@ -206,6 +206,8 @@ export const useChatStore = create((set, get) => ({
   // Incremented when a newly appended message or its server reconciliation
   // requires the active timeline to remain locked to the latest message.
   messageAppendVersionByChannel: {},
+  scrollToLatestRequestByChannel: {},
+  scrollToLatestRequestSequence: 0,
   // Normalized message entities (feature-flagged, maintained via subscription)
   hasMore: {},
   isLoadingMessages: false,
@@ -536,7 +538,7 @@ export const useChatStore = create((set, get) => ({
       if (isThreadReply) {
         get().addThreadReply(options.threadId, optimisticMessage);
       } else {
-        get().addMessage(optimisticMessage);
+        get().addMessage(optimisticMessage, { scrollToLatest: true });
         // Update sidebar ordering + preview for the sender's own message immediately
         // (Recipients get this via the message:create socket event handler in socket.js)
         useChannelStore.getState().handleNewMessage(optimisticMessage);
@@ -612,7 +614,7 @@ export const useChatStore = create((set, get) => ({
   },
 
   // ─── Real-time message handlers ─────────────────────────────────────
-  addMessage: (message) => {
+  addMessage: (message, options = {}) => {
     if (message.reportingMeta && revokedReportingChannels.has(normalizeChannelId(message.channelId))) return;
     const normalized = normalizeMessage(message);
     const channelId = normalizeChannelId(normalized.channelId);
@@ -643,6 +645,9 @@ export const useChatStore = create((set, get) => ({
       // equal timestamps cannot move a rapid message ahead of an earlier one.
       const merged = [...existing, normalized];
 
+      const scrollRequestSequence = options.scrollToLatest
+        ? (state.scrollToLatestRequestSequence || 0) + 1
+        : state.scrollToLatestRequestSequence || 0;
       const nextState = {
         messagesByChannel: {
           ...state.messagesByChannel,
@@ -652,6 +657,15 @@ export const useChatStore = create((set, get) => ({
           ...state.messageAppendVersionByChannel,
           [channelId]: (state.messageAppendVersionByChannel[channelId] || 0) + 1,
         },
+        ...(options.scrollToLatest
+          ? {
+              scrollToLatestRequestSequence: scrollRequestSequence,
+              scrollToLatestRequestByChannel: {
+                ...state.scrollToLatestRequestByChannel,
+                [channelId]: scrollRequestSequence,
+              },
+            }
+          : {}),
       };
 
       if (CHAT_FEATURE_FLAGS.normalizedMessageStore && normalized._id) {
@@ -2039,6 +2053,8 @@ export const useChatStore = create((set, get) => ({
     set({
       messagesByChannel: {},
       messageAppendVersionByChannel: {},
+      scrollToLatestRequestByChannel: {},
+      scrollToLatestRequestSequence: 0,
       messagesById: {},
       channelMessageIds: {},
       hasMore: {},

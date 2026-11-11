@@ -62,6 +62,9 @@ export default function MessageList({
   const messageAppendVersion = useChatStore(
     (s) => s.messageAppendVersionByChannel?.[channelId] || 0,
   );
+  const scrollToLatestRequest = useChatStore(
+    (s) => s.scrollToLatestRequestByChannel?.[channelId] || 0,
+  );
 
   const lastReadMessageId = useChannelStore(
     (s) => s.lastReadByChannel?.[channelId]
@@ -75,7 +78,9 @@ export default function MessageList({
   const unreadBoundary = unreadBoundaryRef.current.messageId;
   const virtuosoRef = useRef(null);
   const lastScrolledHighlightId = useRef(null);
+  const lastScrolledEditingId = useRef(null);
   const previousAppendVersionRef = useRef(messageAppendVersion);
+  const consumedScrollToLatestRequestRef = useRef(scrollToLatestRequest);
   const messageScrollerRef = useRef(null);
   const firstItemIndexTrackerRef = useRef(null);
 
@@ -124,6 +129,19 @@ export default function MessageList({
     });
   }, []);
 
+  useEffect(() => {
+    if (scrollToLatestRequest <= consumedScrollToLatestRequestRef.current) return;
+    consumedScrollToLatestRequestRef.current = scrollToLatestRequest;
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(scrollToLatest);
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      if (secondFrame) cancelAnimationFrame(secondFrame);
+    };
+  }, [scrollToLatestRequest, scrollToLatest]);
+
   const cancelPendingFollow = useCallback(() => {
     previousAppendVersionRef.current = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
   }, [channelId]);
@@ -145,7 +163,11 @@ export default function MessageList({
     const appendVersion = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
     if (appendVersion <= previousAppendVersionRef.current) return false;
     previousAppendVersionRef.current = appendVersion;
-    if (!isAtBottomRef.current) return false;
+    const scroller = messageScrollerRef.current;
+    const isCurrentlyAtBottom = scroller
+      ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 8
+      : isAtBottomRef.current;
+    if (!isCurrentlyAtBottom) return false;
     // Virtuoso waits for the new row measurements before consuming this one
     // request. Height-only changes and acknowledgements cannot enter this path.
     return { index: "LAST", align: "end", behavior: "auto" };
@@ -349,9 +371,14 @@ export default function MessageList({
 
   // ─── Auto-scroll to message when editing begins ─────────────────────────────
   useEffect(() => {
-    if (!editingMessageId || !virtuosoRef.current) return;
+    if (!editingMessageId) {
+      lastScrolledEditingId.current = null;
+      return;
+    }
+    if (lastScrolledEditingId.current === editingMessageId || !virtuosoRef.current) return;
     const index = flattenedItems.findIndex((item) => item._id === editingMessageId);
     if (index === -1) return;
+    lastScrolledEditingId.current = editingMessageId;
 
     const t1 = setTimeout(() => {
       virtuosoRef.current?.scrollToIndex({

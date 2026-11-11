@@ -73,6 +73,7 @@ const MessageActionSheet = ({
   attachment,
   colors,
   user,
+  isDM = false,
   isSaved,
   onReact,
   onOpenEmojiPicker,
@@ -113,6 +114,10 @@ const MessageActionSheet = ({
 
   const isAuthor =
     message.authorId?._id === user?._id || message.authorId === user?._id;
+  const canEditMessage =
+    isAuthor &&
+    !message.isDeleted &&
+    (!isDM || Date.now() - new Date(message.createdAt).getTime() < 45 * 60 * 1000);
 
   const imageOnly = hasImageOnly(message);
   const showCopyText = !attachment && !imageOnly && hasText(message);
@@ -265,7 +270,7 @@ const MessageActionSheet = ({
               </TouchableOpacity>
             )}
 
-            {isAuthor && (
+            {canEditMessage && (
               <TouchableOpacity
                 style={styles.listItem}
                 onPress={() => { onClose(); setTimeout(() => onEdit(), 100); }}

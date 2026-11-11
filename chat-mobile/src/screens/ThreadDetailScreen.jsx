@@ -35,6 +35,8 @@ import AudioMessagePlayer from '../components/AudioMessagePlayer';
 import { resolveMessageSenderName, resolveReplyToSenderName, resolveReplyToContent, resolveReplyToAttachment, hasValidReplyTo } from '../utils/replyUtils';
 import { useChannelMembers } from '../hooks/queries/useChannelMembers';
 import { useChannelStore } from '../stores/channelStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useChannels } from '../hooks/queries/useChannels';
 import VideoMessagePlayer from '../components/VideoMessagePlayer';
 import { Bookmark, Share, MoreVertical } from 'lucide-react-native';
 import { useThreadDetails } from '../hooks/useThreadDetails';
@@ -59,6 +61,11 @@ const ThreadDetailScreen = ({ route, navigation }) => {
   } = route.params;
 
   const { colors } = useThemeStore();
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const { data: channels = [] } = useChannels(activeWorkspaceId);
+  const isDM = channels.some(
+    (channel) => String(channel._id) === String(channelId) && channel.type === 'dm',
+  );
   const { data: channelMembers = [] } = useChannelMembers(channelId);
   const [activeHighlightId, setActiveHighlightId] = useState(highlightedMessageId || null);
   const threadDetails = useThreadDetails({ rootMessageId, channelId, highlightedMessageId });
@@ -533,6 +540,7 @@ const ThreadDetailScreen = ({ route, navigation }) => {
         attachment={actionAttachmentTarget}
         colors={colors}
         user={user}
+        isDM={isDM}
         isSaved={isMessageSaved?.(actionMenuTarget?._id, actionAttachmentTarget)}
         onReact={(emoji) => { if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji); }}
         onOpenEmojiPicker={() => setEmojiPickerTarget(actionMenuTarget?._id)}

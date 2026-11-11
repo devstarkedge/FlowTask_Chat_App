@@ -1295,6 +1295,7 @@ const ChatScreen = ({ route, navigation }) => {
         attachment={actionAttachmentTarget}
         colors={colors}
         user={user}
+        isDM={isDM}
         isSaved={isMessageSaved?.(actionMenuTarget?._id, actionAttachmentTarget)}
         onReact={(emoji) => {
           if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji);

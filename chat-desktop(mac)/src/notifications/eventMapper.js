@@ -348,9 +348,9 @@ class EventMapperRegistry {
     const sender = resolveSender(notification, context)
 
     return {
-      type: notification.type || NotificationType.SYSTEM_ALERT,
+      type: notification.reportingEventType ? NotificationType.ATTENDANCE_REPORT : notification.type || NotificationType.SYSTEM_ALERT,
       eventId: notification._id || notification.id || `notif_${Date.now()}`,
-      messageId: notification.messageId,
+      messageId: notification.messageId || notification.sourceId,
       channelId: channelId ? String(channelId) : undefined,
       conversationId: channelId ? String(channelId) : undefined,
       workspaceId: context.workspaceId || notification.workspaceId,

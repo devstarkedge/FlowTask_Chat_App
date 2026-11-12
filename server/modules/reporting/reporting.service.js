@@ -16,6 +16,7 @@ import { emitToUser, joinChannelRoom, leaveChannelRoom, reconcileChannelRoomAcce
 import { messageSocketPayload } from '../../utils/socketPayload.js';
 import { ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { hasReportingAccess } from './reportingAccess.js';
+import { isAttendanceNotificationEvent } from './attendanceNotification.js';
 import { withReportingMemberCounts } from './reportingMemberCounts.js';
 import { REPORT_TYPES, DIRECTORY_TYPES, reportingChannelName, formatReportingMessage } from './reportingFormat.js';
 
@@ -151,7 +152,7 @@ async function syncDirectory(payload, workspaceId) {
   }
 }
 
-export async function handleReportingEvent(payload, workspaceId) {
+export async function handleReportingEvent(payload, workspaceId, { restoringHistory = false } = {}) {
   if (!validId(payload.workspaceId) || !payload.eventId || typeof payload.eventId !== 'string' || payload.eventId.length > 250) throw new ValidationError('Invalid reporting event identity');
   if (payload.eventType === 'leave.daily_report') return handleLeaveReport(payload, workspaceId);
   if (DIRECTORY_TYPES.has(payload.eventType)) { await syncDirectory(payload, workspaceId); return { status: 'processed' }; }
@@ -172,7 +173,7 @@ export async function handleReportingEvent(payload, workspaceId) {
       if (!root && payload.initialCheckIn?.attendanceSessionId === payload.attendanceSessionId &&
         payload.initialCheckIn?.employee?.flowTaskUserId === payload.employee.flowTaskUserId && payload.initialCheckIn.workspaceId === payload.workspaceId) {
         await handleReportingEvent({ ...payload.initialCheckIn, eventId: rootEventId, eventType: 'attendance.checked_in',
-          presentationVersion: 2, departments: [department] }, workspaceId);
+          presentationVersion: 2, departments: [department] }, workspaceId, { restoringHistory: true });
         root = await Message.findOne({ workspaceId, channelId: channel._id, reportingEventId: rootEventId }).lean();
       }
       if (!root || String(root.reportingMeta.employeeId) !== String(user._id)) throw new ValidationError('Verified check-in anchor is missing; retry source delivery');
@@ -224,9 +225,30 @@ export async function handleReportingEvent(payload, workspaceId) {
       await messageService._incrementUnreadForChannel(channel._id, bot._id, String(workspaceId));
     }
     const [persisted] = await attachReportingProfiles([await messageRepository.findById(message._id, { workspaceId })], workspaceId);
+    const notificationManaged = isAttendanceNotificationEvent(payload.eventType);
+    if (created && notificationManaged && !restoringHistory && !channel.isArchived) {
+      try {
+        const { default: notificationQueue } = await import('../../services/notificationQueue.service.js');
+        await notificationQueue.add({
+          _id: persisted._id,
+          workspaceId: persisted.workspaceId,
+          authorId: bot._id,
+          senderSnapshot: persisted.senderSnapshot,
+          reportingEventId: payload.eventId,
+          reportingMeta: {
+            eventType: payload.eventType,
+            employeeName: persisted.reportingEmployee?.name || persisted.reportingMeta.employeeName,
+          },
+        }, { _id: channel._id, workspaceId: channel.workspaceId, flowTaskRef: channel.flowTaskRef });
+      } catch (error) {
+        logger.warn('Failed to enqueue attendance notification', { messageId: message._id, error: error.message });
+      }
+    }
     for (const { recipient, reportingHistory } of await reportingHistoryAudience(persisted, channel)) {
       const socketPayload = messageSocketPayload(persisted, { reportingHistory });
-      emitToUser(recipient, created ? 'message:create' : 'message:update', { message: socketPayload }, String(workspaceId));
+      emitToUser(recipient, created ? 'message:create' : 'message:update', {
+        message: socketPayload, ...(notificationManaged && { notificationManaged: true }),
+      }, String(workspaceId));
     }
     // A corrected checkout may be older than another employee's newest
     // report. Preserve the channel's current position in the sidebar.

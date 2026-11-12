@@ -350,7 +350,7 @@ export function connectSocket() {
   })
 
   // ─── Message Events ──────────────────────────────────────────────────
-  socket.on(SOCKET_EVENTS.MESSAGE_CREATE, ({ message }) => {
+  socket.on(SOCKET_EVENTS.MESSAGE_CREATE, ({ message, notificationManaged }) => {
     const currentUserId = useAuthStore.getState().user?._id
 
     // Clear typing for the author as soon as their message arrives (before any early returns)
@@ -397,7 +397,9 @@ export function connectSocket() {
     useChannelStore.getState().handleNewMessage(message)
 
     const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId
-    notificationService.processEvent('message:create', { message }, { workspaceId: activeWorkspaceId })
+    if (!notificationManaged) {
+      notificationService.processEvent('message:create', { message }, { workspaceId: activeWorkspaceId })
+    }
     badgeService.sync()
   })
 
@@ -814,7 +816,9 @@ export function connectSocket() {
     useChatStore.getState().addNotification(notification)
 
     const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
-    notificationService.processEvent(notification.type || 'notification', notification, { workspaceId: activeWsId })
+    if (notification.desktopPushEnabled !== false) {
+      notificationService.processEvent(notification.type || 'notification', notification, { workspaceId: activeWsId })
+    }
   })
 
   // ─── Multi-Device Notification Sync ──────────────────────────────────

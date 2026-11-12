@@ -2,6 +2,8 @@ import NotificationPreference from '../modules/notifications/NotificationPrefere
 import Notification from '../modules/notifications/Notification.model.js';
 import userRepository from '../modules/users/user.repository.js';
 import channelRepository from '../modules/channels/channel.repository.js';
+import { isReportingChannel, reportingRecipients } from '../modules/reporting/reportingAccess.js';
+import { isAttendanceNotificationEvent } from '../modules/reporting/attendanceNotification.js';
 import { emitToUser, getIO } from '../sockets/socketManager.js';
 import pushService from './push.service.js';
 import logger from '../utils/logger.js';
@@ -62,8 +64,16 @@ class NotificationEngine {
         return;
       }
 
+      const isAttendanceReport = isReportingChannel(channel) && Boolean(message.reportingEventId)
+        && isAttendanceNotificationEvent(message.reportingMeta?.eventType);
+      if (isReportingChannel(channel)) {
+        // A queued channel snapshot can outlive an archive or access change.
+        channel = await channelRepository.findById(channelIdStr, { workspaceId });
+        if (!isReportingChannel(channel) || channel.isArchived) return;
+      }
+
       // Detect conversation type
-      const convType = this._getConversationType(channel);
+      const convType = isAttendanceReport ? 'department' : this._getConversationType(channel);
 
       // Get all recipients (members minus sender)
       const recipientIds = await this._getRecipients(channel, senderIdStr, workspaceId);
@@ -90,7 +100,7 @@ class NotificationEngine {
       }
 
       // Check for broadcast mentions in content
-      const rawText = `${message.content || ''} ${message.htmlContent || ''}`;
+      const rawText = isAttendanceReport ? '' : `${message.content || ''} ${message.htmlContent || ''}`;
       if (/\b@channel\b/i.test(rawText) || /\b@everyone\b/i.test(rawText)) {
         hasBroadcastMention.channel = true;
       }
@@ -101,7 +111,12 @@ class NotificationEngine {
       // Build message preview — fall back to attachment label when there is no text
       const textPreview = truncate(stripHtml(message.content || ''), 120);
       const attachmentPreview = getAttachmentPreview(message);
-      const preview = textPreview || attachmentPreview || '';
+      const isCheckIn = message.reportingMeta?.eventType === 'attendance.checked_in';
+      const attendanceAction = isCheckIn ? 'checked in' : 'checked out';
+      const employeeName = message.reportingMeta?.employeeName || '';
+      const preview = isAttendanceReport
+        ? `${truncate(stripHtml(employeeName), 90) || 'A team member'} ${attendanceAction}.`
+        : textPreview || attachmentPreview || '';
       const senderName = message.senderSnapshot?.name || 'Someone';
       const senderAvatar = message.senderSnapshot?.avatar || null;
       const channelName = channel.name || 'channel';
@@ -109,28 +124,30 @@ class NotificationEngine {
       // Resolve original-message snapshot for reply linking in Activity
       const replyToPreview = await this._resolveReplyToPreview(message, threadId, workspaceId);
 
-      // Process each recipient
-      const results = await Promise.allSettled(
-        recipientIds.map((recipientId) =>
-          this._processRecipient({
-            recipientId,
-            senderIdStr,
-            workspaceId,
-            channelIdStr,
-            channelName,
-            convType,
-            channel,
-            message,
-            preview,
-            senderName,
-            senderAvatar,
-            threadId,
-            mentionedUserIds,
-            hasBroadcastMention,
-            replyToPreview,
-          }),
-        ),
-      );
+      const processRecipient = recipientId => this._processRecipient({
+        recipientId,
+        senderIdStr,
+        workspaceId,
+        channelIdStr,
+        channelName,
+        convType,
+        channel,
+        message,
+        preview,
+        senderName,
+        senderAvatar,
+        threadId,
+        mentionedUserIds,
+        hasBroadcastMention,
+        replyToPreview,
+        isAttendanceReport,
+      });
+      // Bound provider and DB fan-out during bursts of department check-ins.
+      const batchSize = isAttendanceReport ? 8 : recipientIds.length;
+      const results = [];
+      for (let offset = 0; offset < recipientIds.length; offset += batchSize) {
+        results.push(...await Promise.allSettled(recipientIds.slice(offset, offset + batchSize).map(processRecipient)));
+      }
 
       const sent = results.filter((r) => r.status === 'fulfilled' && r.value?.sent).length;
       const skipped = results.filter((r) => r.status === 'fulfilled' && !r.value?.sent).length;
@@ -174,6 +191,7 @@ class NotificationEngine {
     mentionedUserIds,
     hasBroadcastMention,
     replyToPreview = null,
+    isAttendanceReport = false,
   }) {
     const recipientIdStr = recipientId.toString();
 
@@ -183,6 +201,10 @@ class NotificationEngine {
     // 2. Global kill switch
     if (!prefs.global?.enabled) {
       return { sent: false, reason: 'global_disabled' };
+    }
+    const recipient = await userRepository.findById(recipientIdStr);
+    if (isAttendanceReport && (!recipient || recipient.isActive === false)) {
+      return { sent: false, reason: 'inactive_recipient' };
     }
 
     // 3. Check if sender is VIP (bypasses pause/DND)
@@ -195,7 +217,6 @@ class NotificationEngine {
         return { sent: false, reason: 'paused' };
       }
 
-      const recipient = await userRepository.findById(recipientIdStr);
       const globalDnd = recipient?.chatPreferences?.dnd;
       const isGlobalPaused = globalDnd?.enabled && (!globalDnd.endAt || new Date(globalDnd.endAt) > new Date());
       if (isGlobalPaused) {
@@ -278,7 +299,7 @@ class NotificationEngine {
     // level === 'nothing' → already handled above
 
     // 7. Check custom keywords (triggers regardless of level)
-    if (!shouldNotify && prefs.keywords?.length > 0) {
+    if (!shouldNotify && !isAttendanceReport && prefs.keywords?.length > 0) {
       const contentLower = (message.content || '').toLowerCase();
       const matched = prefs.keywords.some((kw) => contentLower.includes(kw.toLowerCase()));
       if (matched) {
@@ -296,7 +317,6 @@ class NotificationEngine {
     // 8. Check presence — skip push/socket toast if user is viewing this exact chat.
     // Prefer in-memory socket.activeChannelId (set synchronously by window:focus)
     // over the async DB chatPreferences.activeWindowChannel field.
-    const recipient = await userRepository.findById(recipientIdStr);
     const isOnline = recipient?.socketIds?.length > 0;
     const activeWindowChannel = recipient?.chatPreferences?.activeWindowChannel?.toString?.()
       || recipient?.chatPreferences?.activeWindowChannel
@@ -304,7 +324,9 @@ class NotificationEngine {
     let isViewingSameChat = false;
     let socketFocusChecked = false;
     let hasFocusedConversation = false;
-    const io = getIO();
+    // For attendance, let each client decide whether it is viewing the report.
+    // A focused desktop must not silence a separate background phone.
+    const io = isAttendanceReport ? null : getIO();
     if (io && workspaceId) {
       try {
         const userRoom = buildRoomName(workspaceId, 'user', recipientIdStr);
@@ -335,7 +357,9 @@ class NotificationEngine {
       : !isViewingSameChat && !activeWindowChannel;
 
     // 9. Build notification title
-    const title = this._buildTitle(notificationType, senderName, channelName, convType, isThreadReply, isBroadcast);
+    const title = isAttendanceReport
+      ? (message.reportingMeta.eventType === 'attendance.checked_in' ? 'Attendance check-in' : 'Attendance check-out')
+      : this._buildTitle(notificationType, senderName, channelName, convType, isThreadReply, isBroadcast);
 
     // 10. Build deep-link data
     const deepLink = {
@@ -346,7 +370,7 @@ class NotificationEngine {
       type: isDM ? 'dm' : isThreadReply ? 'thread' : 'channel',
     };
     // 11. Build bundle key for low-priority grouping
-    const bundleKey = priority === NOTIFICATION_PRIORITIES.LOW
+    const bundleKey = priority === NOTIFICATION_PRIORITIES.LOW && !isAttendanceReport
       ? `${convType}:${channelIdStr}`
       : null;
 
@@ -375,20 +399,26 @@ class NotificationEngine {
       bundleKey,
     });
 
-    // 13. Emit real-time socket notification (unless viewing same chat)
-    if (!isViewingSameChat) {
-      this._emitSocketNotification(recipientIdStr, notification, workspaceId);
+    // 13. Emit the real-time notification. Desktop and mobile check their own focus for attendance.
+    const attendanceDelivery = isAttendanceReport ? {
+      reportingEventType: message.reportingMeta.eventType,
+      desktopPushEnabled: Boolean(prefs.global.desktopPush),
+      mobilePushEnabled: Boolean(prefs.global.mobilePush),
+    } : null;
+    if (isAttendanceReport || !isViewingSameChat) {
+      this._emitSocketNotification(recipientIdStr, notification, workspaceId, attendanceDelivery);
     }
 
-    // 14. Send push notification (only if NOT viewing same chat)
-    const shouldSendPush = !isViewingSameChat && (isAway || isOffline || isWindowBlurred);
+    // 14. Send push to configured devices. For attendance each client handles its own focus.
+    const shouldSendPush = isAttendanceReport || (!isViewingSameChat && (isAway || isOffline || isWindowBlurred));
     if (shouldSendPush) {
-      this._sendPush(recipientIdStr, notification, recipient, prefs).catch((err) => {
+      const push = this._sendPush(recipientIdStr, notification, prefs, attendanceDelivery).catch((err) => {
         logger.warn('NotificationEngine: push send failed', {
           recipientId: recipientIdStr,
           error: err?.message || err,
         });
       });
+      if (isAttendanceReport) await push;
     }
 
     return { sent: true, notificationId: notification._id };
@@ -455,8 +485,7 @@ class NotificationEngine {
 
       // Send push for high/medium priority
       if (priority !== NOTIFICATION_PRIORITIES.LOW) {
-        const recipient = await userRepository.findById(recipientIdStr);
-        this._sendPush(recipientIdStr, notification, recipient, forceNotify ? { global: { desktopPush: true, mobilePush: true } } : await NotificationPreference.getOrCreate(recipientIdStr, workspaceId)).catch(() => {});
+        this._sendPush(recipientIdStr, notification, forceNotify ? { global: { desktopPush: true, mobilePush: true } } : await NotificationPreference.getOrCreate(recipientIdStr, workspaceId)).catch(() => {});
       }
 
       return notification;
@@ -488,6 +517,10 @@ class NotificationEngine {
    */
   async _getRecipients(channel, senderIdStr, workspaceId) {
     try {
+      if (isReportingChannel(channel)) {
+        if (channel.isArchived || String(channel.workspaceId) !== workspaceId) return [];
+        return (await reportingRecipients(channel)).filter(id => id !== senderIdStr);
+      }
       if (channel.type === CHANNEL_TYPES.DM) {
         // DM: get the other participant
         return (channel.dmParticipants || [])
@@ -639,7 +672,7 @@ class NotificationEngine {
    * Emit socket notification to the recipient.
    * @private
    */
-  _emitSocketNotification(recipientId, notification, workspaceId) {
+  _emitSocketNotification(recipientId, notification, workspaceId, attendanceDelivery = null) {
     try {
       emitToUser(recipientId, SOCKET_EVENTS.NOTIFICATION, {
         notification: {
@@ -667,6 +700,7 @@ class NotificationEngine {
           bundleCount: notification.bundleCount || 1,
           isRead: false,
           createdAt: notification.createdAt,
+          ...attendanceDelivery,
         },
       }, workspaceId);
     } catch (err) {
@@ -680,7 +714,7 @@ class NotificationEngine {
    * Send push notification (Web Push + FCM + Expo).
    * @private
    */
-  async _sendPush(recipientId, notification, recipient, prefs) {
+  async _sendPush(recipientId, notification, prefs, attendanceDelivery = null) {
     let accepted = 0;
     // Skip if no push channel is enabled
     if (!prefs.global?.desktopPush && !prefs.global?.mobilePush) return;
@@ -700,6 +734,7 @@ class NotificationEngine {
         threadId: notification.threadId?.toString(),
         type: notification.type,
         priority: notification.priority,
+        ...(attendanceDelivery && { reportingEventType: attendanceDelivery.reportingEventType }),
       },
     };
 

@@ -169,6 +169,7 @@ export class NotificationService {
     // B. In-App Notification Store (only for activity notifications/mentions/tasks)
     if (
       event.type !== NotificationType.NEW_MESSAGE &&
+      event.type !== NotificationType.ATTENDANCE_REPORT &&
       event.type !== NotificationType.THREAD_REPLY
     ) {
       const notifStore = useNotificationStore?.getState ? useNotificationStore.getState() : null

@@ -9,7 +9,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(os = 'android') {
   const calls = [], saved = new Map([['expo_push_token', 'ExpoPushToken[unchanged]']]);
   let permission = { status: 'undetermined', canAskAgain: true }, lastResponse = null;
-  let token = 'ExpoPushToken[unchanged]', registrationSuccess = true, permissionWait;
+  let token = 'ExpoPushToken[unchanged]', registrationSuccess = true, permissionWait, focusedChannel;
   const auth = { user: { _id: 'recipient' }, accessToken: 'test-session' };
   const workspace = { activeWorkspaceId: 'first', isSwitchingWorkspace: false,
     switchWorkspace: async id => { calls.push(['switch', id]); workspace.activeWorkspaceId = id; } };
@@ -17,7 +17,9 @@ function fixture(os = 'android') {
   const add = (type, cb) => { calls.push([type]); subs[type] = cb; return { remove: () => delete subs[type] }; };
   const notifications = {
     AndroidImportance: { MAX: 5 }, IosAuthorizationStatus: { PROVISIONAL: 3 }, AndroidNotificationPriority: { HIGH: 2 },
+    AndroidAudioUsage: { NOTIFICATION_RINGTONE: 6 },
     setNotificationHandler: x => { subs.handler = x.handleNotification; },
+    setNotificationCategoryAsync: async () => {},
     setNotificationChannelAsync: async () => calls.push(['channel']),
     getPermissionsAsync: async () => { calls.push(['permission']); return permissionWait ? permissionWait : permission; },
     requestPermissionsAsync: async () => { calls.push(['request']); return { status: 'granted' }; },
@@ -44,6 +46,7 @@ function fixture(os = 'android') {
     '../stores/workspaceStore': { useWorkspaceStore: { getState: () => workspace } },
     '../stores/notificationStore': { useNotificationStore: { getState: () => ({ fetchUnreadCount: async () => {} }) } },
     '../stores/channelStore': { useChannelStore: { getState: () => ({ activeChannelId: null }) } },
+    './conversationPresence': { conversationPresence: { isActive: id => Boolean(id && id === focusedChannel) } },
   };
   const filename = path.join(root, 'src/services/pushNotificationService.js');
   const mod = new Module(filename, module); mod.filename = filename; mod.paths = Module._nodeModulePaths(path.dirname(filename));
@@ -52,7 +55,7 @@ function fixture(os = 'android') {
   return { service: mod.exports, calls, saved, subs, auth, workspace, logs,
     setPermission: value => { permission = value; }, setToken: value => { token = value; },
     setSuccess: value => { registrationSuccess = value; }, setResponse: value => { lastResponse = value; },
-    waitPermission: value => { permissionWait = value; } };
+    waitPermission: value => { permissionWait = value; }, focus: channel => { focusedChannel = channel; } };
 }
 
 (async () => {
@@ -110,5 +113,14 @@ function fixture(os = 'android') {
   const presentation = { request: { content: { data: { notificationId: 'same-event' } }, trigger: { type: 'firebase' } } };
   assert.equal((await tapped.subs.handler(presentation)).shouldShowBanner, true);
   assert.equal((await tapped.subs.handler(presentation)).shouldShowBanner, false);
+  const report = { request: { content: { data: {
+    notificationId: 'attendance-event', reportingEventType: 'attendance.checked_in',
+    workspaceId: tapped.workspace.activeWorkspaceId, channelId: 'attendance',
+  } } } };
+  tapped.focus('attendance');
+  assert.equal((await tapped.subs.handler(report)).shouldShowBanner, false);
+  tapped.focus('another-channel');
+  assert.equal((await tapped.subs.handler(report)).shouldShowBanner, true);
+  assert.equal((await tapped.subs.handler(report)).shouldShowBanner, false);
   console.log('PASS cold-start tap waits for navigation, selects workspace, consumes once, rejects inaccessible workspace; socket/remote presentation deduplicates');
 })().catch(error => { console.error(error); process.exitCode = 1; });

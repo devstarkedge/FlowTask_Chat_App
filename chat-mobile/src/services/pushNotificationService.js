@@ -99,6 +99,14 @@ const initNotificationHandler = () => {
         const notifChannelId = data.channelId || data.conversationId;
         const senderId = data.senderId;
         try {
+          if (data.reportingEventType) {
+            const { useWorkspaceStore } = require('../stores/workspaceStore');
+            const { conversationPresence } = require('./conversationPresence');
+            if (String(data.workspaceId) === String(useWorkspaceStore.getState().activeWorkspaceId)
+              && conversationPresence.isActive(notifChannelId)) {
+              return { shouldPlaySound: false, shouldSetBadge: false, shouldShowBanner: false, shouldShowList: false };
+            }
+          }
           const { useNotificationPrefStore } = require('../stores/notificationPrefStore');
           const mutedMap = useNotificationPrefStore.getState().mutedChannels || {};
           const isMuted = Boolean(

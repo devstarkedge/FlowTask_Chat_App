@@ -4,6 +4,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { X, Bell, BellOff, Volume2, VolumeX, Monitor, Smartphone, Hash, Lock, MessageCircle, Clock, Zap, Shield, Tags, Moon, Check, Plus, Trash2 } from "lucide-react";
 import Loader from '../shared/Loader';
 import toast from 'react-hot-toast'
+import { isDesktopApp } from '../../services/desktopService'
 import { notificationAPI } from '../../services/api'
 import logger from '../../utils/logger'
 import usePushSubscription from '../../hooks/usePushSubscription'
@@ -199,9 +200,14 @@ function GeneralTab({ prefs, onUpdateGlobal, isPaused, onPause, onResume, saving
   const global = prefs?.global || {}
   const { permission, requestPermissionAndSubscribe } = pushSub || {}
 
-  const isDesktopPushOn = permission === 'granted' && global.desktopPush !== false
+  const isDesktop = isDesktopApp()
+  const isDesktopPushOn = (isDesktop || permission === 'granted') && global.desktopPush !== false
 
   const handleDesktopPushChange = async (v) => {
+    if (isDesktop) {
+      onUpdateGlobal('desktopPush', v)
+      return
+    }
     if (v) {
       if (permission === 'default') {
         const result = await requestPermissionAndSubscribe({ silent: false })
@@ -243,8 +249,8 @@ function GeneralTab({ prefs, onUpdateGlobal, isPaused, onPause, onResume, saving
         />
         <ToggleRow
           icon={Monitor}
-          label="Desktop push notifications"
-          description="Show browser push notifications on desktop"
+          label={isDesktop ? 'Desktop notifications' : 'Desktop push notifications'}
+          description={isDesktop ? 'Show native notifications on desktop' : 'Show browser push notifications on desktop'}
           checked={isDesktopPushOn}
           onChange={handleDesktopPushChange}
         />

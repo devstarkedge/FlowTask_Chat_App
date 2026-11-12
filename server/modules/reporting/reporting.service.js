@@ -14,7 +14,7 @@ import { encryptPreview } from '../../services/encryption/messageEncryption.serv
 import userRepository from '../users/user.repository.js';
 import { emitToUser, joinChannelRoom, leaveChannelRoom, reconcileChannelRoomAccess } from '../../sockets/socketManager.js';
 import { messageSocketPayload } from '../../utils/socketPayload.js';
-import { ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
+import { ValidationError, ForbiddenError, ConflictError } from '../../middleware/errorHandler.js';
 import { hasReportingAccess } from './reportingAccess.js';
 import { isAttendanceNotificationEvent } from './attendanceNotification.js';
 import { withReportingMemberCounts } from './reportingMemberCounts.js';
@@ -158,6 +158,12 @@ export async function handleReportingEvent(payload, workspaceId, { restoringHist
   if (DIRECTORY_TYPES.has(payload.eventType)) { await syncDirectory(payload, workspaceId); return { status: 'processed' }; }
   if (!REPORT_TYPES.has(payload.eventType) || !validId(payload.employee?.flowTaskUserId) || !validId(payload.attendanceSessionId) ||
     !Array.isArray(payload.departments) || !/^\d{4}-\d{2}-\d{2}$/.test(payload.workDateKey) || !Number.isFinite(+new Date(payload.occurredAt))) throw new ValidationError('Invalid attendance report');
+  const singleDepartment = payload.routingVersion === 1;
+  if (payload.routingVersion !== undefined &&
+    (!singleDepartment || payload.departments.length !== 1 || !validId(payload.departments[0]?.id) ||
+      typeof payload.departments[0]?.name !== 'string' || !payload.departments[0].name.trim())) {
+    throw new ValidationError('Attendance report must target one reporting department');
+  }
   const user = await ChatUser.findOne({ flowTaskUserId: payload.employee.flowTaskUserId }).lean();
   if (!user || !await WorkspaceMembership.exists({ userId: user._id, workspaceId })) throw new ForbiddenError('Verified employee workspace mapping is missing; retry after SSO provisioning');
   const bot = await userRepository.ensureBotUser();
@@ -166,11 +172,18 @@ export async function handleReportingEvent(payload, workspaceId, { restoringHist
   for (const department of payload.departments) {
     if (sent.has(department.id)) continue;
     sent.add(department.id);
-    const channel = await provisionReportingChannel(workspaceId, department);
+    const channel = singleDepartment
+      ? await Channel.findOne({ ...reportFilter(workspaceId), 'flowTaskRef.entityId': department.id }).lean()
+      : await provisionReportingChannel(workspaceId, department);
+    if (!channel) throw new ConflictError('Attendance reporting channel is unavailable; retry after directory reconciliation');
+    const archived = singleDepartment && channel.isArchived;
     const rootEventId = 'report-checkin-' + payload.attendanceSessionId;
     if (INTERMEDIATE_REPORT_TYPES.includes(payload.eventType)) {
+      if (archived && !await ReportingActivity.exists({ workspaceId, channelId: channel._id, eventId: payload.eventId })) {
+        throw new ConflictError('Attendance reporting channel is archived');
+      }
       let root = await Message.findOne({ workspaceId, channelId: channel._id, reportingEventId: rootEventId }).lean();
-      if (!root && payload.initialCheckIn?.attendanceSessionId === payload.attendanceSessionId &&
+      if (!archived && !root && payload.initialCheckIn?.attendanceSessionId === payload.attendanceSessionId &&
         payload.initialCheckIn?.employee?.flowTaskUserId === payload.employee.flowTaskUserId && payload.initialCheckIn.workspaceId === payload.workspaceId) {
         await handleReportingEvent({ ...payload.initialCheckIn, eventId: rootEventId, eventType: 'attendance.checked_in',
           presentationVersion: 2, departments: [department] }, workspaceId, { restoringHistory: true });
@@ -183,6 +196,7 @@ export async function handleReportingEvent(payload, workspaceId, { restoringHist
       }
       if (root.reportingMeta.attendanceSessionId !== payload.attendanceSessionId) throw new ValidationError('Activity belongs to another attendance session');
       await storeReportingActivity(payload, root);
+      if (archived) continue;
       // Retain any old standalone message, but retire it from all public reads.
       await Message.updateOne({ workspaceId, channelId: channel._id, reportingEventId: payload.eventId }, { $set: {
         'reportingMeta.attendanceSessionId': payload.attendanceSessionId, 'reportingMeta.historySchemaVersion': 2,
@@ -197,6 +211,7 @@ export async function handleReportingEvent(payload, workspaceId, { restoringHist
     const filter = { workspaceId, channelId: channel._id, reportingEventId: payload.eventId };
     let created = false;
     let message = await Message.findOne(filter).select('_id reportingDigest reportingRevision reportingMeta reportingDigestVersion').lean();
+    if (archived && !message) throw new ConflictError('Attendance reporting channel is archived');
     const revision = payload.reportRevision || 1;
     if (!Number.isSafeInteger(revision) || revision < 1) throw new ValidationError('Invalid reporting revision');
     const updateMessage = async existing => {
@@ -211,6 +226,9 @@ export async function handleReportingEvent(payload, workspaceId, { restoringHist
       await Message.updateOne({ _id: existing._id, workspaceId, ...(upgrade ? { 'reportingMeta.historySchemaVersion': { $ne: 2 } } : { reportingRevision: { $lt: revision } }) }, { $set: { ...encrypted, reportingDigest: digest, reportingDigestVersion: 2, reportingRevision: revision, 'reportingMeta.attendanceSessionId': payload.attendanceSessionId, 'reportingMeta.flowTaskUserId': payload.employee.flowTaskUserId, 'reportingMeta.historySchemaVersion': 2 } });
     };
     if (message) await updateMessage(message);
+    // Keep retry and summary correction semantics for reports already stored
+    // before archiving. Archived channels get no new posts or live updates.
+    if (archived) continue;
     if (!message) {
       try { message = await messageRepository.create({ ...filter, ...formatReportingMessage(payload, department),
         authorId: bot._id, senderSnapshot: { name: 'FlowTask', avatar: bot.avatar }, contentType: 'system',

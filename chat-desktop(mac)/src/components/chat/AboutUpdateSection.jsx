@@ -27,6 +27,17 @@ function formatBytes(bytes) {
   return `${size.toFixed(1)} ${units[unitIndex]}`;
 }
 
+function formatUpdateError(error) {
+  const message = String(error || 'Unable to contact update server');
+  if (/Cannot find latest\.yml/i.test(message)) {
+    return 'Update information is missing from the current release. Please try again after a new release is published.';
+  }
+  return message
+    .split(/: HttpError:|\r?\n\s*at\s+/i)[0]
+    .trim()
+    .slice(0, 240);
+}
+
 export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
   const isDesktop = isDesktopApp();
   const {
@@ -230,7 +241,7 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                 <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div style={{ flex: 1 }}>
                   <strong>Update check failed:</strong>
-                  <div style={{ fontSize: '12px', marginTop: '2px', opacity: 0.9 }}>{error || 'Unable to contact update server'}</div>
+                  <div style={{ fontSize: '12px', marginTop: '2px', opacity: 0.9 }}>{formatUpdateError(error)}</div>
                 </div>
               </div>
             )}
@@ -450,33 +461,6 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
         )}
       </div>
 
-      {/* System Information card */}
-      <div
-        style={{
-          padding: '14px 16px',
-          borderRadius: '12px',
-          background: 'var(--bg-secondary, rgba(255, 255, 255, 0.04))',
-          border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.08))',
-          fontSize: '12.5px',
-          color: 'var(--text-muted)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Channel</span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Production (GitHub Releases)</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Publisher</span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>FlowTask Desktop</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Repository</span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>devstarkedge/FlowTask_Chat_App</span>
-        </div>
-      </div>
     </div>
   );
 }

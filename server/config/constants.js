@@ -466,7 +466,7 @@ export const BOT = Object.freeze({
 });
 
 // ─── Message Edit Window ─────────────────────────────────────────────────────
-export const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
+export const MESSAGE_EDIT_WINDOW_MS = 45 * 60 * 1000;
 
 // ─── Channel Name Constraints ────────────────────────────────────────────────
 export const CHANNEL_NAME = Object.freeze({

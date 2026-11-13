@@ -5,6 +5,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { X, Download } from 'lucide-react-native';
 import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';

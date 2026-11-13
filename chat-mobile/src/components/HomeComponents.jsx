@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { scale, verticalScale, moderateScale } from "../utils/responsive";
 import { AppAvatar } from "../components/common";
-import { Hash, Lock, Radio, Plus, ChevronUp, ChevronDown, MoreVertical } from "lucide-react-native";
+import { Hash, Lock, Radio, Plus, ChevronUp, ChevronDown, MoreVertical, ArrowUpDown } from "lucide-react-native";
 
 export const SkeletonCard = ({ colors }) => (
   <View style={[qcStyles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -53,7 +53,7 @@ const qcStyles = StyleSheet.create({
   subtitle: { fontSize: moderateScale(11), textAlign: "center", opacity: 0.8 },
 });
 
-export const SectionHeader = React.memo(({ title, icon: Icon, emojiIcon, sectionKey, isExpanded, onToggle, colors, onMenu, onAdd, hideChevron, indentLevel = 0 }) => {
+export const SectionHeader = React.memo(({ title, icon: Icon, emojiIcon, sectionKey, isExpanded, onToggle, colors, onMenu, onAdd, onReorder, hideChevron, indentLevel = 0 }) => {
   const paddingLeft = moderateScale(16) + (indentLevel * moderateScale(16));
   return (
   <View style={[shStyles.headerWrapper, { paddingLeft }]}>
@@ -79,6 +79,11 @@ export const SectionHeader = React.memo(({ title, icon: Icon, emojiIcon, section
     </View>
 
     <View style={shStyles.rightActions}>
+      {onReorder && (
+        <TouchableOpacity style={shStyles.iconBtn} onPress={onReorder} accessibilityLabel="Reorder categories">
+          <ArrowUpDown size={18} color={colors.textSecondary} strokeWidth={2.2} />
+        </TouchableOpacity>
+      )}
       {onAdd && (
         <TouchableOpacity style={shStyles.iconBtn} onPress={onAdd}>
           <Plus size={24} color={colors.textSecondary} strokeWidth={2.5} />

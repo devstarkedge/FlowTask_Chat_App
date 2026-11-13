@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import { isChatAppChannel } from "../../utils/channelOrigin";
-import { MessageCircle, Search, Menu, Pin, FileText, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus, Trash2 } from "lucide-react";
+import { MessageCircle, Search, Menu, Pin, FileText, Activity, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus, Trash2, LogOut } from "lucide-react";
 import ChannelMemberCount from "./ChannelMemberCount";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -21,6 +21,7 @@ const EMPTY_PINS = [];
 
 const BASE_TABS = [
   { id: "messages", label: "Messages", icon: MessageCircle },
+  { id: "activity", label: "Activity", icon: Activity },
   { id: "files", label: "Files", icon: FileText },
 ];
 
@@ -49,7 +50,7 @@ export default function ChatHeader({
   // onRemoveCanvasTab: () => void
   onRemoveCanvasTab,
 }) {
-  const { membersByChannel, toggleInfoPanel, showInfoPanel, deleteChannel } = useChannelStore();
+  const { membersByChannel, toggleInfoPanel, showInfoPanel, deleteChannel, leaveChannel } = useChannelStore();
   const navigate = useNavigate();
   const { confirm } = useDeleteConfirm();
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
@@ -94,9 +95,17 @@ export default function ChatHeader({
   const canvasTabRef = useRef(null);
 
   const isCustom = isChatAppChannel(channel);
-  const isWsAdmin = ['owner', 'admin'].includes(activeWorkspace?.role);
-  const isChannelOwner = channel?.createdBy === user?._id || channel?.isOwner?.(user?._id);
-  const canDeleteChannel = isCustom && (isChannelOwner || isWsAdmin);
+  const createdById = channel?.createdBy?._id || channel?.createdBy;
+  const userIdStr = user?._id != null ? String(user._id) : null;
+  const chMembers = membersByChannel?.[channel?._id] || [];
+  const myChMembership = chMembers.find((m) => userIdStr && String(m._id || m.userId) === userIdStr);
+  const isChannelOwner =
+    myChMembership?.channelRole === 'owner' ||
+    Boolean(myChMembership?.isHost) ||
+    Boolean(createdById && userIdStr && String(createdById) === userIdStr) ||
+    Boolean(channel?.isOwner?.(user?._id));
+  const canDeleteChannel = isCustom && isChannelOwner;
+  const canLeaveCustomChannel = isCustom && !isChannelOwner;
 
   const askDelete = async () => {
     const ok = await confirm({
@@ -108,6 +117,21 @@ export default function ChatHeader({
     if (!ok) return;
     try {
       await deleteChannel(channel._id);
+      navigate(`/workspace/${workspaceId}`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const askLeave = async () => {
+    const ok = await confirm({
+      title: 'Leave channel',
+      message: `You will need to be re-added to rejoin #${channel?.name}.`,
+      confirmLabel: 'Leave',
+    });
+    if (!ok) return;
+    try {
+      await leaveChannel(channel._id);
       navigate(`/workspace/${workspaceId}`);
     } catch (err) {
       console.error(err);
@@ -449,6 +473,18 @@ export default function ChatHeader({
                   onClick={() => {
                     setShowMoreActions(false);
                     askDelete();
+                  }}
+                />
+              )}
+              {canLeaveCustomChannel && (
+                <DropItem
+                  icon={LogOut}
+                  iconColor="red"
+                  label="Leave channel"
+                  sublabel="Leave this custom channel"
+                  onClick={() => {
+                    setShowMoreActions(false);
+                    askLeave();
                   }}
                 />
               )}

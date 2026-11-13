@@ -3,14 +3,23 @@ import WorkspaceMembership from '../workspaces/WorkspaceMembership.model.js';
 import Message from '../messages/Message.model.js';
 import Notification from '../notifications/Notification.model.js';
 import flowtaskService from '../flowtask/flowtask.service.js';
-import { emitToWorkspace } from '../../sockets/socketManager.js';
+import { emitToWorkspace, emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
+import axios from 'axios';
+import { v2 as cloudinary } from 'cloudinary';
 
 export async function syncFlowTaskUserProfile(user, workspaceId) {
   try {
     if (!workspaceId || !user?._id) throw new Error('User profile sync requires shared user ID and resolved workspace ID');
-    const existing = await userRepository.findByFlowTaskId(user._id);
+    let existing = await userRepository.findByFlowTaskId(user._id);
+    if (!existing && user.email) {
+      existing = await userRepository.findByEmail(user.email.toLowerCase());
+      if (existing && !existing.flowTaskUserId) {
+        existing.flowTaskUserId = String(user._id);
+        await existing.save();
+      }
+    }
     if (!existing) return null;
     const membership = await WorkspaceMembership.findOne({
       userId: existing._id, workspaceId, isActive: true,
@@ -19,7 +28,49 @@ export async function syncFlowTaskUserProfile(user, workspaceId) {
       logger.warn('Ignored FlowTask profile update outside user workspace', { flowTaskUserId: user._id, workspaceId });
       return null;
     }
-    const updated = await userRepository.updateFlowTaskProfile(user, existing._id);
+
+    // Avatar Cloudinary transfer
+    let userToUpdate = { ...user };
+    if (user.avatar && typeof user.avatar === 'string' && user.avatar.trim()) {
+      const avatarUrl = user.avatar.trim();
+      if (!avatarUrl.includes('chat-app/users/')) {
+        try {
+          const response = await axios.get(avatarUrl, { responseType: 'arraybuffer', timeout: 8000 });
+          const buffer = Buffer.from(response.data);
+          const uploadResult = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              {
+                folder: `chat-app/users/${existing._id}/avatar`,
+                resource_type: 'image',
+                transformation: [
+                  { width: 512, height: 512, crop: 'limit' },
+                  { quality: 'auto' },
+                  { fetch_format: 'auto' },
+                ],
+              },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            stream.end(buffer);
+          });
+          if (uploadResult?.secure_url) {
+            userToUpdate.avatar = uploadResult.secure_url;
+          }
+        } catch (uploadErr) {
+          logger.warn('Failed to transfer avatar to ChatApp Cloudinary, falling back to original URL', {
+            error: uploadErr.message,
+            userId: existing._id,
+          });
+          userToUpdate.avatar = avatarUrl;
+        }
+      }
+    } else if (user.avatar === null || user.avatar === '') {
+      userToUpdate.avatar = null;
+    }
+
+    const updated = await userRepository.updateFlowTaskProfile(userToUpdate, existing._id);
     // A delayed delivery returns the current profile, never its old name.
     const current = updated || await userRepository.findByFlowTaskId(user._id);
     flowtaskService.invalidateUserProfile(String(user._id));
@@ -57,10 +108,20 @@ export async function syncFlowTaskUserProfile(user, workspaceId) {
         $set: { 'forwardMeta.originalSenderName': current.name, 'forwardMeta.profileUpdatedAt': version },
       }),
     ]);
-    emitToWorkspace(workspaceId, SOCKET_EVENTS.USER_PROFILE_UPDATED, {
-      workspaceId, userId: String(current._id), flowTaskUserId: String(current.flowTaskUserId),
+
+    const userMemberships = await WorkspaceMembership.find({ userId: current._id, isActive: true }).distinct('workspaceId');
+    const targetWorkspaces = new Set([String(workspaceId), ...userMemberships.map(String)]);
+    for (const ws of targetWorkspaces) {
+      emitToWorkspace(ws, SOCKET_EVENTS.USER_PROFILE_UPDATED, {
+        workspaceId: ws, userId: String(current._id), flowTaskUserId: String(current.flowTaskUserId),
+        updates, profileUpdatedAt: current.flowTaskProfileUpdatedAt || null,
+      });
+    }
+    emitToUser(String(current._id), SOCKET_EVENTS.USER_PROFILE_UPDATED, {
+      userId: String(current._id), flowTaskUserId: String(current.flowTaskUserId),
       updates, profileUpdatedAt: current.flowTaskProfileUpdatedAt || null,
     });
+
     return current;
   } catch (error) {
     logger.error('FlowTask user profile sync failed; delivery remains retryable', {

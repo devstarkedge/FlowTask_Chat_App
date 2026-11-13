@@ -63,6 +63,19 @@ import {
  *   - System channels bootstrapped on first server boot
  */
 
+/**
+ * Determine if a channel is a custom workspace channel (not sourced from FlowTask or system).
+ */
+export function isCustomChannel(channel) {
+  if (!channel) return false;
+  if (channel.systemManaged) return false;
+  if (channel.flowTaskRef && (channel.flowTaskRef.entityType || channel.flowTaskRef.entityId)) return false;
+  if (['project', 'department', 'team', 'system'].includes(channel.type)) return false;
+  if (channel.type === 'dm' || channel.type === 'self' || channel.recipientOnly) return false;
+  if (channel.slug && typeof channel.slug === 'string' && channel.slug.startsWith('flowtask-')) return false;
+  return true;
+}
+
 class ChannelService {
   // ──────────────────── Channel Creation ────────────────────────────────────
 
@@ -2253,7 +2266,7 @@ class ChannelService {
     const allowed = {};
     if (channel.recipientOnly && updates.name !== undefined) allowed.nameFromMembers = false;
     if (updates.name !== undefined) {
-      allowed.name = isCustomChannel(channel)
+      allowed.name = this.isCustomChannel(channel)
         ? (slugify(updates.name) || sanitizeHtml(updates.name))
         : sanitizeHtml(updates.name);
     }
@@ -2273,6 +2286,12 @@ class ChannelService {
         normalizedVisibility === CHANNEL_VISIBILITY.PRIVATE
       ) {
         allowed.visibility = normalizedVisibility;
+        if (this.isCustomChannel(channel)) {
+          allowed.type =
+            normalizedVisibility === CHANNEL_VISIBILITY.PUBLIC
+              ? CHANNEL_TYPES.PUBLIC
+              : CHANNEL_TYPES.PRIVATE;
+        }
       }
     }
     if (updates.adminOverrides !== undefined) {
@@ -2290,6 +2309,9 @@ class ChannelService {
     }
     if (updates.flowTaskMetadata !== undefined && userId === null) {
       allowed.flowTaskMetadata = updates.flowTaskMetadata;
+    }
+    if (updates.allowAllMembersEditCanvas !== undefined) {
+      allowed.allowAllMembersEditCanvas = Boolean(updates.allowAllMembersEditCanvas);
     }
 
     // Detect visibility change for workspace-wide broadcast
@@ -2518,6 +2540,7 @@ class ChannelService {
     if (!channel) throw new NotFoundError("Channel not found");
 
     const effectiveWorkspaceId = channel.workspaceId?.toString() || workspaceId;
+    const creatorIdStr = channel.createdBy?._id?.toString() || channel.createdBy?.toString() || null;
 
     const [members, pendingParticipants] = await Promise.all([
       channelRepository.listActiveMembers(channelId, {
@@ -2574,6 +2597,10 @@ class ChannelService {
           registrationStatus: "active",
           source: ["channel"],
           channelRole: member.role,
+          isHost: Boolean(
+            member.role === 'owner' ||
+            (creatorIdStr && user._id.toString() === creatorIdStr)
+          ),
           joinedAt: member.joinedAt,
         };
       })
@@ -2596,6 +2623,8 @@ class ChannelService {
 
     return [...activeMembers, ...pendingMembers]
       .sort((a, b) => {
+      // Channel host first, then online status, then alphabetical
+      if (Boolean(a.isHost) !== Boolean(b.isHost)) return a.isHost ? -1 : 1;
       // Online first, then alphabetical
       const onlineOrder = { online: 0, away: 1, dnd: 2, offline: 3 };
       const aOrder = onlineOrder[a.onlineStatus] ?? 3;

@@ -5,6 +5,8 @@ import { channelAPI, usersAPI, readReceiptAPI, categoryAPI, resolveWorkspaceId, 
 import { getSocket } from '../services/socket';
 import logger from '../utils/logger';
 import Toast from 'react-native-toast-message';
+import { sortCategoriesByOrder } from '../utils/categoryOrder';
+import { isCanceledError, isChannelAccessDeniedError } from '../utils/channelAccess';
 
 /** Normalise any id-like value (ObjectId, populated object, string) to a plain string. */
 const toIdString = (id) => {
@@ -45,7 +47,7 @@ export const useChannelStore = create(
         try {
           const { data } = await categoryAPI.list();
           if (resolveWorkspaceId() !== workspaceId || getWorkspaceContextVersion() !== contextVersion) return;
-          set({ categories: data.data || [] });
+          set({ categories: sortCategoriesByOrder(data.data || []) });
         } catch (error) {
           logger.error('Failed to fetch categories:', error);
         }
@@ -76,6 +78,37 @@ export const useChannelStore = create(
             return gId !== cidStr;
           }),
         }));
+      },
+
+      applyCategoryReorder: (categoryOrders) => {
+        if (!Array.isArray(categoryOrders)) return;
+        const orderMap = new Map(
+          categoryOrders.map((o) => [String(o.id), Number(o.order) || 0])
+        );
+        set((state) => {
+          const updated = (state.categories || []).map((c) => {
+            const id = String(c._id);
+            return orderMap.has(id) ? { ...c, order: orderMap.get(id) } : c;
+          });
+          return { categories: sortCategoriesByOrder(updated) };
+        });
+      },
+
+      reorderCategories: async (categoryOrders) => {
+        if (!Array.isArray(categoryOrders) || categoryOrders.length === 0) return;
+        get().applyCategoryReorder(categoryOrders);
+        try {
+          await categoryAPI.reorder(categoryOrders);
+        } catch (error) {
+          logger.error('Failed to reorder categories:', error);
+          await get().fetchCategories();
+          const msg =
+            error.response?.data?.error?.message ||
+            error.response?.data?.message ||
+            'Failed to update category order';
+          Toast.show({ type: 'error', text1: msg });
+          throw error;
+        }
       },
 
       fetchUnreads: async () => {
@@ -146,7 +179,7 @@ export const useChannelStore = create(
       },
 
       markAsRead: async (channelId, messageId = null) => {
-        if (!channelId) return;
+        if (!channelId || !resolveWorkspaceId()) return;
         const cid = channelId?.toString ? channelId.toString() : String(channelId);
         try {
           // Reset locally immediately for fast UI
@@ -156,13 +189,16 @@ export const useChannelStore = create(
 
           // Call REST API
           await readReceiptAPI.markRead(cid, messageId);
-          
+
           // Emit socket seen event (in case it is a DM)
           const socket = getSocket();
           if (socket && socket.connected) {
             socket.emit('dm:markSeen', { channelId: cid });
           }
         } catch (error) {
+          if (isChannelAccessDeniedError(error) || isCanceledError(error)) {
+            return;
+          }
           logger.error('[ChannelStore] markAsRead error:', error);
         }
       },
@@ -231,12 +267,12 @@ export const useChannelStore = create(
         }
       },
 
-      setActiveChannel: (channelId) => {
+      setActiveChannel: (channelId, options = {}) => {
         const cid = channelId != null
           ? (channelId?.toString ? channelId.toString() : String(channelId))
           : null;
         set({ activeChannelId: cid });
-        if (cid) {
+        if (cid && !options.skipMarkRead) {
           get().markAsRead(cid);
         }
       },
@@ -248,18 +284,84 @@ export const useChannelStore = create(
         if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
       },
 
-      removeChannel: (channelId) => {
-        const cidStr = channelId?.toString ? channelId.toString() : channelId;
-        set((state) => ({
-          activeChannelId: (() => {
-            const activeStr = state.activeChannelId?.toString ? state.activeChannelId.toString() : state.activeChannelId;
-            return activeStr === cidStr ? null : state.activeChannelId;
-          })(),
-        }));
+      editChannel: async (channelId, data) => {
         const queryClient = require('../queries/queryClient').queryClient;
         const queryKeys = require('../queries/queryKeys').queryKeys;
         const wid = resolveWorkspaceId();
-        if (wid) queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+        get().updateChannel(channelId, data);
+        try {
+          const { data: res } = await channelAPI.update(channelId, data);
+          const updated = res?.data?.channel || res?.data || {};
+          get().updateChannel(channelId, updated);
+          if (data?.visibility !== undefined && wid) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+          }
+          Toast.show({ type: 'success', text1: 'Channel updated' });
+          return updated;
+        } catch (error) {
+          if (wid) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+          }
+          const msg =
+            error.response?.data?.error?.message ||
+            error.response?.data?.message ||
+            error.message ||
+            'Failed to update channel';
+          Toast.show({ type: 'error', text1: msg });
+          throw error;
+        }
+      },
+
+      deleteChannel: async (channelId) => {
+        try {
+          await channelAPI.delete(channelId);
+          get().removeChannel(channelId);
+          Toast.show({ type: 'success', text1: 'Channel deleted' });
+        } catch (error) {
+          const msg =
+            error.response?.data?.error?.message ||
+            error.response?.data?.message ||
+            error.message ||
+            'Failed to delete channel';
+          Toast.show({ type: 'error', text1: msg });
+          throw error;
+        }
+      },
+
+      removeChannel: (channelId) => {
+        const cidStr = toIdString(channelId);
+        const queryClient = require('../queries/queryClient').queryClient;
+        const queryKeys = require('../queries/queryKeys').queryKeys;
+        const wid = resolveWorkspaceId();
+        set((state) => {
+          const widKey = wid ? String(wid) : null;
+          const prevCached = widKey ? state.cachedChannels?.[widKey] : null;
+          return {
+            activeChannelId: toIdString(state.activeChannelId) === cidStr ? null : state.activeChannelId,
+            starredIds: (state.starredIds || []).filter((id) => toIdString(id) !== cidStr),
+            pinnedIds: (state.pinnedIds || []).filter((id) => toIdString(id) !== cidStr),
+            categories: (state.categories || []).map((cat) =>
+              Array.isArray(cat.channelIds)
+                ? { ...cat, channelIds: cat.channelIds.filter((id) => toIdString(id) !== cidStr) }
+                : cat
+            ),
+            ...(widKey && Array.isArray(prevCached)
+              ? {
+                  cachedChannels: {
+                    ...state.cachedChannels,
+                    [widKey]: prevCached.filter((c) => toIdString(c._id) !== cidStr),
+                  },
+                }
+              : {}),
+          };
+        });
+        if (wid) {
+          queryClient.setQueryData(queryKeys.channels(wid), (oldChannels) => {
+            if (!Array.isArray(oldChannels)) return oldChannels;
+            return oldChannels.filter((c) => toIdString(c._id) !== cidStr);
+          });
+          queryClient.invalidateQueries({ queryKey: queryKeys.channels(wid) });
+        }
       },
 
       updateChannel: (channelId, updates = {}) => {

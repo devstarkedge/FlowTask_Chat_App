@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Folder, ListPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import SidebarSection from "./sidebar/SidebarSection";
@@ -174,9 +174,13 @@ export default function CategoryList({
   if (!categories || categories.length === 0) return null;
   const customCategoryOwners = getCustomCategoryOwners(categories);
 
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [categories]);
+
   return (
     <>
-      {categories.map((category) => {
+      {sortedCategories.map((category) => {
         // A deleted FlowTask department populates as null.
         if (category.type === "department" && !category.departmentId) return null;
         let categoryChannels = [];

@@ -52,7 +52,10 @@ import EmojiPickerModal from "../../components/EmojiPickerModal";
 import ReminderModal from "../../components/ReminderModal";
 import AudioMessagePlayer from "../../components/AudioMessagePlayer";
 import VideoMessagePlayer from "../../components/VideoMessagePlayer";
-import { Hash, MoreVertical, Users, Search, Pin, Lock, Volume2, FileText, Folder } from "lucide-react-native";
+import { Hash, MoreVertical, Users, Search, Pin, Lock, Volume2, FileText, Folder, Settings, Trash2, LogOut } from "lucide-react-native";
+import EditChannelModal from "../../components/EditChannelModal";
+import { getChannelPermissions } from "../../utils/channelOrigin";
+import { getErrorStatus, isCanceledError, isChannelAccessDeniedError } from "../../utils/channelAccess";
 import SearchBar from "../../components/SearchBar";
 import MessageComposer from "../../components/MessageComposer";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -148,8 +151,20 @@ const ChatScreen = ({ route, navigation }) => {
   );
   const user = useAuthStore(useShallow((s) => s.user));
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const deleteChannel = useChannelStore((s) => s.deleteChannel);
   const { data: channels = [] } = useChannels(activeWorkspaceId);
-  const { data: channelMembers = [], error: channelMembersError } = useChannelMembers(channelId);
+  const knownChannelInWorkspace = useMemo(
+    () => channels.some((ch) => String(ch._id) === String(channelId)),
+    [channels, channelId]
+  );
+  const [channelAccessState, setChannelAccessState] = useState('checking');
+  useEffect(() => {
+    setChannelAccessState('checking');
+  }, [channelId, activeWorkspaceId]);
+  const { data: channelMembers = [], error: channelMembersError } = useChannelMembers(channelId, {
+    enabled: Boolean(channelId && activeWorkspaceId) && (knownChannelInWorkspace || channelAccessState === 'granted'),
+  });
   const markAsRead = useChannelStore((s) => s.markAsRead);
   const { colors } = useThemeStore(useShallow((s) => ({ colors: s.colors })));
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -159,6 +174,7 @@ const ChatScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     if (channelMembersError) {
+      if (isChannelAccessDeniedError(channelMembersError) || isCanceledError(channelMembersError)) return;
       logger.error('Failed to load channel members:', channelMembersError);
       Toast.show({ type: 'error', text1: 'Unable to load channel members', text2: channelMembersError.userMessage || channelMembersError.message });
     }
@@ -166,6 +182,7 @@ const ChatScreen = ({ route, navigation }) => {
 
   const [text, setText] = useState("");
   const [showOptions, setShowOptions] = useState(false);
+  const [showEditChannelModal, setShowEditChannelModal] = useState(false);
   const [showSearch, setShowSearch] = useState(!!route.params?.searchQuery);
   const [searchQuery, setSearchQuery] = useState(route.params?.searchQuery || "");
   const [searchResults, setSearchResults] = useState([]);
@@ -438,6 +455,76 @@ const ChatScreen = ({ route, navigation }) => {
   const isPrivate =
     channel?.visibility === "private" || channel?.type === "private";
 
+  const { isCustom: isCustomChannel, canEditChannel, canDeleteChannel, canLeaveChannel } = useMemo(
+    () => getChannelPermissions({ channel, members: channelMembersArr, user, activeWorkspace }),
+    [channel, channelMembersArr, user, activeWorkspace]
+  );
+
+  const handleLeaveCurrentChannel = useCallback(() => {
+    const label = channel?.name || channelName || "this channel";
+    Alert.alert(
+      "Leave Channel",
+      `Are you sure you want to leave #${label}? You will not receive any further messages unless you are re-invited.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await channelAPI.leave(channelId);
+              useChannelStore.getState().removeChannel(channelId);
+              Toast.show({ type: "success", text1: `Left #${label}` });
+              navigation.navigate("Main");
+            } catch (err) {
+              const msg = err.response?.data?.error?.message || err.response?.data?.message || "Failed to leave channel.";
+              Alert.alert("Error", msg);
+            }
+          },
+        },
+      ]
+    );
+  }, [channel?.name, channelName, channelId, navigation]);
+
+  const handleDeleteCurrentChannel = useCallback(() => {
+    const label = channel?.name || channelName || "this channel";
+    Alert.alert(
+      "Delete channel",
+      `Are you sure you want to delete #${label}? The channel and all its membership associations will be permanently removed. This action cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Channel",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteChannel(channelId);
+              navigation.navigate("Main");
+            } catch (err) {
+              logger.error("Failed to delete channel:", err);
+            }
+          },
+        },
+      ]
+    );
+  }, [channel?.name, channelName, deleteChannel, channelId, navigation]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !channelId) return;
+    const onRemoved = ({ channelId: removedId } = {}) => {
+      if (removedId && String(removedId) === String(channelId)) {
+        navigation.navigate("Main");
+      }
+    };
+    socket.on("channel:deleted", onRemoved);
+    socket.on("channel:removed", onRemoved);
+    return () => {
+      socket.off("channel:deleted", onRemoved);
+      socket.off("channel:removed", onRemoved);
+    };
+  }, [channelId, navigation]);
+
   // Build dmUser from membersByChannel (full user objects with avatar/name/onlineStatus)
   // Fallback to channel-level decorated fields (server sets name & avatar on DM channels)
   const dmUser = useMemo(() => {
@@ -492,24 +579,46 @@ const ChatScreen = ({ route, navigation }) => {
       // and loads the *next older* page using the stored cursor, meaning the latest
       // messages are never re-fetched and the chat stays stale.
       try {
+        if (!activeWorkspaceId) return;
         const result = await refetchMessages();
-        if (result.error && !cancelled) {
-          logger.error('Failed to load channel messages:', result.error);
-        }
-      } catch (err) {
+        const fetchErr = result?.error;
         if (cancelled) return;
-        if (err?.response?.status === 403) {
-          try {
-            const currentUser = useAuthStore.getState().user;
-            await channelAPI.addMember(channelId, currentUser._id);
-            if (cancelled) return;
-            Toast.show({ type: 'success', text1: `Joined ${channelName || 'channel'}` });
-            await refetchMessages();
-            queryClient.invalidateQueries({ queryKey: queryKeys.channelMembers(channelId) });
-          } catch (joinErr) {
-            logger.error('Failed to auto-join channel:', joinErr);
+        if (!fetchErr) {
+          setChannelAccessState('granted');
+          return;
+        }
+        if (isCanceledError(fetchErr)) return;
+        const status = getErrorStatus(fetchErr);
+        if (status === 403 || status === 404) {
+          const currentUser = useAuthStore.getState().user;
+          if (status === 403 && currentUser?._id) {
+            try {
+              await channelAPI.addMember(channelId, currentUser._id);
+              if (cancelled) return;
+              setChannelAccessState('granted');
+              Toast.show({ type: 'success', text1: `Joined ${channelName || 'channel'}` });
+              await refetchMessages();
+              queryClient.invalidateQueries({ queryKey: queryKeys.channels(activeWorkspaceId) });
+              queryClient.invalidateQueries({ queryKey: queryKeys.channelMembers(channelId) });
+              return;
+            } catch (joinErr) {
+              if (cancelled) return;
+              if (!isChannelAccessDeniedError(joinErr)) {
+                logger.error('Failed to auto-join channel:', joinErr);
+              }
+            }
           }
-        } else {
+          setChannelAccessState('denied');
+          if (status === 404 || fetchErr?.response?.data?.error?.message === 'Channel not found') {
+            useChannelStore.getState().removeChannel(channelId);
+          }
+          Toast.show({ type: 'info', text1: 'Channel unavailable', text2: 'You no longer have access to this channel.' });
+          if (navigation.canGoBack()) navigation.goBack(); else navigation.navigate('Main');
+          return;
+        }
+        logger.error('Failed to load channel messages:', fetchErr);
+      } catch (err) {
+        if (!cancelled && !isCanceledError(err)) {
           logger.error('Failed to load channel messages:', err);
         }
       }
@@ -518,7 +627,7 @@ const ChatScreen = ({ route, navigation }) => {
       if (!cancelled) logger.error('Failed to initialize channel:', err);
     });
     return () => { cancelled = true; };
-  }, [channelId, channelName, refetchMessages]);
+  }, [channelId, channelName, activeWorkspaceId, refetchMessages, markAsRead, navigation]);
 
   // Track active conversation for unread/push/receipts parity with web
   useEffect(() => {
@@ -532,7 +641,7 @@ const ChatScreen = ({ route, navigation }) => {
     );
     const type = channel?.type === 'dm' ? 'dm' : 'channel';
 
-    setActiveChannel(channelId);
+    setActiveChannel(channelId, { skipMarkRead: true });
     conversationPresence.setActive(channelId, type);
 
     return () => {
@@ -546,7 +655,7 @@ const ChatScreen = ({ route, navigation }) => {
   }, [channelId]);
 
   useEffect(() => {
-    if (channelId) {
+    if (channelId && channelAccessState === 'granted') {
       // Only auto-mark read while the app is foregrounded
       if (AppState.currentState !== 'active') return;
 
@@ -562,7 +671,7 @@ const ChatScreen = ({ route, navigation }) => {
         });
       }
     }
-  }, [channelId, messages.length, markAsRead]);
+  }, [channelId, channelAccessState, messages.length, markAsRead]);
 
   // Debounced search — avoid re-running on every displayedMessages change
   const searchTimeoutRef = useRef(null);
@@ -944,6 +1053,57 @@ const ChatScreen = ({ route, navigation }) => {
                   </Text>
                 </View>
               </TouchableOpacity>
+
+              {canEditChannel && (
+                <TouchableOpacity
+                  style={styles.cardOptionItem}
+                  onPress={() => {
+                    setShowOptions(false);
+                    setShowEditChannelModal(true);
+                  }}
+                >
+                  <View style={styles.cardOptionLeft}>
+                    <Settings size={20} color={colors.textPrimary} />
+                    <Text style={[styles.cardOptionText, { color: colors.textPrimary }]}>
+                      Edit Channel
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {canDeleteChannel && (
+                <TouchableOpacity
+                  style={styles.cardOptionItem}
+                  onPress={() => {
+                    setShowOptions(false);
+                    handleDeleteCurrentChannel();
+                  }}
+                >
+                  <View style={styles.cardOptionLeft}>
+                    <Trash2 size={20} color="#E53E3E" />
+                    <Text style={[styles.cardOptionText, { color: "#E53E3E", fontWeight: "600" }]}>
+                      Delete Channel
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {isCustomChannel && canLeaveChannel && (
+                <TouchableOpacity
+                  style={styles.cardOptionItem}
+                  onPress={() => {
+                    setShowOptions(false);
+                    handleLeaveCurrentChannel();
+                  }}
+                >
+                  <View style={styles.cardOptionLeft}>
+                    <LogOut size={20} color="#E53E3E" />
+                    <Text style={[styles.cardOptionText, { color: "#E53E3E", fontWeight: "600" }]}>
+                      Leave Channel
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </>
@@ -1135,6 +1295,7 @@ const ChatScreen = ({ route, navigation }) => {
         attachment={actionAttachmentTarget}
         colors={colors}
         user={user}
+        isDM={isDM}
         isSaved={isMessageSaved?.(actionMenuTarget?._id, actionAttachmentTarget)}
         onReact={(emoji) => {
           if (actionMenuTarget) addReaction(actionMenuTarget._id, emoji);
@@ -1289,6 +1450,15 @@ const ChatScreen = ({ route, navigation }) => {
         onClose={() => setMessageInfoTarget(null)}
         message={messageInfoTarget}
         colors={colors}
+      />
+
+      {/* Edit Channel Modal */}
+      <EditChannelModal
+        visible={showEditChannelModal}
+        channel={channel}
+        members={channelMembersArr}
+        onClose={() => setShowEditChannelModal(false)}
+        onDeleted={() => navigation.navigate("Main")}
       />
       </View>
     </AppScreen>

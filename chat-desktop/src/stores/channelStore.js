@@ -109,6 +109,39 @@ export const useChannelStore = create(
     }
   },
 
+  applyCategoryReorder: (categoryOrders) => {
+    if (!Array.isArray(categoryOrders)) return;
+    const orderMap = new Map(categoryOrders.map(o => [String(o.id), Number(o.order) || 0]));
+    set((state) => {
+      const updated = state.categories.map((c) => {
+        const id = String(c._id);
+        if (orderMap.has(id)) {
+          return { ...c, order: orderMap.get(id) };
+        }
+        return c;
+      });
+      const sorted = [...updated].sort((a, b) => {
+        const orderA = a.order ?? 999;
+        const orderB = b.order ?? 999;
+        return orderA - orderB;
+      });
+      return { categories: normalizeCategoryAssignments(sorted) };
+    });
+  },
+
+  reorderCategories: async (categoryOrders) => {
+    if (!Array.isArray(categoryOrders)) return;
+    get().applyCategoryReorder(categoryOrders);
+
+    try {
+      await categoryAPI.reorder(categoryOrders);
+    } catch (err) {
+      logger.error('Failed to reorder categories:', err);
+      get().fetchCategories();
+      throw err;
+    }
+  },
+
   fetchDepartments: async () => {
     try {
       const { data } = await categoryAPI.getDepartments();

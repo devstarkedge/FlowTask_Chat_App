@@ -1,7 +1,7 @@
 import { useLiveProfileData } from '../../hooks/useLiveProfileData';
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, MessageSquare, Headphones, MoreHorizontal, Mail, Building2, Shield, Clock, Copy } from "lucide-react";
+import { X, MessageSquare, Headphones, MoreHorizontal, Mail, Building2, Shield, Clock, Copy, Camera, Loader2 } from "lucide-react";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -57,7 +57,62 @@ export default function ProfileSidePanel({ user, onClose }) {
 
   const userId = user?._id || user?.userId;
   const liveStatus = presenceMap[userId] || presenceMap[user?.flowTaskUserId] || presenceMap[user?.chatUserId] || user?.onlineStatus || "offline";
-  const isCurrentUser = userId === currentUser?._id;
+  const isCurrentUser = userId === currentUser?._id || userId === currentUser?.id;
+  const fileInputRef = useRef(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Please upload a valid image (JPEG, PNG, WebP, GIF)");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size must be less than 5MB");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    setIsUploadingAvatar(true);
+    try {
+      const res = await userAPI.uploadAvatar(formData);
+      const updatedUser = res.data?.data || res.data?.user;
+      const newAvatar = updatedUser?.avatar || res.data?.avatar;
+      if (newAvatar) {
+        useAuthStore.setState((state) => ({
+          user: { ...state.user, avatar: newAvatar, profilePicture: newAvatar },
+        }));
+      }
+      toast.success("Profile photo updated");
+    } catch (err) {
+      console.error("Failed to upload avatar:", err);
+      toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to update profile photo");
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setIsUploadingAvatar(true);
+    try {
+      await userAPI.removeAvatar();
+      useAuthStore.setState((state) => ({
+        user: { ...state.user, avatar: null, profilePicture: null },
+      }));
+      toast.success("Profile photo removed");
+    } catch (err) {
+      console.error("Failed to remove avatar:", err);
+      toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to remove profile photo");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
   const statusMeta = STATUS_META[liveStatus] || STATUS_META.offline;
 
   useEffect(() => {
@@ -236,6 +291,17 @@ export default function ProfileSidePanel({ user, onClose }) {
             }}
           />
 
+          {/* Hidden file input for current user */}
+          {isCurrentUser && (
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              style={{ display: "none" }}
+              onChange={handleAvatarChange}
+            />
+          )}
+
           {/* Spinning avatar ring */}
           <div
             style={{
@@ -280,7 +346,10 @@ export default function ProfileSidePanel({ user, onClose }) {
                 fontWeight: 800,
                 color: "var(--text-white)",
                 background: "linear-gradient(135deg,#7c3aed,#1264a3)",
+                cursor: isCurrentUser ? "pointer" : "default",
               }}
+              onClick={isCurrentUser ? () => fileInputRef.current?.click() : undefined}
+              title={isCurrentUser ? "Click to change profile photo" : undefined}
             >
               {avatar ? (
                 <img
@@ -291,7 +360,58 @@ export default function ProfileSidePanel({ user, onClose }) {
               ) : (
                 name.charAt(0).toUpperCase()
               )}
+
+              {/* Hover overlay or loading spinner for current user */}
+              {isCurrentUser && (
+                <div
+                  className="pp-avatar-overlay"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundColor: "rgba(0,0,0,0.45)",
+                    display: isUploadingAvatar ? "flex" : "none",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "opacity 0.2s",
+                  }}
+                >
+                  {isUploadingAvatar ? (
+                    <Loader2 size={24} className="animate-spin" style={{ color: "#fff" }} />
+                  ) : (
+                    <Camera size={22} style={{ color: "#fff" }} />
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Camera badge button for current user */}
+            {isCurrentUser && !isUploadingAvatar && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Change profile photo"
+                style={{
+                  position: "absolute",
+                  bottom: -2,
+                  left: -2,
+                  zIndex: 3,
+                  width: 26,
+                  height: 26,
+                  borderRadius: "50%",
+                  background: "var(--bg-secondary, #1e1e24)",
+                  border: "2px solid var(--bg-primary, #121216)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "var(--text-secondary, #ccc)",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
+                }}
+              >
+                <Camera size={13} />
+              </button>
+            )}
+
             {/* Status dot */}
             <span
               style={{
@@ -311,6 +431,57 @@ export default function ProfileSidePanel({ user, onClose }) {
               }}
             />
           </div>
+
+          {/* Action links under avatar for current user */}
+          {isCurrentUser && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                marginTop: 6,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: "var(--accent-primary, #6366f1)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: isUploadingAvatar ? "not-allowed" : "pointer",
+                  padding: "2px 4px",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 2,
+                }}
+              >
+                {isUploadingAvatar ? "Uploading..." : avatar ? "Change photo" : "Upload photo"}
+              </button>
+              {avatar && !isUploadingAvatar && (
+                <button
+                  type="button"
+                  onClick={handleRemoveAvatar}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: "var(--accent-red, #ef4444)",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "2px 4px",
+                    textDecoration: "underline",
+                    textUnderlineOffset: 2,
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Name & title */}
           <h2
@@ -671,6 +842,7 @@ export default function ProfileSidePanel({ user, onClose }) {
       </div>
 
       <style>{`
+        div:hover > .pp-avatar-overlay { display: flex !important; }
         @keyframes ppSlideIn  { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
         @keyframes ppFadeUp   { from{opacity:0;transform:translateY(8px)}  to{opacity:1;transform:translateY(0)} }
         @keyframes ppAvatarIn { from{opacity:0;transform:scale(.88)}        to{opacity:1;transform:scale(1)}      }

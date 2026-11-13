@@ -14,7 +14,15 @@ import {
   updateThemePreferences,
   getThemePreferences,
   updateUser,
+  uploadAvatar,
+  removeAvatar,
 } from './user.controller.js';
+import multer from 'multer';
+
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 import { protect } from '../auth/auth.middleware.js';
 import { resolveWorkspace } from '../../middleware/workspaceContext.js';
 
@@ -54,6 +62,16 @@ router.get('/preferences/theme', protect, getThemePreferences);
 
 // Presence
 router.put('/presence', protect, setPresence);
+
+// Avatar upload & removal (must come before :id catch-all)
+router.post('/avatar', protect, (req, res, next) => {
+  memoryUpload.fields([{ name: 'avatar', maxCount: 1 }, { name: 'file', maxCount: 1 }])(req, res, (err) => {
+    if (err) return next(err);
+    req.file = req.files?.avatar?.[0] || req.files?.file?.[0] || req.file;
+    next();
+  });
+}, uploadAvatar);
+router.delete('/avatar', protect, removeAvatar);
 
 // Profile (must be last — :id is a catch-all param)
 router.patch('/:id', protect, resolveWorkspace, updateUser);

@@ -17,6 +17,29 @@ export async function microphonePermission(){
     if(result!==PermissionsAndroid.RESULTS.GRANTED)throw Object.assign(new Error('Allow microphone access in Settings to speak in this Huddle.'),{name:'NotAllowedError'});
   }
 }
+export async function cameraPermission(){
+  ensureNativeCalling();
+  if(Platform.OS==='android'){
+    const result=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+    if(result!==PermissionsAndroid.RESULTS.GRANTED)throw Object.assign(new Error('Allow camera access in Settings to show your video in this Huddle.'),{name:'NotAllowedError'});
+    return;
+  }
+  if(Platform.OS==='ios'){
+    try{
+      const expoCamera=require('expo-camera');
+      const requestPerm=expoCamera?.Camera?.requestCameraPermissionsAsync;
+      if(typeof requestPerm==='function'){
+        const res=await requestPerm();
+        if(res && res.status==='denied'){
+          throw Object.assign(new Error('Allow camera access in Settings to show your video in this Huddle.'),{name:'NotAllowedError'});
+        }
+      }
+    }catch(error){
+      if(error?.name==='NotAllowedError')throw error;
+      // If expo-camera isn't linked in a bare test environment, fall through to WebRTC's native prompt.
+    }
+  }
+}
 export function nativeCallAudio(){
   if(!NativeModules.InCallManager)return;
   audio=require('react-native-incall-manager').default;
@@ -30,7 +53,10 @@ export function setHuddleSpeaker(enabled){audio?.setForceSpeakerphoneOn(enabled)
 export function stopNativeCallAudio(){pendingCapture?.();NativeModules.TaskChatHuddle?.stop();audio?.stop();audio=null;}
 export function nativeCaptureDevices(){
   const rtc=ensureNativeCalling();
-  if(Platform.OS==='ios')return {getDisplayMedia:()=>captureIOSScreen(rtc)};
+  if(Platform.OS==='ios')return {
+    getUserMedia:constraints=>rtc.mediaDevices.getUserMedia(constraints),
+    getDisplayMedia:()=>captureIOSScreen(rtc),
+  };
   return rtc.mediaDevices;
 }
 export function getNativeVideoView(){return NativeModules.WebRTCModule?ensureNativeCalling().RTCView:null;}

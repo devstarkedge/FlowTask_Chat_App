@@ -106,6 +106,7 @@
       "@config-plugins/react-native-blob-util",
       "@config-plugins/react-native-pdf",
       "expo-asset",
+      "expo-sharing",
       "expo-media-library",
       [
         "expo-camera",
@@ -144,6 +145,12 @@
       ],
       "./plugins/withHuddleCalling.cjs",
       "./plugins/withHuddleBroadcast.cjs"
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/dcfa4a56-c26e-4daf-9e3b-751f3136bd8d"
+    }
   }
 }

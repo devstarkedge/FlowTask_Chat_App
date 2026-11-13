@@ -25,6 +25,7 @@ import HuddleOverlay from './src/features/huddle/components/HuddleOverlay';
 import Toast from "react-native-toast-message";
 import { toastConfig } from "./src/config/toastConfig";
 import { GlobalToastProvider } from "./src/components/common/GlobalToastProvider";
+import ExpoUpdateBanner from "./src/components/common/ExpoUpdateBanner";
 import { useToastStore } from "./src/utils/toastStore";
 
 Toast.show = (options) => useToastStore.getState().show(options);
@@ -228,6 +229,7 @@ export default function App() {
                     <AppNavigator />
                     <HuddleOverlay />
                     <GlobalToastProvider />
+                    <ExpoUpdateBanner />
                   </NavigationContainer>
                 ) : (
                   <SplashScreenFallback />

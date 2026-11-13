@@ -7,8 +7,8 @@ import {useHuddleStore} from '../stores/huddleStore';
 import {useHuddleAudioStore} from '../stores/huddleAudioStore';
 import {HuddleAudioController} from './HuddleAudioController';
 import {HuddleSfuController} from './HuddleSfuController';
-import {ensureNativeCalling,nativeCallAudio,stopNativeCallAudio,nativeCaptureDevices,microphonePermission,startNativeCallLifetime} from '../features/huddle/services/nativeMedia.service';
-import {SCREEN_CAPTURE_VIDEO,prepareScreenTrack} from '../features/huddle/services/screenQuality.service';
+import {ensureNativeCalling,nativeCallAudio,stopNativeCallAudio,nativeCaptureDevices,microphonePermission,cameraPermission,startNativeCallLifetime} from '../features/huddle/services/nativeMedia.service';
+import {prepareScreenTrack} from '../features/huddle/services/screenQuality.service';
 
 
 const microphone=new HuddleMediaManager();
@@ -48,6 +48,23 @@ function selectController(mode){
 
 function currentSession(session,epoch) {
   return epoch===audioEpoch && useHuddleStore.getState().session?.id===session.id;
+}
+
+async function captureCameraStream(facing='user') {
+  await cameraPermission();
+  const captureDevices=nativeCaptureDevices();
+  const getUserMedia=captureDevices?.getUserMedia
+    ?constraints=>captureDevices.getUserMedia(constraints)
+    :constraints=>navigator.mediaDevices.getUserMedia(constraints);
+  const baseVideo={width:{ideal:640},height:{ideal:360},frameRate:{ideal:24,max:30}};
+  try{
+    return await getUserMedia({audio:false,video:{...baseVideo,facingMode:facing}});
+  }catch(error){
+    if(['OverconstrainedError','ConstraintNotSatisfiedError'].includes(error?.name)){
+      return await getUserMedia({audio:false,video:baseVideo});
+    }
+    throw error;
+  }
 }
 
 function scheduleRenewal(expiresAt,renewAfterMs) {
@@ -117,7 +134,7 @@ async function beginHuddleAudio(channelId,session) {
 
 export function stopHuddleAudio() {
   audioEpoch++;starting=null;restarting=null;microphone.stopLocalStream({stopTracks:microphone.stream!==controller?.stream});stopNativeCallAudio();huddleLogger.debug('CLEANUP');clearTimeout(renewTimer);renewTimer=null;controller?.stop();
-  update({deafened:false,playbackBlocked:false,invitation:null,withoutMicrophone:false,micBusy:false,cameraBusy:false,screenBusy:false,reconnectDeadline:null});
+  update({deafened:false,playbackBlocked:false,invitation:null,withoutMicrophone:false,micBusy:false,cameraBusy:false,cameraFacing:'user',screenBusy:false,reconnectDeadline:null});
 }
 
 export async function retryHuddleAudio() {
@@ -170,16 +187,19 @@ export async function toggleHuddleMute() {
 export async function toggleHuddleCamera() {
   const session=useHuddleStore.getState().session,epoch=audioEpoch;
   if(!session || useHuddleAudioStore.getState().cameraBusy)return;
+  ensureController();
   update({cameraBusy:true,error:null});let stream;
   try {
     if(controller.cameraStream){
-      controller.cameraStream.getTracks().forEach(track=>{track.onended=null;track.stop();});update({localCameraStream:null});
+      controller.cameraStream.getTracks().forEach(track=>{track.onended=null;});
+      update({localCameraStream:null,cameraFacing:'user'});
       await controller.setCamera(null);
       const data=await audioRequest('camera-state',{channelId:session.channelId,enabled:false});
       if(currentSession(session,epoch))useHuddleStore.getState().ingest(session.channelId,data.state);
       return;
     }
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:24,max:30}}});
+    const facing=useHuddleAudioStore.getState().cameraFacing || 'user';
+    stream=await captureCameraStream(facing);
     if(!currentSession(session,epoch)){releaseStream(stream);return;}
     const state=await audioRequest('camera-state',{channelId:session.channelId,enabled:true});
     if(!currentSession(session,epoch)){releaseStream(stream);return;}
@@ -187,7 +207,8 @@ export async function toggleHuddleCamera() {
     await controller.setCamera(stream);
     if(!currentSession(session,epoch)){releaseStream(stream);return;}
     useHuddleStore.getState().ingest(session.channelId,state.state);
-    stream.getVideoTracks()[0].onended=()=>{if(currentSession(session,epoch))toggleHuddleCamera();};
+    const track=stream.getVideoTracks()[0];
+    if(track)track.onended=()=>{if(currentSession(session,epoch))toggleHuddleCamera();};
   } catch(error){
     releaseStream(stream);
     if(currentSession(session,epoch)){
@@ -195,6 +216,36 @@ export async function toggleHuddleCamera() {
       update({error:error.name==='NotAllowedError'?'Camera access was denied. Allow Camera in your device settings and try again.':error.name==='NotFoundError'?'No camera was found. Connect a camera and try again.':error.message});
     }
   } finally {if(currentSession(session,epoch))update({cameraBusy:false});}
+}
+
+export async function switchHuddleCamera() {
+  const session=useHuddleStore.getState().session,epoch=audioEpoch;
+  if(!session || !controller?.cameraStream || useHuddleAudioStore.getState().cameraBusy)return;
+  const currentFacing=useHuddleAudioStore.getState().cameraFacing || 'user';
+  const nextFacing=currentFacing==='user'?'environment':'user';
+  const currentTrack=controller.cameraStream.getVideoTracks?.()[0];
+  if(currentTrack && typeof currentTrack._switchCamera==='function'){
+    try{
+      currentTrack._switchCamera();
+      update({cameraFacing:nextFacing,error:null});
+      return;
+    }catch(error){
+      huddleLogger.debug('NATIVE_SWITCH_CAMERA_FALLBACK',{message:error.message});
+    }
+  }
+  update({cameraBusy:true,error:null});let stream;
+  try{
+    stream=await captureCameraStream(nextFacing);
+    if(!currentSession(session,epoch)){releaseStream(stream);return;}
+    await controller.setCamera(stream);
+    if(!currentSession(session,epoch)){releaseStream(stream);return;}
+    update({cameraFacing:nextFacing});
+    const track=stream.getVideoTracks()[0];
+    if(track)track.onended=()=>{if(currentSession(session,epoch))toggleHuddleCamera();};
+  }catch(error){
+    releaseStream(stream);
+    if(currentSession(session,epoch))update({error:error.message || 'Unable to switch camera.'});
+  }finally{if(currentSession(session,epoch))update({cameraBusy:false});}
 }
 
 export async function toggleHuddleScreen() {

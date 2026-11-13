@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.6",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -97,7 +97,8 @@
     "publish": {
       "provider": "github",
       "owner": "devstarkedge",
-      "repo": "FlowTask_Chat_App"
+      "repo": "FlowTask_Chat_App",
+      "releaseType": "release"
     },
     "files": [
       "dist/**/*",

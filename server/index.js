@@ -55,6 +55,7 @@ import cache from './services/cache.service.js';
 // ─── Express App ─────────────────────────────────────────────────────────────
 const app = express();
 const httpServer = http.createServer(app);
+httpServer.requestTimeout = 600000; // Allow up to 10 minutes for large (100MB) file uploads
 
 // ─── Trust Proxy (required behind nginx / load balancers) ────────────────────
 if (env.TRUST_PROXY) {

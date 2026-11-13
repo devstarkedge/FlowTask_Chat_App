@@ -42,10 +42,11 @@ import toast from "react-hot-toast";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import { getChannelPath, getDMPath } from "../../utils/chatRoutes";
 import { ReactionRenderer } from "../shared/EmojiRenderer";
+import MessageLinkContextMenu from "./MessageLinkContextMenu";
 
 const EMPTY_LIST = [];
 const EMPTY_MAP = {};
-const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MESSAGE_EDIT_WINDOW_MS = 45 * 60 * 1000;
 
 // ─── Inject inline-editor styles (once) ──────────────────────────────────────
 
@@ -545,6 +546,13 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
   const { user } = useAuthStore();
   // Channel members are used to resolve reaction `userIds` → user objects.
   const threadChannelId = message.channelId;
+  const isDMChannel =
+    useChannelStore(
+      useCallback(
+        (s) => s.channels?.find((channel) => String(channel._id) === String(threadChannelId)),
+        [threadChannelId],
+      ),
+    )?.type === 'dm';
   const channelMembers =
     useChannelStore(
       useCallback((s) => s.membersByChannel?.[threadChannelId], [threadChannelId]),
@@ -589,10 +597,18 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
   const [showActions, setShowActions] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [linkContextMenu, setLinkContextMenu] = useState(null);
 
   const containerRef = useRef(null);
   const moreMenuRef = useRef(null);
   const emojiButtonRef = useRef(null);
+  const handleLinkContextMenu = useCallback((event) => {
+    const link = event.target.closest?.("a[href]");
+    if (!link) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setLinkContextMenu({ x: event.clientX, y: event.clientY, url: link.href });
+  }, []);
 
   const authorName =
     message.authorId?.name || message.senderSnapshot?.name || "FlowTask Bot";
@@ -610,7 +626,8 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
     isOwn &&
     !isDeleted &&
     !isRoot && // Root message edits go through main channel; suppress in thread view
-    Date.now() - new Date(message.createdAt).getTime() < MESSAGE_EDIT_WINDOW_MS;
+    (!isDMChannel ||
+      Date.now() - new Date(message.createdAt).getTime() < MESSAGE_EDIT_WINDOW_MS);
 
   const isEditing = editingMessageId === message._id;
 
@@ -731,6 +748,7 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
     <div
       ref={containerRef}
       className={`thread-message thread-message--interactive${isRoot ? " thread-message--root" : ""}`}
+      onContextMenu={handleLinkContextMenu}
       style={{
         background: isDeleteTarget
           ? "var(--bg-danger, rgba(239, 68, 68, 0.08))"
@@ -1040,6 +1058,10 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
         position="top-start"
         zIndex={1050}
       />
+      <MessageLinkContextMenu
+        context={linkContextMenu}
+        onClose={() => setLinkContextMenu(null)}
+      />
     </div>
   );
 }
@@ -1260,6 +1282,7 @@ export default function ThreadPanel({ thread, onClose }) {
       {!isEditingInThread && (
         <div className="thread-panel__composer">
           <MessageInput
+            key={`${thread.channelId}:${thread.rootMessageId}`}
             channelId={thread.channelId}
             threadId={thread.rootMessageId}
             placeholder="Reply in thread…"

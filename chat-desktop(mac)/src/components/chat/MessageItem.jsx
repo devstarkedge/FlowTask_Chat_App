@@ -25,6 +25,7 @@ import toast from "react-hot-toast";
 import { handleDownload } from "../../utils/handleDownload";
 import { getFileUrl, getFileAssetId } from "../../utils/fileProxy";
 import MessageDetailsPanel from "./MessageDetailsPanel";
+import MessageLinkContextMenu from "./MessageLinkContextMenu";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import { calculateResponsiveMediaDimensions } from "../../utils/mediaUtils";
 import RichTextEditor from "./RichTextEditor";
@@ -294,7 +295,7 @@ function fileIcon(mimeType) {
   return File;
 }
 
-const MESSAGE_EDIT_WINDOW_MS = 10 * 60 * 1000;
+const MESSAGE_EDIT_WINDOW_MS = 45 * 60 * 1000;
 
 // ─── InlineEditor ───────────────────────────────────────────────────────────
 function isImageAttachment(file) {
@@ -605,10 +606,18 @@ const MessageItem = memo(
     const [showReactionPicker, setShowReactionPicker] = useState(false);
     const [showMessageDetails, setShowMessageDetails] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+    const [linkContextMenu, setLinkContextMenu] = useState(null);
 
     const messageRef = useRef(null);
     const moreMenuRef = useRef(null);
     const emojiButtonRef = useRef(null);
+    const handleLinkContextMenu = useCallback((event) => {
+      const link = event.target.closest?.("a[href]");
+      if (!link) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLinkContextMenu({ x: event.clientX, y: event.clientY, url: link.href });
+    }, []);
 
     // ── Pinned-highlight animation ───────────────────────────────────────────
     useEffect(() => {
@@ -708,8 +717,9 @@ const MessageItem = memo(
     const canEdit =
       isOwn &&
       !isDeleted &&
-      Date.now() - new Date(message.createdAt).getTime() <
-        MESSAGE_EDIT_WINDOW_MS &&
+      (!isDMChannel ||
+        Date.now() - new Date(message.createdAt).getTime() <
+          MESSAGE_EDIT_WINDOW_MS) &&
       message.contentType !== 'gif';
 
     const authorName =
@@ -1039,6 +1049,7 @@ let derivedAttachments = [];
       <div
         id={`msg-${message._id}`}
         ref={messageRef}
+        onContextMenu={handleLinkContextMenu}
         className={`relative group chat-message-row ${highlightMessageId === message._id ? "message-highlight" : ""}`}
         style={{
           background: isSelected
@@ -1565,6 +1576,10 @@ let derivedAttachments = [];
               onClose={() => setShowInfoModal(false)}
             />
           )}
+          <MessageLinkContextMenu
+            context={linkContextMenu}
+            onClose={() => setLinkContextMenu(null)}
+          />
         </div>
       </div>
     );

@@ -6,7 +6,10 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useNotificationPrefStore } from '../stores/notificationPrefStore';
 import api, { channelAPI, notificationPrefAPI, directoriesAPI, workspaceAPI, categoryAPI } from '../services/api';
 import logger from '../utils/logger';
-import { isChatAppChannel } from '../utils/channelOrigin';
+import { getChannelPermissions, resolveChannelHost, sortMembersWithHostFirst } from '../utils/channelOrigin';
+import { useWorkspaceMembers } from './queries/useWorkspaceMembers';
+import { isCanceledError, isChannelAccessDeniedError } from '../utils/channelAccess';
+import { getSocket } from '../services/socket';
 import Toast from 'react-native-toast-message';
 import { useChannels } from './queries/useChannels';
 import { useChannelMembers } from './queries/useChannelMembers';
@@ -15,6 +18,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const createDM = useChannelStore((s) => s.createDM);
   const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
   const updateChannel = useChannelStore((s) => s.updateChannel);
+  const deleteChannel = useChannelStore((s) => s.deleteChannel);
   const starChannel = useChannelStore((s) => s.starChannel);
   const starredIds = useChannelStore((s) => s.starredIds) || [];
   const { user: currentUser } = useAuthStore();
@@ -24,7 +28,10 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const channel = channels.find((c) => c._id === channelId);
   const isOneToOneDM = channel?.type === 'dm' && (channel?.dmParticipants?.length || 0) <= 2;
 
-  const { data: members = [], isLoading: isLoadingMembers, refetch: refetchMembers, error: membersError } = useChannelMembers(channelId);
+  const { data: rawMembers = [], isLoading: isLoadingMembers, refetch: refetchMembers, error: membersError } = useChannelMembers(channelId);
+  const { data: workspaceMembers = [] } = useWorkspaceMembers(activeWorkspace?._id);
+  const hostMember = resolveChannelHost({ channel, members: rawMembers, workspaceMembers, currentUser });
+  const members = sortMembersWithHostFirst(rawMembers, channel, hostMember);
   const [showMembersList, setShowMembersList] = useState(false);
   const isMutedStore = useNotificationPrefStore((s) => !!s.mutedChannels?.[channelId]);
   const [isMutedLocal, setIsMutedLocal] = useState(false);
@@ -34,6 +41,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState("");
 
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [memberSearchResults, setMemberSearchResults] = useState([]);
@@ -42,6 +50,7 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
 
   useEffect(() => {
     if (membersError) {
+      if (isChannelAccessDeniedError(membersError) || isCanceledError(membersError)) return;
       logger.error('Failed to load channel members:', membersError);
       Toast.show({ type: 'error', text1: 'Unable to load channel members', text2: membersError.userMessage || membersError.message });
     }
@@ -227,12 +236,52 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
     );
   };
 
-  const userRole = (currentUser?.role || '').toLowerCase();
-  const isSystemAdminOrManager = userRole === 'admin' || userRole === 'manager' || currentUser?.isAdmin;
-  const isChannelCreator = channel?.createdBy === currentUser?._id;
-  const isChannelAdmin = channel?.admins?.includes(currentUser?._id);
-  const canAddMember = isChatAppChannel(channel);
-  const canMoveToCategory = channel?.type !== 'dm' && isChatAppChannel(channel);
+  const {
+    canAddMember,
+    canEditChannel,
+    canMoveToCategory,
+    canDeleteChannel,
+    canLeaveChannel,
+  } = getChannelPermissions({ channel, members, user: currentUser, activeWorkspace });
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !channelId) return;
+    const onRemoved = ({ channelId: removedId } = {}) => {
+      if (removedId && String(removedId) === String(channelId)) {
+        navigation.navigate('Main');
+      }
+    };
+    socket.on('channel:deleted', onRemoved);
+    socket.on('channel:removed', onRemoved);
+    return () => {
+      socket.off('channel:deleted', onRemoved);
+      socket.off('channel:removed', onRemoved);
+    };
+  }, [channelId, navigation]);
+
+  const handleDeleteChannel = () => {
+    const label = channel?.name || channelName || 'this channel';
+    Alert.alert(
+      'Delete channel',
+      `Are you sure you want to delete #${label}? The channel and all its membership associations will be permanently removed. This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Channel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteChannel(channelId);
+              navigation.navigate('Main');
+            } catch (err) {
+              logger.error('Failed to delete channel:', err);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const categories = useChannelStore((s) => s.categories) || [];
   const fetchCategories = useChannelStore((s) => s.fetchCategories);
@@ -269,12 +318,19 @@ export const useChannelDetails = (channelId, channelName, navigation) => {
     channel,
     isOneToOneDM,
     canAddMember,
+    canEditChannel,
+    canDeleteChannel,
+    canLeaveChannel,
     canMoveToCategory,
+    showEditModal,
+    setShowEditModal,
+    handleDeleteChannel,
     categories,
     showMoveCategoryModal,
     setShowMoveCategoryModal,
     handleAssignCategory,
     members,
+    hostMember,
     isLoadingMembers,
     showMembersList,
     setShowMembersList,

@@ -255,4 +255,57 @@ export async function announceWorkspaceUpdated({ workspace, changes = {} }) {
   }
 }
 
-export default { announceWorkspaceCreated, announceWorkspaceLinked, announceWorkspaceUpdated };
+/**
+ * Push shared user profile updates (such as avatar/photo) from ChatApp
+ * to FlowTask. FlowTask writes this update without dispatching its outbound
+ * user hook, preventing a sync ping-pong loop.
+ */
+export async function announceUserProfileUpdated({ chatUser, changes = {} }) {
+  if (!env.FLOWTASK_ENABLED || !env.FLOWTASK_API_URL || !env.FLOWTASK_WEBHOOK_SECRET) {
+    return null;
+  }
+
+  const flowTaskUserId = chatUser?.flowTaskUserId;
+  if (!flowTaskUserId && !chatUser?.email) return null;
+
+  const sharedChanges = Object.fromEntries(
+    Object.entries(changes).filter(([field]) => field === 'avatar' || field === 'name'),
+  );
+  if (Object.keys(sharedChanges).length === 0) return null;
+
+  const payload = {
+    chatUserId: chatUser._id.toString(),
+    flowTaskUserId: flowTaskUserId ? String(flowTaskUserId) : null,
+    email: chatUser.email,
+    user: {
+      avatar: chatUser.avatar || null,
+      name: chatUser.name,
+    },
+    changes: sharedChanges,
+  };
+
+  try {
+    const { deliveryId: updateDeliveryId } = await postWorkspaceUpdateWithRetry({
+      path: '/api/chat-integration/inbound/user-updated',
+      eventName: 'USER_UPDATED',
+      payload,
+    });
+    logger.info('User profile synced from ChatApp to FlowTask', {
+      chatUserId: chatUser._id.toString(),
+      flowTaskUserId,
+      deliveryId: updateDeliveryId,
+      fields: Object.keys(sharedChanges),
+    });
+    return { success: true };
+  } catch (err) {
+    logger.warn('Failed to sync user profile from ChatApp to FlowTask', {
+      chatUserId: chatUser._id.toString(),
+      flowTaskUserId,
+      error: err.message,
+    });
+    return null;
+  }
+}
+
+export default { announceWorkspaceCreated, announceWorkspaceLinked, announceWorkspaceUpdated, announceUserProfileUpdated };
+

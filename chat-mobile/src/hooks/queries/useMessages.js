@@ -3,6 +3,8 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import api, { messageAPI } from '../../services/api';
 import { queryKeys } from '../../queries/queryKeys';
 import { useAuthStore } from '../../stores/authStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { shouldRetryChannelQuery } from '../../utils/channelAccess';
 import { enqueueMessage } from '../../services/offlineQueue';
 import { useChatStore } from '../../stores/chatStore';
 import { fileAPI } from '../../services/api';
@@ -27,18 +29,19 @@ import { orderMessageRecords } from '../../utils/messageTimeline';
  */
 export const useMessages = (channelId, options = {}) => {
   const queryClient = useQueryClient();
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
 
   return useInfiniteQuery({
     queryKey: queryKeys.messages(channelId),
     queryFn: async ({ pageParam = null, signal }) => {
       const snapshot = reportingSnapshot();
       if (!isReportingSnapshotCurrent(snapshot, channelId)) return { items: [], hasMore: false, nextCursor: null };
-      if (!channelId) return { items: [], hasMore: false, nextCursor: null };
+      if (!channelId || !activeWorkspaceId) return { items: [], hasMore: false, nextCursor: null };
 
       const params = { limit: 50 };
       if (pageParam) params.cursor = pageParam;
 
-      const { data } = await api.get(`/channels/${channelId}/messages`, { params, signal });
+      const { data } = await api.get(`/channels/${channelId}/messages`, { params, signal, headers: { 'X-Workspace-Id': activeWorkspaceId } });
       if (!isReportingSnapshotCurrent(snapshot, channelId)) throw new Error("Reporting access changed; refresh messages.");
       let apiMessages = data?.data?.items || [];
       const hasMore = data?.data?.hasMore || false;
@@ -98,7 +101,8 @@ export const useMessages = (channelId, options = {}) => {
       return { items: apiMessages, hasMore, nextCursor };
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
-    enabled: !!channelId,
+    enabled: Boolean(channelId && activeWorkspaceId) && (options.enabled !== false),
+    retry: (failureCount, error) => shouldRetryChannelQuery(failureCount, error, 2),
     // Keep data fresh — 30 s is enough so socket events don't get wiped too quickly.
     staleTime: 30 * 1000,
     ...options,

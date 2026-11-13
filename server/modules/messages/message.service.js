@@ -678,6 +678,14 @@ class MessageService {
       throw new ForbiddenError('Cannot edit a deleted message');
     }
 
+    const channel = await channelRepository.findById(message.channelId, { workspaceId });
+    if (channel?.type === CHANNEL_TYPES.DM) {
+      const createdAt = new Date(message.createdAt).getTime();
+      if (!Number.isFinite(createdAt) || Date.now() - createdAt >= MESSAGE_EDIT_WINDOW_MS) {
+        throw new ForbiddenError('Direct messages can only be edited within 45 minutes');
+      }
+    }
+
     const sanitizedContent = newContent ? sanitizeHtml(newContent) : '';
     const sanitizedHtml = htmlContent ? sanitizeHtml(htmlContent) : sanitizedContent;
 

@@ -207,7 +207,7 @@ function SectionDivider({ label }) {
 
 /* ─── Main component ──────────────────────────────────────────────── */
 export default function EditChannelModal({ channel, onClose }) {
-  const { editChannel, deleteChannel } = useChannelStore()
+  const { editChannel, deleteChannel, membersByChannel } = useChannelStore()
   const { user } = useAuthStore()
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -218,6 +218,7 @@ export default function EditChannelModal({ channel, onClose }) {
   const [description,  setDescription]  = useState(channel.description || '')
   const [topic,        setTopic]        = useState(channel.topic || '')
   const [visibility,   setVisibility]   = useState(channel.visibility || 'public')
+  const [allowAllMembersEditCanvas, setAllowAllMembersEditCanvas] = useState(channel.allowAllMembersEditCanvas !== false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error,        setError]        = useState('')
   const [focused,      setFocused]      = useState(null)
@@ -235,11 +236,19 @@ export default function EditChannelModal({ channel, onClose }) {
     || description !== (channel.description || '')
     || topic !== (channel.topic || '')
     || visibility !== (channel.visibility || 'public')
+    || allowAllMembersEditCanvas !== (channel.allowAllMembersEditCanvas !== false)
 
   const isCustom = isChatAppChannel(channel)
-  const isWsAdmin = ['owner', 'admin'].includes(activeWorkspace?.role)
-  const isChannelOwner = channel.createdBy === user?._id || channel.isOwner?.(user?._id)
-  const canDeleteChannel = isCustom && (isChannelOwner || isWsAdmin)
+  const createdById = channel.createdBy?._id || channel.createdBy
+  const userIdStr = user?._id != null ? String(user._id) : null
+  const channelMembers = membersByChannel?.[channel._id] || []
+  const myMembership = channelMembers.find((m) => userIdStr && String(m._id || m.userId) === userIdStr)
+  const isChannelOwner =
+    myMembership?.channelRole === 'owner' ||
+    Boolean(myMembership?.isHost) ||
+    Boolean(createdById && userIdStr && String(createdById) === userIdStr) ||
+    Boolean(channel.isOwner?.(user?._id))
+  const canDeleteChannel = isCustom && isChannelOwner
 
   const handleDelete = async () => {
     const ok = await confirm({
@@ -267,7 +276,7 @@ export default function EditChannelModal({ channel, onClose }) {
     setIsSubmitting(true)
     setError('')
     try {
-      const data = { description: description.trim(), topic: topic.trim() }
+      const data = { description: description.trim(), topic: topic.trim(), allowAllMembersEditCanvas }
       if (!isLocked) { data.name = name.trim(); data.visibility = visibility }
       await editChannel(channel._id, data)
       onClose()
@@ -280,14 +289,19 @@ export default function EditChannelModal({ channel, onClose }) {
 
   const inputStyle = {
     width: '100%', padding: '11px 13px',
-    border: '1.5px solid var(--border-color)',
+    borderWidth: '1.5px',
+    borderStyle: 'solid',
+    borderColor: 'var(--border-color)',
     borderRadius: 'var(--radius-md)',
     background: 'var(--bg-input)',
     color: 'var(--text-primary)',
     font: 'inherit', fontSize: 14, outline: 'none',
     transition: 'border-color 160ms ease, background 160ms ease',
   }
-  const focusedBorder = { borderColor: 'var(--accent-color)' }
+  const getInputStyle = (fieldName) => ({
+    ...inputStyle,
+    borderColor: focused === fieldName ? 'var(--accent-color)' : 'var(--border-color)',
+  })
 
   return (
     <AnimatePresence>
@@ -411,9 +425,8 @@ export default function EditChannelModal({ channel, onClose }) {
                     maxLength={50}
                     placeholder="channel-name"
                     style={{
-                      ...inputStyle,
+                      ...getInputStyle('name'),
                       paddingLeft: 34,
-                      ...(focused === 'name' ? focusedBorder : {}),
                       opacity: isLocked ? .5 : 1,
                       cursor: isLocked ? 'not-allowed' : 'text',
                     }}
@@ -554,9 +567,10 @@ export default function EditChannelModal({ channel, onClose }) {
                     }}>
                       <input
                         type="checkbox"
-                        checked={channel.allowAllMembersEditCanvas !== false}
+                        checked={allowAllMembersEditCanvas}
                         onChange={async (e) => {
                           const newValue = e.target.checked;
+                          setAllowAllMembersEditCanvas(newValue);
                           try {
                             await editChannel(channel._id, { allowAllMembersEditCanvas: newValue });
                             toast.success(newValue
@@ -564,6 +578,7 @@ export default function EditChannelModal({ channel, onClose }) {
                               : 'Only admins can now edit canvases'
                             );
                           } catch (err) {
+                            setAllowAllMembersEditCanvas(!newValue);
                             toast.error('Failed to update canvas permissions');
                           }
                         }}
@@ -603,9 +618,8 @@ export default function EditChannelModal({ channel, onClose }) {
                     placeholder="What is this channel currently about?"
                     maxLength={250}
                     style={{
-                      ...inputStyle,
+                      ...getInputStyle('topic'),
                       paddingLeft: 34,
-                      ...(focused === 'topic' ? focusedBorder : {}),
                     }}
                   />
                 </InputWrap>
@@ -635,12 +649,11 @@ export default function EditChannelModal({ channel, onClose }) {
                     rows={3}
                     maxLength={250}
                     style={{
-                      ...inputStyle,
+                      ...getInputStyle('description'),
                       paddingLeft: 34,
                       resize: 'vertical',
                       lineHeight: 1.65,
                       minHeight: 80,
-                      ...(focused === 'description' ? focusedBorder : {}),
                     }}
                   />
                 </InputWrap>
@@ -776,7 +789,9 @@ export default function EditChannelModal({ channel, onClose }) {
                     >
                       <span style={{
                         width: 13, height: 13,
-                        border: '2px solid rgba(255,255,255,.3)',
+                        borderWidth: '2px',
+                        borderStyle: 'solid',
+                        borderColor: 'rgba(255,255,255,.3)',
                         borderTopColor: '#fff', borderRadius: '50%',
                         animation: 'spin .8s linear infinite',
                         display: 'inline-block', flexShrink: 0,

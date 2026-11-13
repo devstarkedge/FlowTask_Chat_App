@@ -386,6 +386,7 @@ export const channelAPI = {
   search: (q) => api.get('/channels/search', { params: { q } }),
   get: (id) => api.get(`/channels/${id}`),
   update: (id, data) => api.put(`/channels/${id}`, data),
+  delete: (id) => api.delete(`/channels/${id}`),
 };
 
 // Thread API
@@ -540,6 +541,46 @@ export const usersAPI = {
   setPresence: (status) => api.put('/users/presence', { status }),
   setCustomStatus: (data) => api.put('/users/status', data),
   updateUser: (id, data) => api.patch(`/users/${id}`, data),
+  uploadAvatar: async (fileObj) => {
+    const uploadUrl = `${BASE_URL}/users/avatar`;
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      try {
+        const FileSystem = require('expo-file-system/legacy');
+        let fileUri = fileObj.uri;
+        if (Platform.OS === 'android' && !fileUri.startsWith('file://') && !fileUri.startsWith('content://')) {
+          fileUri = `file://${fileUri}`;
+        }
+        const workspaceId = resolveWorkspaceId();
+        const response = await FileSystem.uploadAsync(uploadUrl, fileUri, {
+          fieldName: 'avatar',
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          headers: {
+            ...(cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {}),
+            ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+          },
+          mimeType: fileObj.type || 'image/jpeg',
+        });
+        if (response.status >= 200 && response.status < 300) {
+          return { data: JSON.parse(response.body) };
+        }
+        let errBody = {};
+        try { errBody = JSON.parse(response.body); } catch (_) {}
+        const err = new Error(errBody?.error || errBody?.message || 'Failed to upload profile photo');
+        err.response = { status: response.status, data: errBody };
+        throw err;
+      } catch (nativeErr) {
+        if (nativeErr?.response) throw nativeErr;
+        logger.warn('[usersAPI] Native avatar upload fallback to axios:', nativeErr?.message);
+      }
+    }
+    const formData = new FormData();
+    formData.append('avatar', fileObj);
+    return api.post('/users/avatar', formData, {
+      headers: { 'Content-Type': undefined },
+    });
+  },
+  removeAvatar: () => api.delete('/users/avatar'),
   getChannelMembers: (channelId, config = {}) => api.get(`/channels/${channelId}/members`, config),
   getDMContacts: (search) => api.get('/users/dm-contacts', { params: { search } }),
   pauseNotifications: (data) => api.post('/users/dnd/pause', data),

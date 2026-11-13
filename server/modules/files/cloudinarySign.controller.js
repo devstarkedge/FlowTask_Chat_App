@@ -116,6 +116,33 @@ function shouldRetryWithSignedUrl(upstream, cldError = "") {
   return cldError === "unknown" || /deny|acl|unauthorized|forbidden|access/i.test(cldError || "");
 }
 
+async function fetchAssetPartUpstream(partAsset, assetId) {
+  let fetchUrl = partAsset.secureUrl;
+  let upstream = await fetchCloudinaryWithTimeout(fetchUrl, assetId);
+
+  if (!upstream.ok) {
+    let cldError = upstream.headers.get("x-cld-error") || "unknown";
+    if (shouldRetryWithSignedUrl(upstream, cldError)) {
+      const signedUrl = buildSignedDeliveryUrl(partAsset);
+      if (signedUrl && signedUrl !== fetchUrl) {
+        fetchUrl = signedUrl;
+        upstream = await fetchCloudinaryWithTimeout(fetchUrl, assetId);
+        if (!upstream.ok) {
+          cldError = upstream.headers.get("x-cld-error") || cldError;
+        }
+      }
+      if (!upstream.ok && shouldRetryWithSignedUrl(upstream, cldError)) {
+        const apiDownloadUrl = buildSignedApiDownloadUrl(partAsset);
+        if (apiDownloadUrl && apiDownloadUrl !== fetchUrl) {
+          fetchUrl = apiDownloadUrl;
+          upstream = await fetchCloudinaryWithTimeout(fetchUrl, assetId);
+        }
+      }
+    }
+  }
+  return upstream;
+}
+
 async function fetchCloudinaryWithTimeout(fetchUrl, assetId) {
   assertCloudinaryDeliveryUrl(fetchUrl, env.CLOUDINARY_CLOUD_NAME);
   const controller = new AbortController();
@@ -298,6 +325,87 @@ export const proxyFileAsset = asyncHandler(async (req, res) => {
   assertCloudinaryDeliveryUrl(storedUrl, env.CLOUDINARY_CLOUD_NAME);
   if (!parsedUrl.hostname.endsWith(".cloudinary.com")) {
     throw new ForbiddenError("Only Cloudinary CDN files can be proxied");
+  }
+
+  // ── Multi-part chunked asset streaming (e.g. >9MB ZIPs split across Cloudinary raw parts) ──
+  if (asset.metadata?.isChunked && Array.isArray(asset.metadata?.parts) && asset.metadata.parts.length > 0) {
+    const parts = [...asset.metadata.parts].sort((a, b) => a.index - b.index);
+    const contentType = asset.mimeType || "application/octet-stream";
+    const safeFilename = encodeURIComponent(asset.originalName || "file");
+    const isInlineMedia =
+      ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"].includes(contentType.toLowerCase().split(";")[0]) ||
+      contentType.startsWith("video/") ||
+      contentType.startsWith("audio/") ||
+      contentType === "application/pdf";
+    const disposition = isInlineMedia ? "inline" : `attachment; filename="${safeFilename}"`;
+
+    const firstPart = parts[0];
+    assertCloudinaryDeliveryUrl(firstPart.secureUrl, env.CLOUDINARY_CLOUD_NAME);
+    const firstUpstream = await fetchAssetPartUpstream(
+      { publicId: firstPart.publicId, secureUrl: firstPart.secureUrl, resourceType: "raw", originalName: "" },
+      assetId,
+    );
+
+    if (!firstUpstream.ok) {
+      const cldError = firstUpstream.headers.get("x-cld-error") || "unknown";
+      logger.error("Proxy: chunked part 0 upstream failure", {
+        assetId,
+        status: firstUpstream.status,
+        cldError,
+      });
+      return res.status(502).json({
+        success: false,
+        error: {
+          message: `Cloudinary proxy error: HTTP ${firstUpstream.status} ${firstUpstream.statusText}`,
+          cloudinaryError: cldError,
+          statusCode: firstUpstream.status,
+        },
+      });
+    }
+
+    res.setHeader("Content-Type", contentType);
+    if (asset.fileSize) res.setHeader("Content-Length", String(asset.fileSize));
+    res.setHeader("Content-Disposition", disposition);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    const streamUpstream = async (upstreamResp) => {
+      const reader = upstreamResp.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const canContinue = res.write(Buffer.from(value));
+        if (!canContinue) {
+          await new Promise((resolve) => res.once("drain", resolve));
+        }
+      }
+    };
+
+    try {
+      await streamUpstream(firstUpstream);
+      for (let i = 1; i < parts.length; i++) {
+        const part = parts[i];
+        assertCloudinaryDeliveryUrl(part.secureUrl, env.CLOUDINARY_CLOUD_NAME);
+        const partUpstream = await fetchAssetPartUpstream(
+          { publicId: part.publicId, secureUrl: part.secureUrl, resourceType: "raw", originalName: "" },
+          assetId,
+        );
+        if (!partUpstream.ok) {
+          throw new Error(`Chunk part ${i} fetch failed: HTTP ${partUpstream.status}`);
+        }
+        await streamUpstream(partUpstream);
+      }
+      res.end();
+    } catch (streamErr) {
+      logger.error("Proxy: error mid-stream on chunked file", {
+        assetId,
+        error: streamErr.message,
+      });
+      if (!res.writableEnded) {
+        res.destroy(streamErr);
+      }
+    }
+    return;
   }
 
   // First try the stored secureUrl exactly as saved in the database. If Cloudinary

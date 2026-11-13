@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useChannelStore } from "../../stores/channelStore";
-import { X, Search, Check, FolderPlus, Hash, Lock, Volume2, ChevronDown } from "lucide-react";
+import { X, Search, Check, FolderPlus, Hash, Lock, Volume2, ChevronDown, GripVertical } from "lucide-react";
 import Loader from '../shared/Loader';
 import toast from "react-hot-toast";
 import api, { categoryAPI } from "../../services/api";
@@ -61,7 +61,13 @@ const STYLES = `
   .ccm-btn-submit { padding: 9px 18px; border-radius: 6px; border: none; background: var(--accent-primary, #007a5a); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
   .ccm-btn-submit:hover { background: var(--accent-hover, #148567); }
   .ccm-btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-  .ccm-dept-item { border: 1px solid var(--border-primary, #EBECEF); border-radius: 6px; margin-bottom: 8px; background: var(--bg-primary, #fff); overflow: hidden; transition: all 0.2s ease; }
+  .ccm-drag-handle { display: inline-flex; align-items: center; justify-content: center; cursor: grab; color: var(--text-secondary, #616061); margin-right: 4px; padding: 2px; opacity: 0.6; transition: opacity 0.15s ease; }
+  .ccm-drag-handle:hover { opacity: 1; color: var(--text-primary); }
+  .ccm-drag-handle:active { cursor: grabbing; }
+  .ccm-dept-item { border: 1px solid var(--border-primary, #EBECEF); border-radius: 6px; margin-bottom: 8px; background: var(--bg-primary, #fff); overflow: hidden; transition: border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease; cursor: grab; }
+  .ccm-dept-item:active { cursor: grabbing; }
+  .ccm-dept-item.is-dragging { opacity: 0.35 !important; transform: scale(0.99); border-color: var(--accent-primary, #005A9E); }
+  .ccm-dept-item.is-drag-over { border-top: 2.5px solid var(--accent-primary, #005A9E) !important; background: var(--accent-primary-light, rgba(0,90,158,0.06)); }
   .ccm-dept-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: var(--bg-primary, #fff); color: var(--text-primary, #1D1C1D); font-size: 14px; font-weight: 500; }
   .ccm-dept-header:hover { background: var(--bg-secondary, #F8F8F8); }
   .ccm-dept-header.is-selected { background: var(--bg-secondary, #F8F8F8); border-bottom: 1px solid var(--border-primary, #EBECEF); }
@@ -74,6 +80,24 @@ const STYLES = `
   .ccm-selected-chip__remove:hover { color: var(--text-primary, #1D1C1D); }
 `;
 
+function findCategoryForDept(dept, categoriesList) {
+  if (!dept || !categoriesList) return null;
+  const deptId = String(dept._id || '');
+  const extId = String(dept.externalId || '');
+  const deptName = (dept.name || '').trim().toLowerCase();
+
+  return categoriesList.find((cat) => {
+    const catDeptId = String(cat.departmentId?._id || cat.departmentId || '');
+    const catExtId = String(cat.departmentId?.externalId || '');
+    const catName = (cat.name || '').trim().toLowerCase();
+
+    if (deptId && (catDeptId === deptId || catExtId === deptId)) return true;
+    if (extId && (catDeptId === extId || catExtId === extId)) return true;
+    if (deptName && catName === deptName) return true;
+    return false;
+  });
+}
+
 function getChannelIcon(channel) {
   if (channel.visibility === 'private' || channel.type === 'private') return <Lock size={14} color="var(--text-secondary, #616061)" />;
   if (channel.type === 'system') return <Volume2 size={14} color="var(--text-secondary, #616061)" />;
@@ -81,7 +105,7 @@ function getChannelIcon(channel) {
 }
 
 export default function CreateCategoryModal({ onClose }) {
-  const { channels, categories, fetchCategories, fetchChannels, isLoading: channelsLoading } = useChannelStore();
+  const { channels, categories, fetchCategories, fetchChannels, reorderCategories, isLoading: channelsLoading } = useChannelStore();
   
   // Category Type
   const [categoryType, setCategoryType] = useState(() => {
@@ -92,6 +116,9 @@ export default function CreateCategoryModal({ onClose }) {
   
   // Department State
   const [departments, setDepartments] = useState([]);
+  const [deptList, setDeptList] = useState([]);
+  const [draggedIdx, setDraggedIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
   const [loadingDepts, setLoadingDepts] = useState(false);
   const [departmentError, setDepartmentError] = useState(null);
   const [expandedDepts, setExpandedDepts] = useState({});
@@ -183,22 +210,132 @@ export default function CreateCategoryModal({ onClose }) {
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [channels]);
 
-  const existingDepartmentIds = useMemo(() => new Set(
-    categories
-      .filter((category) => category.type === 'department')
-      .flatMap((category) => [
-        category.departmentId?._id,
-        category.departmentId?.externalId,
-        category.departmentId,
-      ])
-      .filter((id) => typeof id === 'string')
-      .map(String),
-  ), [categories]);
+  const existingDepartmentIds = useMemo(() => {
+    const ids = new Set();
+    categories.forEach((category) => {
+      if (category.type === 'department') {
+        if (category.departmentId) {
+          if (typeof category.departmentId === 'object') {
+            if (category.departmentId._id) ids.add(String(category.departmentId._id));
+            if (category.departmentId.externalId) ids.add(String(category.departmentId.externalId));
+          } else {
+            ids.add(String(category.departmentId));
+          }
+        }
+        if (category.name) {
+          ids.add(category.name.trim().toLowerCase());
+        }
+      }
+    });
+    return ids;
+  }, [categories]);
   const hasDepartmentCategory = existingDepartmentIds.size > 0;
+
+  useEffect(() => {
+    if (visibleDepartments.length === 0) {
+      setDeptList([]);
+      return;
+    }
+
+    // Sort categories exactly as CategoryList does in navigation sidebar
+    const sortedCategories = [...categories].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    // Sort visibleDepartments to match navigation sidebar categories order 1:1
+    const sorted = [...visibleDepartments].sort((a, b) => {
+      const catA = findCategoryForDept(a, sortedCategories);
+      const catB = findCategoryForDept(b, sortedCategories);
+
+      const idxA = catA ? sortedCategories.indexOf(catA) : 9999;
+      const idxB = catB ? sortedCategories.indexOf(catB) : 9999;
+
+      if (idxA !== idxB) return idxA - idxB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    setDeptList(sorted);
+  }, [visibleDepartments, categories]);
+
+  const handleDragStart = (index, e) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(index));
+  };
+
+  const handleDragOver = (index, e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDragEnter = (index, e) => {
+    e.preventDefault();
+    if (draggedIdx !== null && draggedIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (targetIndex, e) => {
+    e.preventDefault();
+    setDragOverIdx(null);
+    if (draggedIdx === null || draggedIdx === targetIndex) {
+      setDraggedIdx(null);
+      return;
+    }
+
+    const sourceIndex = draggedIdx;
+    setDraggedIdx(null);
+
+    const updated = [...deptList];
+    const [movedItem] = updated.splice(sourceIndex, 1);
+    updated.splice(targetIndex, 0, movedItem);
+    setDeptList(updated);
+
+    // Sync categories order with navigation sidebar
+    const categoryOrders = [];
+    const matchedCategoryIds = new Set();
+
+    updated.forEach((dept, index) => {
+      const cat = findCategoryForDept(dept, categories);
+      if (cat) {
+        categoryOrders.push({ id: cat._id, order: index });
+        matchedCategoryIds.add(String(cat._id));
+      }
+    });
+
+    let nextOrder = updated.length;
+    categories.forEach((cat) => {
+      if (!matchedCategoryIds.has(String(cat._id))) {
+        categoryOrders.push({ id: cat._id, order: nextOrder++ });
+      }
+    });
+
+    if (categoryOrders.length > 0) {
+      try {
+        if (reorderCategories) {
+          await reorderCategories(categoryOrders);
+        } else {
+          await categoryAPI.reorder(categoryOrders);
+          await fetchCategories();
+        }
+        toast.success("Category order updated", { id: "cat-reorder-toast", duration: 1500 });
+      } catch (err) {
+        toast.error("Failed to update category order");
+      }
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
 
   const missingDepartments = useMemo(() => visibleDepartments.filter((department) =>
     !existingDepartmentIds.has(String(department._id))
-      && !existingDepartmentIds.has(String(department.externalId)),
+      && !existingDepartmentIds.has(String(department.externalId))
+      && !existingDepartmentIds.has((department.name || '').trim().toLowerCase()),
   ), [visibleDepartments, existingDepartmentIds]);
 
   const allDepartmentsImported = !loadingDepts
@@ -384,7 +521,10 @@ export default function CreateCategoryModal({ onClose }) {
                     : <>Click <strong>"Import Departments"</strong> to enable department categories. Departments appear when they have accessible channels, with project channels listed beneath them.</>}
                 </div>
                 
-                <div className="ccm-label">FLOWTASK DEPARTMENTS</div>
+                <div className="ccm-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>FLOWTASK DEPARTMENTS</span>
+                  <span style={{ fontSize: '11px', fontWeight: 'normal', textTransform: 'none', color: 'var(--text-secondary, #616061)' }}>Drag &amp; drop to reorder</span>
+                </div>
                 <div className="ccm-department-list">
                   {loadingDepts ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary, #616061)', fontSize: '13px' }}>Loading...</div>
@@ -398,19 +538,39 @@ export default function CreateCategoryModal({ onClose }) {
                   ) : visibleDepartments.length === 0 ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: '#616061', fontSize: '13px' }}>No FlowTask departments with accessible channels are available for your account.</div>
                   ) : (
-                    visibleDepartments.map(dept => {
+                    deptList.map((dept, index) => {
                       const isAlreadyImported = existingDepartmentIds.has(String(dept._id))
-                        || existingDepartmentIds.has(String(dept.externalId));
+                        || (dept.externalId && existingDepartmentIds.has(String(dept.externalId)))
+                        || (dept.name && existingDepartmentIds.has(dept.name.trim().toLowerCase()));
                       const isExpanded = expandedDepts[dept._id];
                       
                       const deptChannels = getDeptChannels(dept);
+                      const isDragging = draggedIdx === index;
+                      const isDragOver = dragOverIdx === index;
 
                       return (
-                        <div key={dept._id} className="ccm-dept-item" style={{ opacity: isAlreadyImported ? 0.6 : 1 }}>
+                        <div
+                          key={dept._id}
+                          className={`ccm-dept-item ${isDragging ? 'is-dragging' : ''} ${isDragOver ? 'is-drag-over' : ''}`}
+                          draggable={true}
+                          onDragStart={(e) => handleDragStart(index, e)}
+                          onDragOver={(e) => handleDragOver(index, e)}
+                          onDragEnter={(e) => handleDragEnter(index, e)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(index, e)}
+                          onDragEnd={handleDragEnd}
+                        >
                           <div 
                             className="ccm-dept-header"
                             onClick={() => toggleDeptExpand(dept._id)}
                           >
+                            <span
+                              className="ccm-drag-handle"
+                              title="Drag to reorder"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <GripVertical size={14} />
+                            </span>
                             <span style={{ color: 'var(--text-secondary, #616061)' }}>
                               {isExpanded ? <ChevronDown size={16} /> : <span style={{ display: 'inline-block', transform: 'rotate(-90deg)' }}><ChevronDown size={16} /></span>}
                             </span>

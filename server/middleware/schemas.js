@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CHANNEL_VISIBILITY } from "../config/constants.js";
+import env from "../config/environment.js";
 
 /**
  * Zod validation schemas for all API endpoints.
@@ -29,7 +30,7 @@ export const sendMessageSchema = z
             .number()
             .int()
             .nonnegative()
-            .max(50 * 1024 * 1024),
+            .max(env.MAX_FILE_SIZE),
           url: z.union([z.string().url(), z.string().startsWith("/")]),
           thumbnailUrl: z.string().nullish(),
           source: z.enum(["chat_upload", "flowtask_link"]).optional(),

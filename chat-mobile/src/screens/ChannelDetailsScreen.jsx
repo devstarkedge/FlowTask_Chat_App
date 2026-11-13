@@ -15,16 +15,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeStore } from '../stores/themeStore';
-import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, FolderInput } from "lucide-react-native";
+import { Hash, Users, Pin, Bell, LogOut, FolderOpen, FileText, UserPlus, X, Search, Plus, Lock, Edit2, Star, FolderInput, Settings, Trash2, Info, Crown } from "lucide-react-native";
+import EditChannelModal from '../components/EditChannelModal';
 import { AppAvatar, HeaderBackButton } from '../components/common';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { useChannelDetails } from '../hooks/useChannelDetails';
 
-const DetailItem = ({ icon: Icon, label, onPress, colors, children }) => (
+const DetailItem = ({ icon: Icon, label, onPress, colors, danger = false, children }) => (
   <TouchableOpacity style={[styles.detailItem, { borderBottomColor: colors.border }]} onPress={onPress}>
-    <Icon size={20} color={colors.textSecondary} />
+    <Icon size={20} color={danger ? '#E53E3E' : colors.textSecondary} />
     <View style={styles.detailLabelContainer}>
-      <Text style={[styles.detailLabel, { color: colors.textPrimary }]}>{label}</Text>
+      <Text style={[styles.detailLabel, { color: danger ? '#E53E3E' : colors.textPrimary }]}>{label}</Text>
     </View>
     {children}
   </TouchableOpacity>
@@ -39,12 +40,19 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
     channel,
     isOneToOneDM,
     canAddMember,
+    canEditChannel,
+    canDeleteChannel,
+    canLeaveChannel,
     canMoveToCategory,
+    showEditModal,
+    setShowEditModal,
+    handleDeleteChannel,
     categories,
     showMoveCategoryModal,
     setShowMoveCategoryModal,
     handleAssignCategory,
     members,
+    hostMember,
     isLoadingMembers,
     showMembersList,
     setShowMembersList,
@@ -186,20 +194,26 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingHorizontal: scale(20), marginTop: verticalScale(12) }}>
-              <Text style={[styles.channelName, { color: colors.textPrimary, flexShrink: 1, marginTop: 0 }]} numberOfLines={2}>
-                {channel?.name || channelName}
-              </Text>
-              {!(channel?.type === 'project' && channel?.systemManaged) && (
-                <TouchableOpacity onPress={() => { setNewName(channel?.name || channelName); setIsEditingName(true); }} style={{ marginLeft: scale(8), padding: scale(4) }}>
-                  <Edit2 size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingHorizontal: scale(20), marginTop: verticalScale(12) }}>
+                <Text style={[styles.channelName, { color: colors.textPrimary, flexShrink: 1, marginTop: 0 }]} numberOfLines={2}>
+                  {channel?.name || channelName}
+                </Text>
+                {canEditChannel && (
+                  <TouchableOpacity onPress={() => setShowEditModal(true)} style={{ marginLeft: scale(8), padding: scale(4) }}>
+                    <Edit2 size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              {!!channel?.topic && (
+                <Text style={[styles.channelTopic, { color: colors.textSecondary }]} numberOfLines={3}>
+                  {channel.topic}
+                </Text>
               )}
-            </View>
+            </>
           )}
 
-
-          <View style={styles.actionButtonsRow}>
+          <View style={[styles.actionButtonsRow, { flexWrap: "wrap", paddingHorizontal: scale(12) }]}>
             {canAddMember && (
               <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => { setMemberSearchQuery(""); setShowAddMemberModal(true); }}>
                 <UserPlus size={18} color={colors.textPrimary} />
@@ -214,8 +228,30 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
               <Search size={18} color={colors.textPrimary} />
               <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Search</Text>
             </TouchableOpacity>
+            {canEditChannel && (
+              <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => setShowEditModal(true)}>
+                <Settings size={18} color={colors.textPrimary} />
+                <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Edit</Text>
+              </TouchableOpacity>
+            )}
+            {canDeleteChannel && (
+              <TouchableOpacity style={[styles.actionBtn, { borderColor: "#E53E3E50", backgroundColor: "#E53E3E10" }]} onPress={handleDeleteChannel}>
+                <Trash2 size={18} color="#E53E3E" />
+                <Text style={[styles.actionBtnText, { color: "#E53E3E" }]}>Delete</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
+
+        {!!channel?.description && (
+          <View style={[styles.descriptionBlock, { borderBottomColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
+            <View style={styles.descriptionLabelRow}>
+              <Info size={13} color={colors.textSecondary} />
+              <Text style={[styles.descriptionLabel, { color: colors.textSecondary }]}>DESCRIPTION</Text>
+            </View>
+            <Text style={[styles.descriptionText, { color: colors.textPrimary }]}>{channel.description}</Text>
+          </View>
+        )}
 
         <View style={styles.section}>
           <DetailItem icon={Users} label="View Members" colors={colors} onPress={() => setShowMembersList(!showMembersList)}>
@@ -226,20 +262,45 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
 
           {showMembersList && (
             <View style={[styles.membersContainer, { backgroundColor: colors.backgroundSecondary }]}>
-              {isLoadingMembers ? (
+              {!!hostMember?.name && (
+                <View style={[styles.hostSummaryRow, { borderBottomColor: colors.border }]}>
+                  <Crown size={14} color={colors.primary} />
+                  <Text style={[styles.hostSummaryLabel, { color: colors.textSecondary }]}>Channel Host:</Text>
+                  <Text style={[styles.hostSummaryName, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {hostMember.name}{currentUser?._id && String(hostMember._id) === String(currentUser._id) ? " (You)" : ""}
+                  </Text>
+                </View>
+              )}
+              {isLoadingMembers && members.length === 0 ? (
                 <ActivityIndicator size="small" color={colors.primary} style={{ padding: moderateScale(12) }} />
               ) : members.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No members loaded</Text>
               ) : (
-                members.map((member) => (
-                  <TouchableOpacity key={member._id} style={styles.memberRow} onPress={() => handleMemberPress(member)} activeOpacity={0.6}>
-                    <AppAvatar user={member} size={28} />
-                    <View style={styles.memberInfo}>
-                      <Text style={[styles.memberName, { color: colors.textPrimary }]}>{member.name || 'Member'}</Text>
-                      <Text style={[styles.memberEmail, { color: colors.textSecondary }]}>{member.email}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))
+                members.map((member, idx) => {
+                  const isHost = Boolean(member.isHost);
+                  const isSelf = Boolean(currentUser?._id && String(member._id) === String(currentUser._id));
+                  return (
+                    <TouchableOpacity key={member._id || `m-${idx}`} style={styles.memberRow} onPress={() => handleMemberPress(member)} activeOpacity={0.6}>
+                      <AppAvatar user={member} size={28} />
+                      <View style={styles.memberInfo}>
+                        <View style={styles.memberNameRow}>
+                          <Text style={[styles.memberName, { color: colors.textPrimary, flexShrink: 1 }]} numberOfLines={1}>
+                            {member.name || 'Member'}{isSelf ? ' (You)' : ''}
+                          </Text>
+                          {isHost && (
+                            <View style={[styles.hostBadge, { backgroundColor: colors.primary + "1F", borderColor: colors.primary + "40" }]}>
+                              <Crown size={11} color={colors.primary} />
+                              <Text style={[styles.hostBadgeText, { color: colors.primary }]}>Host</Text>
+                            </View>
+                          )}
+                        </View>
+                        {!!member.email && (
+                          <Text style={[styles.memberEmail, { color: colors.textSecondary }]}>{member.email}</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
               )}
             </View>
           )}
@@ -260,9 +321,23 @@ const ChannelDetailsScreen = ({ route, navigation }) => {
             )}
           </DetailItem>
 
-          <DetailItem icon={LogOut} label="Leave Channel" colors={colors} onPress={handleLeaveChannel} />
+          {canLeaveChannel && (
+            <DetailItem icon={LogOut} label="Leave Channel" colors={colors} onPress={handleLeaveChannel} />
+          )}
+          {canDeleteChannel && (
+            <DetailItem icon={Trash2} label="Delete Channel" colors={colors} danger onPress={handleDeleteChannel} />
+          )}
         </View>
       </ScrollView>
+
+      {/* Edit Channel Modal */}
+      <EditChannelModal
+        visible={showEditModal}
+        channel={channel}
+        members={members}
+        onClose={() => setShowEditModal(false)}
+        onDeleted={() => navigation.navigate('Main')}
+      />
 
       {/* Move to Category Modal */}
       <Modal visible={showMoveCategoryModal} animationType="slide" transparent onRequestClose={() => setShowMoveCategoryModal(false)}>
@@ -350,6 +425,11 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', paddingVertical: verticalScale(24), borderBottomWidth: 1 },
   channelIcon: { width: scale(72), height: verticalScale(72), borderRadius: moderateScale(36), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(12) },
   channelName: { fontSize: moderateScale(22), fontWeight: '700', textAlign: 'center' },
+  channelTopic: { fontSize: moderateScale(13.5), textAlign: 'center', marginTop: verticalScale(6), paddingHorizontal: scale(24), lineHeight: moderateScale(18) },
+  descriptionBlock: { paddingHorizontal: scale(16), paddingVertical: verticalScale(12), borderBottomWidth: StyleSheet.hairlineWidth },
+  descriptionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: verticalScale(4) },
+  descriptionLabel: { fontSize: moderateScale(11), fontWeight: '700', letterSpacing: 0.6 },
+  descriptionText: { fontSize: moderateScale(14), lineHeight: moderateScale(20) },
   memberCount: { fontSize: moderateScale(13), marginTop: verticalScale(4) },
   section: { paddingVertical: verticalScale(8) },
   detailItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(16), paddingVertical: verticalScale(15), borderBottomWidth: StyleSheet.hairlineWidth, gap: 12 },
@@ -357,7 +437,13 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: moderateScale(15), fontWeight: '500' },
   membersContainer: { paddingHorizontal: scale(16), paddingVertical: verticalScale(8) },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(8), gap: 10 },
+  hostSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: verticalScale(8), marginBottom: verticalScale(4), borderBottomWidth: StyleSheet.hairlineWidth },
+  hostSummaryLabel: { fontSize: moderateScale(12), fontWeight: '600' },
+  hostSummaryName: { fontSize: moderateScale(13), fontWeight: '700', flex: 1 },
   memberInfo: { flex: 1 },
+  memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  hostBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: scale(7), paddingVertical: verticalScale(2), borderRadius: moderateScale(10), borderWidth: 1 },
+  hostBadgeText: { fontSize: moderateScale(10.5), fontWeight: '700' },
   memberName: { fontSize: moderateScale(14), fontWeight: '600' },
   memberEmail: { fontSize: moderateScale(11), marginTop: verticalScale(1) },
   emptyText: { fontSize: moderateScale(13), paddingVertical: verticalScale(8), textAlign: 'center' },

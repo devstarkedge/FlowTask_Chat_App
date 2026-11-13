@@ -70,6 +70,21 @@ export default function ChatPanel({
     return channelMessageIds.map((id) => messagesById[id]).filter(Boolean);
   }, [legacyMessages, channelMessageIds, messagesById]);
 
+  const isActivityMessage = useCallback((message) =>
+    message?.contentType === "activity" ||
+    message?.contentType === "system" ||
+    message?.contentType === "bot" ||
+    !!message?.activityMeta,
+  []);
+  const activityMessages = useMemo(
+    () => messages.filter(isActivityMessage),
+    [messages, isActivityMessage],
+  );
+  const conversationMessages = useMemo(
+    () => messages.filter((message) => !isActivityMessage(message)),
+    [messages, isActivityMessage],
+  );
+
   const isEditingInChannel = useMemo(() => {
     return editingMessageId && messages.some(m => m._id === editingMessageId);
   }, [editingMessageId, messages]);
@@ -304,11 +319,21 @@ export default function ChatPanel({
         />
       ) : activeTab === "files" ? (
         <FilesTab channelId={channelId} onOpenFilePreview={onOpenFilePreview} />
+      ) : activeTab === "activity" ? (
+        <MessageList
+          messages={activityMessages}
+          channelId={channelId}
+          onOpenThread={onOpenThread}
+          onOpenProfile={onOpenProfile}
+          onOpenFilePreview={onOpenFilePreview}
+          isDMChannel={isDMChannel}
+          onSaveMessage={onSaveMessage}
+        />
       ) : (
         <>
           <PinnedBar channelId={channelId} />
           <MessageList
-            messages={messages}
+            messages={conversationMessages}
             channelId={channelId}
             onOpenThread={onOpenThread}
             onOpenProfile={onOpenProfile}
@@ -318,7 +343,7 @@ export default function ChatPanel({
           />
           <TypingIndicator channelId={channelId} />
           <div style={{ flexShrink: 0 }}>
-            <MessageInput channelId={channelId} />
+            <MessageInput key={channelId} channelId={channelId} />
           </div>
         </>
       )}

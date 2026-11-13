@@ -7,6 +7,7 @@ import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
+import { useUpdateStore } from './stores/updateStore'
 import { isDesktopApp, setWindowControlsColor } from './services/desktopService'
 
 // Eager load workspace layout (most common route)
@@ -190,6 +191,11 @@ function App() {
 
   usePresenceTracker()
   useTitlebarContrast()
+
+  useEffect(() => {
+    const unsub = useUpdateStore.getState().initUpdater()
+    return () => unsub?.()
+  }, [])
 
   useEffect(() => {
     const state = useAuthStore.getState()

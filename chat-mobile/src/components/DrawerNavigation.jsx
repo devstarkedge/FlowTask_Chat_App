@@ -17,6 +17,7 @@ import { useUIStore } from "../stores/uiStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
+import { sortCategoriesByOrder } from "../utils/categoryOrder";
 import { useChannelStore } from "../stores/channelStore";
 import { disconnectSocket } from "../services/socket";
 import ManageCategoryChannelsModal from "./ManageCategoryChannelsModal";
@@ -476,7 +477,7 @@ const DrawerNavigation = ({ navigation }) => {
           )}
 
           {/* Categories */}
-          {categories.map((cat) => {
+          {sortCategoriesByOrder(categories).map((cat) => {
             const catChannels = channels.filter(c => {
               if (starredIds.includes(c._id)) return false;
               const channelIdStr = c._id?.toString ? c._id.toString() : c._id;

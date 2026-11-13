@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Category from "./Category.model.js";
 import Department from "./Department.model.js";
 import Channel from "../channels/Channel.model.js";
@@ -316,15 +317,25 @@ export const reorderCategories = asyncHandler(async (req, res, next) => {
     return next(new BadRequestError("categoryOrders must be an array"));
   }
 
+  const workspaceObjectId = mongoose.isValidObjectId(req.workspaceId)
+    ? new mongoose.Types.ObjectId(req.workspaceId)
+    : null;
+
   const bulkOps = categoryOrders.map(cat => ({
     updateOne: {
-      filter: { _id: cat.id, workspaceId: req.workspaceId },
-      update: { $set: { order: cat.order } }
+      filter: {
+        _id: mongoose.isValidObjectId(cat.id) ? new mongoose.Types.ObjectId(cat.id) : cat.id,
+        ...(workspaceObjectId ? { workspaceId: workspaceObjectId } : {}),
+      },
+      update: { $set: { order: Number(cat.order) || 0 } }
     }
   }));
 
-  await Category.bulkWrite(bulkOps);
+  if (bulkOps.length > 0) {
+    await Category.bulkWrite(bulkOps);
+  }
 
+  req.app.get("io")?.to(`workspace:${req.workspaceId}`).emit("category:reordered", categoryOrders);
   req.app.get("io")
     ?.to(`ws:${req.workspaceId}:user:${req.user._id}`)
     .emit("category:reordered", categoryOrders);

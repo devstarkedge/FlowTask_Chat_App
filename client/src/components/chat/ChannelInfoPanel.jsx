@@ -115,9 +115,14 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
   ).length
   const isResolvingMembers = memberCount > 0 && members.length === 0
 
-  const myMembership = members.find((m) => m._id === user?._id);
+  const createdById = channel.createdBy?._id || channel.createdBy;
+  const userIdStr = user?._id != null ? String(user._id) : null;
+  const myMembership = members.find((m) => userIdStr && String(m._id || m.userId) === userIdStr);
   const isOwner =
-    myMembership?.channelRole === "owner" || channel.createdBy === user?._id;
+    myMembership?.channelRole === "owner" ||
+    Boolean(myMembership?.isHost) ||
+    Boolean(createdById && userIdStr && String(createdById) === userIdStr) ||
+    Boolean(channel.isOwner?.(user?._id));
   const isAdmin =
     isOwner ||
     myMembership?.channelRole === "admin" ||
@@ -130,12 +135,11 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
     channel.visibility === "private" ||
     (channel.visibility == null && channel.type === "private");
   const isCustom = isChatAppChannel(channel);
-  const isWsAdmin = ["owner", "admin"].includes(activeWorkspace?.role);
-  const canDeleteChannel = isCustom && (isOwner || isWsAdmin);
+  const canDeleteChannel = isCustom && isOwner;
   const canManageMembership =
     isAdmin && !isDM && (isCustom || channel?.slug === 'flowtask-managers');
   const isLastOwner = isOwner && (isResolvingMembers || ownerCount <= 1);
-  const canLeaveChannel = !isSystem && !isSystemManagedProject && !isLastOwner;
+  const canLeaveChannel = isCustom ? !isOwner : (!isSystem && !isSystemManagedProject && !isLastOwner);
   const canEditChannel = !isDM && isAdmin && !isSystemManagedProject;
   const canMoveToCategory = canEditChannel && isCustom;
   const customCategories = categories?.filter((c) => c.type === "custom") || [];
@@ -536,6 +540,11 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                 </span>
                 <span className="cip-count-badge">{memberCount}</span>
               </div>
+              {!isDM && ((() => { const h = members.find((m) => m.isHost || m.channelRole === "owner" || (createdById && String(m._id || m.userId) === String(createdById))); return h?.name || (typeof channel.createdBy === "object" ? channel.createdBy?.name : null); })()) && (
+                <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500 }}>
+                  Host: <strong style={{ color: "var(--text-secondary)" }}>{(() => { const h = members.find((m) => m.isHost || m.channelRole === "owner" || (createdById && String(m._id || m.userId) === String(createdById))); return h?.name || (typeof channel.createdBy === "object" ? channel.createdBy?.name : null); })()}</strong>
+                </span>
+              )}
             </div>
 
             {/* Online */}
@@ -554,6 +563,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                     >
                       <MemberItem
                         member={member}
+                        isHost={Boolean(member.isHost || member.channelRole === 'owner' || (createdById && String(member._id || member.userId) === String(createdById)))}
                         onOpenProfile={onOpenProfile}
                         canRemove={
                           canManageMembership &&
@@ -588,6 +598,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                     >
                       <MemberItem
                         member={member}
+                        isHost={Boolean(member.isHost || member.channelRole === 'owner' || (createdById && String(member._id || member.userId) === String(createdById)))}
                         onOpenProfile={onOpenProfile}
                         canRemove={
                           canManageMembership &&
@@ -625,6 +636,7 @@ export default function ChannelInfoPanel({ channel: channelProp, onOpenProfile }
                     >
                       <MemberItem
                         member={member}
+                        isHost={Boolean(member.isHost || member.channelRole === 'owner' || (createdById && String(member._id || member.userId) === String(createdById)))}
                         onOpenProfile={onOpenProfile}
                         canRemove={false}
                       />

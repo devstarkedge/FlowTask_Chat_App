@@ -22,8 +22,8 @@ import HuddleMeetingLink from './HuddleMeetingLink';
 
 function CameraVideo({stream,self}) {
   const ref=useRef(null);
-  useEffect(()=>{const video=ref.current;video.srcObject=stream;video.play().catch(()=>{});return()=>{video.pause();video.srcObject=null;};},[stream]);
-  return <video ref={ref} autoPlay playsInline muted={self} className="huddle-camera-video" aria-label={self?'Your camera':'Participant camera'}/>;
+  useEffect(()=>{const video=ref.current;if(!video)return;video.muted=Boolean(self);video.srcObject=stream;video.play().catch(()=>{});return()=>{video.pause();video.srcObject=null;};},[stream,self]);
+  return <video ref={ref} autoPlay playsInline muted={Boolean(self)} style={self?{transform:'scaleX(-1)'}:undefined} className="huddle-camera-video" aria-label={self?'Your camera':'Participant camera'}/>;
 }
 function ParticipantTile({name,avatar,muted,self,camera,speaking,handRaised}) {
   const [failed,setFailed]=useState(false);
@@ -87,7 +87,9 @@ export default function HuddleWindow() {
   const otherSession=session && !joined;
   const failure=error || audio.error;
   const denied=!(joined?audio.withoutMicrophone:audio.joinWithoutMicrophone) && (permission==='denied' || /microphone.*(?:denied|access)/i.test(failure || ''));
-  const people=joined?huddlePeople(state?.participants,session?.id):[{id:'preview',userId:user._id,name:user.name || 'You',avatar:user.avatar}];
+  const rawPeople=joined?huddlePeople(state?.participants,session?.id):[{id:'preview',userId:user._id,name:user.name || 'You',avatar:user.avatar}];
+  const hasSelfInPeople=rawPeople.some(person=>person.id===session?.id || String(person.userId)===String(user._id));
+  const people=joined && !hasSelfInPeople?[{id:session.id,userId:user._id,name:user.name || 'You',avatar:user.avatar,muted:audio.muted},...rawPeople]:rawPeople;
   const muted=joined?audio.muted:audio.joinWithoutMicrophone || audio.startMuted;
   const elapsed=Math.max(0,Math.floor((now-new Date(state?.huddle?.startedAt || now).getTime())/1000));
   const duration=`${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}`;

@@ -222,31 +222,7 @@ export default function NavigationSidebar({
     return ids;
   }, [categories, channels]);
 
-  const projectChannels = channels.filter(
-    (c) => c.type === "project" && !c.isArchived && !categorizedChannelIds.has(String(c._id)),
-  );
-  
-  const publicChannels = channels.filter(
-    (c) =>
-      ((c.type === "public" && c.visibility !== "private") ||
-        (c.type !== "public" && c.visibility === "public")) &&
-      !c.isArchived &&
-      c.type !== "project" &&
-      c.type !== "department" &&
-      c.type !== "team" &&
-      c.type !== "dm" &&
-      c.type !== "system" &&
-      c.type !== "self" &&
-      !categorizedChannelIds.has(String(c._id)),
-  );
-  
-  const privateChannels = channels.filter(
-    (c) =>
-      c.type === "private" &&
-      !c.isArchived &&
-      c.type !== "project" &&
-      !categorizedChannelIds.has(String(c._id)),
-  );
+  const isDMMode = mode === "dms";
 
   const selfChannel = useMemo(
     () => channels.find((c) => c.isSelfDM || c.isSelf || c.type === "self"),
@@ -318,15 +294,6 @@ export default function NavigationSidebar({
       });
   }, [channels, user]);
 
-  const systemChannels = channels.filter(
-    (c) => c.type === "system" && !c.isArchived,
-  );
-  const deptChannels = channels.filter(
-    (c) => (c.type === "department" || c.type === "team") && !c.isArchived,
-  );
-
-  const isDMMode = mode === "dms";
-
   const sortChannels = (list) => {
     return [...list].sort((a, b) => {
       const aUnread = unreads[a._id] || 0;
@@ -340,30 +307,9 @@ export default function NavigationSidebar({
     });
   };
 
-  // Resolve favorite targets to channel objects for sidebar rendering
-  const favoriteChannels = useMemo(() => {
-    const favChannelIds = new Set();
-    const favDMIds = new Set();
-
-    for (const fav of favorites) {
-      if (fav.targetType === 'channel' || fav.targetType === 'private_channel' || fav.targetType === 'project') {
-        favChannelIds.add(fav.targetId);
-      } else if (fav.targetType === 'dm') {
-        favDMIds.add(fav.targetId);
-      }
-    }
-
-    const resolved = [];
-    for (const ch of channels) {
-      if (favChannelIds.has(ch._id) || favDMIds.has(ch._id)) {
-        resolved.push(ch);
-      }
-    }
-    return resolved;
-  }, [favorites, channels]);
-
-  // Channels and DMs with unread messages
+  // Channels and DMs with unread messages (shown in UNREAD section at the top)
   const unreadConversations = useMemo(() => {
+    if (isDMMode) return [];
     const dmMap = new Map(dmChannels.map((dm) => [dm._id, dm]));
     const unreadList = channels
       .filter((c) => {
@@ -379,7 +325,103 @@ export default function NavigationSidebar({
       });
 
     return sortChannels(unreadList);
-  }, [channels, unreads, dmChannels]);
+  }, [channels, unreads, dmChannels, isDMMode]);
+
+  const unreadIds = useMemo(() => {
+    return new Set(unreadConversations.map((c) => String(c._id)));
+  }, [unreadConversations]);
+
+  // Resolve favorite targets to channel objects for sidebar rendering
+  const favoriteChannels = useMemo(() => {
+    if (isDMMode) return [];
+    const favChannelIds = new Set();
+    const favDMIds = new Set();
+
+    for (const fav of favorites) {
+      if (fav.targetType === 'channel' || fav.targetType === 'private_channel' || fav.targetType === 'project') {
+        favChannelIds.add(fav.targetId);
+      } else if (fav.targetType === 'dm') {
+        favDMIds.add(fav.targetId);
+      }
+    }
+
+    const dmMap = new Map(dmChannels.map((dm) => [dm._id, dm]));
+    const resolved = [];
+    for (const ch of channels) {
+      if (favChannelIds.has(ch._id) || favDMIds.has(ch._id)) {
+        // If it's already showing in unreadConversations above, don't duplicate it in Starred
+        if (unreadIds.has(String(ch._id))) continue;
+        if (ch.type === "dm" && dmMap.has(ch._id)) {
+          resolved.push(dmMap.get(ch._id));
+        } else {
+          resolved.push(ch);
+        }
+      }
+    }
+    return resolved;
+  }, [favorites, channels, unreadIds, dmChannels, isDMMode]);
+
+  // All channel/DM IDs currently showing in the top sections (Unread, Starred)
+  const topChannelIds = useMemo(() => {
+    if (isDMMode) return new Set();
+    const ids = new Set();
+    unreadConversations.forEach((c) => ids.add(String(c._id)));
+    favoriteChannels.forEach((c) => ids.add(String(c._id)));
+    return ids;
+  }, [unreadConversations, favoriteChannels, isDMMode]);
+
+  // Regular channel sections below (excluding channels already visible in top sections)
+  const projectChannels = channels.filter(
+    (c) =>
+      c.type === "project" &&
+      !c.isArchived &&
+      !categorizedChannelIds.has(String(c._id)) &&
+      !topChannelIds.has(String(c._id)),
+  );
+  
+  const publicChannels = channels.filter(
+    (c) =>
+      (c.visibility === "public" || (c.type === "public" && c.visibility !== "private")) &&
+      !c.isArchived &&
+      c.type !== "project" &&
+      c.type !== "department" &&
+      c.type !== "team" &&
+      c.type !== "dm" &&
+      c.type !== "system" &&
+      c.type !== "self" &&
+      !categorizedChannelIds.has(String(c._id)) &&
+      !topChannelIds.has(String(c._id)),
+  );
+  
+  const privateChannels = channels.filter(
+    (c) =>
+      (c.visibility === "private" || (c.type === "private" && c.visibility !== "public")) &&
+      !c.isArchived &&
+      c.type !== "project" &&
+      c.type !== "department" &&
+      c.type !== "team" &&
+      c.type !== "dm" &&
+      c.type !== "system" &&
+      c.type !== "self" &&
+      !categorizedChannelIds.has(String(c._id)) &&
+      !topChannelIds.has(String(c._id)),
+  );
+
+  const systemChannels = channels.filter(
+    (c) => c.type === "system" && !c.isArchived && !topChannelIds.has(String(c._id)),
+  );
+
+  const deptChannels = channels.filter(
+    (c) => (c.type === "department" || c.type === "team") && !c.isArchived && !topChannelIds.has(String(c._id)),
+  );
+
+  const displayedDMs = useMemo(() => {
+    return dmChannels.filter((c) => !topChannelIds.has(String(c._id)));
+  }, [dmChannels, topChannelIds]);
+
+  const nonTopChannels = useMemo(() => {
+    return channels.filter((c) => !topChannelIds.has(String(c._id)));
+  }, [channels, topChannelIds]);
 
   const handleSelectChannel = (channelId) => {
     // Don't proceed if we're on the Later page - user needs to explicitly navigate away
@@ -672,7 +714,7 @@ export default function NavigationSidebar({
             expanded={expandedSections.starred}
             onToggle={() => toggleSection("starred")}
           >
-            {favoriteChannels.map((channel) => {
+            {sortChannels(favoriteChannels).map((channel) => {
               const favId = favorites.find(
                 (f) => f.targetId === channel._id
               )?._id;
@@ -683,7 +725,16 @@ export default function NavigationSidebar({
                   style={{ position: 'relative' }}
                 >
                   <div className="flex-1 min-w-0">
-                    <ChannelListItem
+                    {channel.type === "dm" ? (
+                      <DMListItem
+                        channel={channel}
+                        isActive={!isLaterPage && channel._id === activeChannelId}
+                        unread={unreads[channel._id] || 0}
+                        onClick={() => handleSelectChannel(channel._id)}
+                        hasDraft={hasDraft(channel._id)}
+                      />
+                    ) : (
+                      <ChannelListItem
                       channel={channel}
                       isActive={!isLaterPage && channel._id === activeChannelId}
                       unread={unreads[channel._id] || 0}
@@ -691,6 +742,7 @@ export default function NavigationSidebar({
                       onlineUsers={onlineUsers}
                       hasDraft={hasDraft(channel._id)}
                     />
+                    )}
                   </div>
                   <button
                     onClick={(e) => {
@@ -742,7 +794,7 @@ export default function NavigationSidebar({
           {!isDMMode && isEnterpriseOrPro && (
             <CategoryList
               categories={categories}
-              channels={channels}
+              channels={nonTopChannels}
               expandedGroups={expandedGroups}
               onToggleCategory={handleToggleCategory}
               isLaterPage={isLaterPage}
@@ -846,7 +898,7 @@ export default function NavigationSidebar({
             /> */}
 
             {/* ── Regular DM list ── */}
-            {sortChannels(dmChannels).map((channel) => (
+            {sortChannels(displayedDMs).map((channel) => (
               <DMListItem
                 key={channel._id}
                 channel={channel}

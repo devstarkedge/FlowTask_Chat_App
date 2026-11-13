@@ -259,6 +259,13 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       return
     }
 
+    const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+    const oversized = files.find((f) => f.size > MAX_FILE_SIZE)
+    if (oversized) {
+      toast.error(`File "${oversized.name}" exceeds the 100MB limit`)
+      return
+    }
+
     const localPreviews = files.map((f, idx) => ({
       localId: `uploading-${Date.now()}-${idx}`,
       file: f,
@@ -435,7 +442,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       processFiles(files)
     }
     // Text paste is handled natively by TipTap (plain text)
-  }, [pendingFiles.length, uploadingFiles.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingFiles.length, uploadingFiles.length, channelId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Attach paste listener to the editor DOM once it's mounted
   useEffect(() => {

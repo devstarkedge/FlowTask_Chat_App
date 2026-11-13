@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Search, X, BrushCleaning } from "lucide-react";
+import { Search, BrushCleaning } from "lucide-react";
 import { messageAPI, searchAPI } from "../../services/api";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -1076,18 +1076,6 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
                 >
                   <SlidersHorizontal size={14} />
                 </button> */}
-                <button
-                  type="button"
-                  className="global-search__close"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeSearch();
-                  }}
-                  aria-label="Close search"
-                >
-                  <X size={16} />
-                </button>
               </>
             ) : (
               <kbd className="global-search__kbd">{SHORTCUT_LABEL}</kbd>

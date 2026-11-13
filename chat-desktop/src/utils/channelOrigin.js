@@ -1,9 +1,5 @@
 const FLOWTASK_CHANNEL_TYPES = new Set(['project', 'department', 'team']);
 
-export function isFlowTaskProjectChannel(channel) {
-  return channel?.type === 'project' || channel?.flowTaskRef?.entityType === 'board';
-}
-
 export function isImplicitDepartmentChannel(channel) {
   return channel?.type === 'department' && channel.flowTaskRef?.entityType === 'department';
 }

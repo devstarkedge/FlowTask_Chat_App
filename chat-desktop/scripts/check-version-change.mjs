@@ -54,6 +54,7 @@ if (!fs.existsSync(desktopPkgPath)) {
 }
 const desktopPkg = JSON.parse(fs.readFileSync(desktopPkgPath, 'utf8'));
 const currentVersion = desktopPkg.version;
+const forceRelease = process.env.FORCE_RELEASE === 'true';
 
 if (!parseSemver(currentVersion)) {
   console.error(`[check-version] Error: Invalid semver in chat-desktop/package.json: "${currentVersion}"`);
@@ -94,12 +95,16 @@ if (prevVersion) {
   const cmp = compareSemver(currentVersion, prevVersion);
 
   if (cmp === 0) {
-    console.log(`[check-version] No version change detected (current: ${currentVersion}, previous: ${prevVersion}).`);
-    console.log('[check-version] Exiting successfully without triggering a desktop release.');
-    setOutput('should_release', 'false');
-    setOutput('version', currentVersion);
-    setOutput('previous_version', prevVersion);
-    process.exit(0);
+    if (forceRelease) {
+      console.log(`[check-version] Manual workflow run requested publication of current version ${currentVersion}.`);
+    } else {
+      console.log(`[check-version] No version change detected (current: ${currentVersion}, previous: ${prevVersion}).`);
+      console.log('[check-version] Exiting successfully without triggering a desktop release.');
+      setOutput('should_release', 'false');
+      setOutput('version', currentVersion);
+      setOutput('previous_version', prevVersion);
+      process.exit(0);
+    }
   }
 
   if (cmp < 0) {

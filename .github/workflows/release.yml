@@ -8,6 +8,7 @@ on:
     paths:
       - 'chat-desktop/**'
       - 'chat-desktop(mac)/**'
+  workflow_dispatch:
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -42,6 +43,7 @@ jobs:
         env:
           GITHUB_EVENT_BEFORE: ${{ github.event.before }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_RELEASE: ${{ github.event_name == 'workflow_dispatch' }}
         run: node chat-desktop/scripts/check-version-change.mjs
 
   # ─── Job 2: Build Windows Application ──────────────────────────────────────

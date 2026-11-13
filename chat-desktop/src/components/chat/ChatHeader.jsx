@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
 import { isChatAppChannel } from "../../utils/channelOrigin";
-import { MessageCircle, Search, Menu, Pin, FileText, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus, Trash2, LogOut } from "lucide-react";
+import { MessageCircle, Search, Menu, Pin, FileText, Activity, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus, Trash2, LogOut } from "lucide-react";
 import ChannelMemberCount from "./ChannelMemberCount";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -21,6 +21,7 @@ const EMPTY_PINS = [];
 
 const BASE_TABS = [
   { id: "messages", label: "Messages", icon: MessageCircle },
+  { id: "activity", label: "Activity", icon: Activity },
   { id: "files", label: "Files", icon: FileText },
 ];
 

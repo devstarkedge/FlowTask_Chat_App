@@ -5,7 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDeleteConfirm } from "../../hooks/useDeleteConfirm";
-import { isChatAppChannel } from "../../utils/channelOrigin";
+import { isChatAppChannel, isFlowTaskProjectChannel } from "../../utils/channelOrigin";
 import { MessageCircle, Search, Menu, Pin, FileText, Activity, Star, Headphones, Info, MoreVertical, BookCopy, Check, X, Plus, Trash2, LogOut } from "lucide-react";
 import ChannelMemberCount from "./ChannelMemberCount";
 import { useChannelStore } from "../../stores/channelStore";
@@ -21,9 +21,9 @@ const EMPTY_PINS = [];
 
 const BASE_TABS = [
   { id: "messages", label: "Messages", icon: MessageCircle },
-  { id: "activity", label: "Activity", icon: Activity },
   { id: "files", label: "Files", icon: FileText },
 ];
+const ACTIVITY_TAB = { id: "activity", label: "Activity", icon: Activity };
 
 export default function ChatHeader({
   channel: channelProp,
@@ -95,6 +95,12 @@ export default function ChatHeader({
   const canvasTabRef = useRef(null);
 
   const isCustom = isChatAppChannel(channel);
+  const visibleBaseTabs = useMemo(
+    () => isFlowTaskProjectChannel(channel)
+      ? [BASE_TABS[0], ACTIVITY_TAB, BASE_TABS[1]]
+      : BASE_TABS,
+    [channel],
+  );
   const createdById = channel?.createdBy?._id || channel?.createdBy;
   const userIdStr = user?._id != null ? String(user._id) : null;
   const chMembers = membersByChannel?.[channel?._id] || [];
@@ -171,7 +177,7 @@ export default function ChatHeader({
       }));
 
       const addTab = { id: "canvas:add", label: "Add Canvas", icon: Plus, isCanvas: true, isAdd: true };
-      return [...BASE_TABS, ...canvasTabs, addTab];
+      return [...visibleBaseTabs, ...canvasTabs, addTab];
     }
 
     const canvasTab = activeCanvasTitle
@@ -190,8 +196,8 @@ export default function ChatHeader({
           isDynamic: false,
         };
 
-    return [...BASE_TABS, canvasTab];
-  }, [activeCanvasTitle, openCanvasTabs]);
+    return [...visibleBaseTabs, canvasTab];
+  }, [activeCanvasTitle, openCanvasTabs, visibleBaseTabs]);
 
   // Collapse tabs when header is narrow
   useEffect(() => {
@@ -508,7 +514,7 @@ export default function ChatHeader({
           {narrowTabs ? (
             // Keep conversation navigation fixed while canvas tabs scroll.
             <>
-              {BASE_TABS.map(tab => <SlimTab key={tab.id} tab={tab} compact={compactTabs} isActive={activeTab === tab.id} onClick={() => onTabChange?.(tab.id)} />)}
+              {visibleBaseTabs.map(tab => <SlimTab key={tab.id} tab={tab} compact={compactTabs} isActive={activeTab === tab.id} onClick={() => onTabChange?.(tab.id)} />)}
               <div aria-label="Canvas tabs" style={{ display: "flex", gap: 2, minWidth: 0, maxWidth: "100%", overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
                 {HEADER_TABS.filter(tab => tab.isCanvas && tab.isDynamic).map(tab => <div key={tab.id} style={{ flex: '0 0 auto', maxWidth: 220, minWidth: 0 }}>
                 <SlimTab

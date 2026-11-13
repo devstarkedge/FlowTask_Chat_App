@@ -1282,6 +1282,7 @@ export default function ThreadPanel({ thread, onClose }) {
       {!isEditingInThread && (
         <div className="thread-panel__composer">
           <MessageInput
+            key={`${thread.channelId}:${thread.rootMessageId}`}
             channelId={thread.channelId}
             threadId={thread.rootMessageId}
             placeholder="Reply in thread…"

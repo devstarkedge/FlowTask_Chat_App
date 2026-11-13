@@ -442,7 +442,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
       processFiles(files)
     }
     // Text paste is handled natively by TipTap (plain text)
-  }, [pendingFiles.length, uploadingFiles.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingFiles.length, uploadingFiles.length, channelId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Attach paste listener to the editor DOM once it's mounted
   useEffect(() => {

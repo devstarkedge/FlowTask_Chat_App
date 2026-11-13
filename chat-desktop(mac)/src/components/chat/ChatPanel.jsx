@@ -343,7 +343,7 @@ export default function ChatPanel({
           />
           <TypingIndicator channelId={channelId} />
           <div style={{ flexShrink: 0 }}>
-            <MessageInput channelId={channelId} />
+            <MessageInput key={channelId} channelId={channelId} />
           </div>
         </>
       )}

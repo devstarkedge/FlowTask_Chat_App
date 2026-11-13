@@ -629,7 +629,7 @@ export default function MessageInput({ channelId, threadId, placeholder }) {
         toast.error("Cannot attach pasted content — unsupported file type");
       }
     },
-    [pendingFiles.length, uploadingFiles.length],
+    [pendingFiles.length, uploadingFiles.length, channelId],
   ); // eslint-disable-line react-hooks/exhaustive-deps
 
 

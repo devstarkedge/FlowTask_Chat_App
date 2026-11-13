@@ -46,7 +46,8 @@ export function formatReportingMessage(payload) {
         'Reason: 30 minutes of inactivity after shift end.');
       lines.push('Hours: ' + time(payload.checkInAt) + '–' + time(payload.checkOutAt));
       for (const row of payload.summary?.rows || []) lines.push(contextLabel(row) + ' — ' + duration(row.seconds));
-      lines.push('Total Tracked Work: ' + duration(payload.summary?.workSeconds));
+      lines.push('Total Work Time: ' + duration(payload.summary?.workSeconds));
+      if (Number.isFinite(payload.attendanceSeconds)) lines.push('Total Office Time: ' + duration(payload.attendanceSeconds));
       break;
   }
   const content = lines.join('\n');

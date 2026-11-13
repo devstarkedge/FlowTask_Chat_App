@@ -42,7 +42,7 @@ export function reportPresentation(message) {
     if (line === 'Attendance' || line === 'Work Summary') continue
     if (/^Leave:\s*NONE$/i.test(line)) continue
     const match = line.match(/^([^:]+):\s*(.*)$/)
-    const labels = { 'Check-In': 'Check-in', 'Check-Out': 'Check-out', 'Work Mode': 'Work mode', 'Previous Work': 'Work', 'Work Completed So Far': 'Worked', 'Break Started': 'Break started', 'Personal Break Duration': 'Break', 'Resuming': 'Work', 'Attendance Duration': 'Attendance', 'Attendance Status': 'Outcome', 'Total Tracked Work': 'Tracked work', 'Total Personal Pause': 'Personal breaks' }
+    const labels = { 'Check-In': 'Check-in', 'Check-Out': 'Check-out', 'Work Mode': 'Work mode', 'Previous Work': 'Work', 'Work Completed So Far': 'Worked', 'Break Started': 'Break started', 'Personal Break Duration': 'Break', 'Resuming': 'Work', 'Attendance Duration': 'Attendance', 'Attendance Status': 'Outcome', 'Total Tracked Work': 'Tracked work', 'Total Work Time': 'Tracked work', 'Total Office Time': 'Office time', 'Total Personal Pause': 'Personal breaks' }
     if (match && (labels[match[1]] || ['Work mode', 'Work', 'From', 'Now', 'Worked', 'Break', 'Hours', 'Attendance', 'Tracked work', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads', 'Leave Type', 'Coverage', 'Effective checkout', 'Last activity', 'Reason'].includes(match[1]))) details.push({ label: labels[match[1]] || match[1], value: compact(match[2]) })
     else details.push({ label: '', value: compact(line.replace(/^\d+\.\s*/, '')) })
   }
@@ -55,13 +55,15 @@ export function reportPresentation(message) {
   }
   if (message.reportingMeta?.eventType === 'tracking.break_started') details.length = 0
   if (message.reportingMeta?.eventType === 'attendance.checked_out') {
-    const kept = details.filter(row => !['Attendance', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads', 'Check-in', 'Check-out', 'Tracked work'].includes(row.label)
+    const kept = details.filter(row => !['Attendance', 'Personal breaks', 'Outcome', 'Leave', 'Pending uploads', 'Pending evidence uploads', 'Check-in', 'Check-out', 'Tracked work', 'Office time'].includes(row.label)
       && !/^(Attendance outcome|Attendance pending review|Status:|Work Summary)/.test(row.value))
     const checkIn = details.find(row => row.label === 'Check-in')?.value
     const checkOut = details.find(row => row.label === 'Check-out')?.value
     if (!kept.some(row => row.label === 'Hours') && checkIn && checkOut) kept.unshift({ label: 'Hours', value: checkIn + '–' + checkOut })
     const total = details.find(row => row.label === 'Tracked work')
-    if (total) kept.push({ label: 'Total working time', value: total.value, total: true })
+    if (total) kept.push({ label: details.some(row => row.label === 'Office time') ? 'Total Work Time' : 'Total working time', value: total.value, total: true })
+    const office = details.find(row => row.label === 'Office time')
+    if (office) kept.push({ label: 'Total Office Time', value: office.value, total: true })
     details.splice(0, details.length, ...kept)
   }
   const rawDate = field('Workday') || message.reportingMeta?.workDateKey

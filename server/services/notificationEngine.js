@@ -4,7 +4,7 @@ import userRepository from '../modules/users/user.repository.js';
 import channelRepository from '../modules/channels/channel.repository.js';
 import { isReportingChannel, reportingRecipients } from '../modules/reporting/reportingAccess.js';
 import { isAttendanceNotificationEvent } from '../modules/reporting/attendanceNotification.js';
-import { emitToUser, getIO } from '../sockets/socketManager.js';
+import { emitNotificationToUser, getIO } from '../sockets/socketManager.js';
 import pushService from './push.service.js';
 import logger from '../utils/logger.js';
 import {
@@ -76,7 +76,11 @@ class NotificationEngine {
       const convType = isAttendanceReport ? 'department' : this._getConversationType(channel);
 
       // Get all recipients (members minus sender)
-      const recipientIds = await this._getRecipients(channel, senderIdStr, workspaceId);
+      const recipientIds = [...new Set(
+        (await this._getRecipients(channel, senderIdStr, workspaceId))
+          .map((id) => (id?._id || id)?.toString())
+          .filter((id) => id && id !== senderIdStr)
+      )];
       if (recipientIds.length === 0) return;
 
       // Extract mention target IDs for quick lookup
@@ -85,7 +89,8 @@ class NotificationEngine {
 
       for (const mention of mentions) {
         const typeStr = (mention.type || '').toLowerCase();
-        const targetIdStr = (mention.targetId || '').toString();
+        const rawTargetId = mention.targetId ?? mention.userId ?? mention.id;
+        const targetIdStr = (rawTargetId?._id || rawTargetId || '').toString();
         const nameStr = (mention.name || '').toLowerCase();
 
         if (targetIdStr === 'channel' || nameStr === 'channel' || nameStr === 'everyone' || typeStr === 'channel') {
@@ -258,6 +263,13 @@ class NotificationEngine {
       notificationType = NOTIFICATION_TYPES.DM;
       priority = NOTIFICATION_PRIORITIES.HIGH;
       category = NOTIFICATION_CATEGORIES.DM;
+    } else if (isMentioned) {
+      // A direct mention in a thread notifies the mentioned user even when
+      // they have not participated in the thread yet.
+      shouldNotify = true;
+      notificationType = NOTIFICATION_TYPES.MENTION;
+      priority = NOTIFICATION_PRIORITIES.HIGH;
+      category = NOTIFICATION_CATEGORIES.MENTION;
     } else if (isThreadReply) {
       // Thread reply — notify root message author AND all thread participants
       shouldNotify = await this._isThreadParticipantOrAuthor(recipientIdStr, threadId, message, workspaceId);
@@ -266,12 +278,6 @@ class NotificationEngine {
         priority = NOTIFICATION_PRIORITIES.MEDIUM;
         category = NOTIFICATION_CATEGORIES.THREAD_REPLY;
       }
-    } else if (isMentioned) {
-      // Direct @mention
-      shouldNotify = true;
-      notificationType = NOTIFICATION_TYPES.MENTION;
-      priority = NOTIFICATION_PRIORITIES.HIGH;
-      category = NOTIFICATION_CATEGORIES.MENTION;
     } else if (isBroadcast) {
       // @channel / @everyone
       shouldNotify = true;
@@ -375,29 +381,41 @@ class NotificationEngine {
       : null;
 
     // 12. Create notification record
-    const notification = await Notification.create({
-      workspaceId,
-      recipientId: recipientIdStr,
-      type: notificationType,
-      priority,
-      category,
-      title,
-      body: preview,
-      sourceType: 'message',
-      sourceId: message._id,
-      channelId: channelIdStr,
-      threadId: threadId || null,
-      senderId: senderIdStr,
-      senderName,
-      senderAvatar,
-      channelName,
-      conversationId: channelIdStr,
-      conversationType: isDM ? 'dm' : 'channel',
-      messagePreview: preview,
-      ...(replyToPreview && { replyTo: replyToPreview }),
-      deepLink,
-      bundleKey,
-    });
+    const eventKey = `message:${workspaceId}:${message._id}:${recipientIdStr}:${notificationType}`;
+    const priorNotification = await Notification.findOne({ eventKey }).select('_id').lean();
+    if (priorNotification) return { sent: false, reason: 'duplicate_event' };
+    let notification;
+    try {
+      notification = await Notification.create({
+        eventKey,
+        workspaceId,
+        recipientId: recipientIdStr,
+        type: notificationType,
+        priority,
+        category,
+        title,
+        body: preview,
+        sourceType: 'message',
+        sourceId: message._id,
+        channelId: channelIdStr,
+        threadId: threadId || null,
+        senderId: senderIdStr,
+        senderName,
+        senderAvatar,
+        channelName,
+        conversationId: channelIdStr,
+        conversationType: isDM ? 'dm' : 'channel',
+        messagePreview: preview,
+        ...(replyToPreview && { replyTo: replyToPreview }),
+        deepLink,
+        bundleKey,
+      });
+    } catch (err) {
+      if (err?.code === 11000 && (err?.keyPattern?.eventKey || err?.keyValue?.eventKey)) {
+        return { sent: false, reason: 'duplicate_event' };
+      }
+      throw err;
+    }
 
     // 13. Emit the real-time notification. Desktop and mobile check their own focus for attendance.
     const attendanceDelivery = isAttendanceReport ? {
@@ -406,7 +424,11 @@ class NotificationEngine {
       mobilePushEnabled: Boolean(prefs.global.mobilePush),
     } : null;
     if (isAttendanceReport || !isViewingSameChat) {
-      this._emitSocketNotification(recipientIdStr, notification, workspaceId, attendanceDelivery);
+      this._emitSocketNotification(recipientIdStr, notification, workspaceId, {
+        desktopPushEnabled: Boolean(prefs.global?.desktopPush),
+        mobilePushEnabled: Boolean(prefs.global?.mobilePush),
+        ...attendanceDelivery,
+      });
     }
 
     // 14. Send push to configured devices. For attendance each client handles its own focus.
@@ -674,7 +696,7 @@ class NotificationEngine {
    */
   _emitSocketNotification(recipientId, notification, workspaceId, attendanceDelivery = null) {
     try {
-      emitToUser(recipientId, SOCKET_EVENTS.NOTIFICATION, {
+      emitNotificationToUser(recipientId, SOCKET_EVENTS.NOTIFICATION, {
         notification: {
           _id: notification._id,
           workspaceId: notification.workspaceId,

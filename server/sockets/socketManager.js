@@ -972,6 +972,31 @@ export function emitToUser(userId, event, data, workspaceId) {
 }
 
 /**
+ * Deliver a personal notification to every active session for this user.
+ * Notification payloads carry their source workspace and are safe to show in
+ * another workspace; other event types remain workspace-scoped via emitToUser.
+ */
+export function emitNotificationToUser(userId, event, data, workspaceId) {
+  if (!io) return;
+  const room = resolveScopedRoom(workspaceId, 'user', userId, 'emitNotificationToUser');
+  if (room) io.to(room).emit(event, data);
+
+  (async () => {
+    try {
+      const sockets = await io.fetchSockets();
+      for (const sock of sockets) {
+        const sockUserId = sock.data?.userId || sock.chatUser?._id?.toString?.();
+        if (sockUserId !== String(userId)) continue;
+        if (room && sock.rooms?.has(room)) continue;
+        try { sock.emit(event, data); } catch { /* best effort */ }
+      }
+    } catch (err) {
+      logger.warn('emitNotificationToUser socket iteration failed', { userId, error: err?.message });
+    }
+  })();
+}
+
+/**
  * Emit event to a channel room.
  * @param {string} channelId
  * @param {string} event

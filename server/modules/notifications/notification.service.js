@@ -1,5 +1,5 @@
 import Notification from './Notification.model.js';
-import { emitToUser } from '../../sockets/socketManager.js';
+import { emitNotificationToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
 import userRepository from '../users/user.repository.js';
@@ -92,7 +92,7 @@ class NotificationService {
     }
 
     if (!suppressEmit) {
-      emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION, {
+      emitNotificationToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION, {
         notification: {
           _id: notification._id,
           type: notification.type,

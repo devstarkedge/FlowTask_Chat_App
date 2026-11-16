@@ -154,10 +154,14 @@ if (repo && token) {
   }
 }
 
-if (duplicateFound) {
+if (duplicateFound && !forceRelease) {
   console.error(`[check-version] ERROR: Duplicate version publication prevented! Release ${tagName} already exists.`);
   setOutput('should_release', 'false');
   process.exit(1);
+}
+
+if (duplicateFound && forceRelease) {
+  console.log(`[check-version] Manual workflow run will repair assets on existing release ${tagName}.`);
 }
 
 console.log(`[check-version] Validation passed. Triggering release for ${tagName}.`);

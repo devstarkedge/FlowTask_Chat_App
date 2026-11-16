@@ -224,7 +224,7 @@ jobs:
           ## What's New in TaskChat ${{ needs.detect-version.outputs.tag_name }}
 
           ### Downloads & Installers
-          - **Windows:** `TaskChat Setup ${{ needs.detect-version.outputs.version }}.exe` (Automatic NSIS installer with delta update support)
+          - **Windows:** `TaskChat-Setup-${{ needs.detect-version.outputs.version }}.exe` (Automatic NSIS installer with delta update support)
           - **macOS:** `TaskChat-${{ needs.detect-version.outputs.version }}.dmg` and `.zip` (Universal macOS installer and auto-updater package)
 
           ### Changes
@@ -246,7 +246,25 @@ jobs:
           TAG="${{ needs.detect-version.outputs.tag_name }}"
           echo "Publishing release $TAG with assets in release-assets..."
 
-          gh release create "$TAG" release-assets/* \
-            --title "TaskChat $TAG" \
-            --notes-file release-notes.md \
-            --latest
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading missing assets."
+            existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+            for asset in release-assets/*; do
+              asset_name="$(basename "$asset")"
+              if printf '%s\n' "$existing_assets" | grep -Fqx "$asset_name"; then
+                echo "Keeping existing asset: $asset_name"
+              else
+                gh release upload "$TAG" "$asset"
+              fi
+            done
+            gh release edit "$TAG" \
+              --draft=false \
+              --latest \
+              --title "TaskChat $TAG" \
+              --notes-file release-notes.md
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "TaskChat $TAG" \
+              --notes-file release-notes.md \
+              --latest
+          fi

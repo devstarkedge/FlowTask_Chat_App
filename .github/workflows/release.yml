@@ -60,7 +60,6 @@ jobs:
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: windows-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
       WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
@@ -120,7 +119,6 @@ jobs:
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: macos-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -148,7 +146,7 @@ jobs:
       - name: Build macOS packages (DMG, ZIP, updater manifest)
         run: |
           cd "chat-desktop(mac)"
-          npm run build:mac
+          npm run build:mac -- --publish never
 
       - name: Verify macOS output files
         shell: bash

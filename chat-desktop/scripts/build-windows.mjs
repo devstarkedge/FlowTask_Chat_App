@@ -43,6 +43,7 @@ try {
   const artifacts = await packageApp({
     projectDir: root,
     targets: Platform.WINDOWS.createTarget(),
+    publish: "never",
     config: {
       directories: { output: packageDir },
       // Electron 43 no longer downloads its runtime during npm install.

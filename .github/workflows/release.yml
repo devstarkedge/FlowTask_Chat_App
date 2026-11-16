@@ -247,15 +247,10 @@ jobs:
           echo "Publishing release $TAG with assets in release-assets..."
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; uploading missing assets."
-            existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+            echo "Release $TAG already exists; synchronizing release assets."
             for asset in release-assets/*; do
               asset_name="$(basename "$asset")"
-              if printf '%s\n' "$existing_assets" | grep -Fqx "$asset_name"; then
-                echo "Keeping existing asset: $asset_name"
-              else
-                gh release upload "$TAG" "$asset"
-              fi
+              gh release upload "$TAG" "$asset" --clobber
             done
             gh release edit "$TAG" \
               --draft=false \
@@ -268,3 +263,14 @@ jobs:
               --notes-file release-notes.md \
               --latest
           fi
+
+          echo "Verifying published release assets..."
+          published_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          while IFS= read -r asset; do
+            asset_name="$(basename "$asset")"
+            if ! printf '%s\n' "$published_assets" | grep -Fqx "$asset_name"; then
+              echo "ERROR: Required release asset was not published: $asset_name"
+              exit 1
+            fi
+            echo "Verified: $asset_name"
+          done < <(find release-assets -maxdepth 1 -type f -print | sort)

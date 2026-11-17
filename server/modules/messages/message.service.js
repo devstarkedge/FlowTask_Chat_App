@@ -111,11 +111,16 @@ class MessageService {
     let processedMentions = [];
     if (mentions && Array.isArray(mentions) && mentions.length > 0) {
       processedMentions = mentions.map(m => {
-        const isChannel = m.userId === 'channel' || m.targetId === 'channel' || m.username === 'channel' || m.type === 'channel';
+        const rawTargetId = m.userId ?? m.targetId ?? m.id;
+        const targetId = rawTargetId?._id?.toString?.() || rawTargetId?.toString?.() || rawTargetId;
+        const type = (m.type || MENTION_TYPES.USER).toString().toLowerCase();
+        const name = m.username || m.name || m.label || 'Unknown';
+        const isChannel = targetId === 'channel' || targetId === 'here' || targetId === 'everyone'
+          || name.toLowerCase() === 'channel' || type === MENTION_TYPES.CHANNEL;
         return {
-          targetId: isChannel ? 'channel' : (m.userId || m.targetId),
-          name: isChannel ? 'channel' : (m.username || m.name || 'Unknown'),
-          type: isChannel ? MENTION_TYPES.CHANNEL : (m.type || MENTION_TYPES.USER),
+          targetId: isChannel ? targetId : targetId,
+          name: isChannel ? (name.toLowerCase() === 'here' ? 'here' : name.toLowerCase() === 'everyone' ? 'everyone' : 'channel') : name,
+          type: isChannel ? MENTION_TYPES.CHANNEL : type,
         };
       });
     } else {

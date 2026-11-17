@@ -9,6 +9,9 @@ const { Schema, model } = mongoose;
  * Auto-expires after 90 days via TTL index.
  */
 const notificationSchema = new Schema({
+  // Stable idempotency key for message-derived events. Prevents a retried
+  // queue job from creating and emitting the same recipient notification twice.
+  eventKey: { type: String, default: undefined },
   workspaceId: {
     type: Schema.Types.ObjectId,
     ref: 'Workspace',
@@ -171,6 +174,7 @@ notificationSchema.index({ workspaceId: 1, senderId: 1 });
 // Unread count query (field order optimized for countDocuments: recipientId first for selectivity)
 notificationSchema.index({ workspaceId: 1, recipientId: 1, isRead: 1 });
 notificationSchema.index({ recipientId: 1, workspaceId: 1, isRead: 1 });
+notificationSchema.index({ eventKey: 1 }, { unique: true, sparse: true });
 // TTL index for auto-expiry
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

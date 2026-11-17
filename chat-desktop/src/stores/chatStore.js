@@ -1,6 +1,5 @@
 import { useReportingHistoryStore } from './reportingHistoryStore';
 import { create } from "zustand";
-import { createElement } from "react";
 import { messageAPI, threadAPI, botAPI } from "../services/api";
 import { useAuthStore } from "./authStore";
 import { useChannelStore } from "./channelStore";
@@ -9,8 +8,6 @@ import { useLaterStore } from "./laterStore";
 import toast from "react-hot-toast";
 import logger from "../utils/logger";
 import { CHAT_FEATURE_FLAGS } from "../config/featureFlags";
-import MentionToast from "../components/notifications/MentionToast";
-import NotificationToast from "../components/notifications/NotificationToast";
 import { normalizeNotification } from "../utils/notificationFormat";
 import {
   enqueueMessageSend,
@@ -1705,115 +1702,9 @@ export const useChatStore = create((set, get) => ({
   addNotification: (notification) => {
     const normalized = normalizeNotification(notification);
     if (!normalized) return;
-    // Prevent duplicate notifications in the same client session
-    const current = get();
-    if (current.notifications.some((n) => n._id === normalized._id)) return;
-
-    set((state) => ({
-      notifications: [normalized, ...state.notifications].slice(0, 50),
-    }));
-    // DM notification toast — fires whenever a DM arrives and user isn't viewing that channel
-    if (normalized.type === "dm") {
-      toast.custom(
-        (t) => createElement(NotificationToast, {
-          notification: normalized,
-          onClick: () => {
-            const channelId = normalized.channelId?._id || normalized.channelId || normalized.conversationId;
-            const wsId = normalized.workspaceId;
-            if (channelId && wsId) {
-              if (typeof window !== 'undefined' && window.electronAPI) {
-                window.location.hash = `/workspace/${wsId}/dm/${channelId}`;
-              } else {
-                window.location.href = `/workspace/${wsId}/dm/${channelId}`;
-              }
-            }
-            toast.dismiss(t.id);
-          },
-          onDismiss: () => toast.dismiss(t.id),
-          playSound: true,
-        }),
-        { duration: 5000 },
-      );
-    } else if (normalized.type === "mention") {
-      toast.custom(
-        () => createElement(MentionToast, { notification: normalized }),
-        {
-          duration: 4200,
-        },
-      );
-    } else if (normalized.type === 'reminder_overdue') {
-      toast.custom(
-        (t) => createElement(NotificationToast, {
-          notification: {
-            ...normalized,
-            senderName: 'Reminder',
-            senderAvatar: null,
-          },
-          onClick: () => {
-            const workspaceId = normalized.deepLink?.workspaceId;
-            const channelId = normalized.deepLink?.channelId;
-            const messageId = normalized.deepLink?.messageId;
-            
-            if (workspaceId && channelId && messageId) {
-              if (typeof window.electronAPI !== 'undefined') {
-                window.location.hash = `/workspace/${workspaceId}/channel/${channelId}?message=${messageId}`;
-              } else {
-                window.location.href = `/workspace/${workspaceId}/channel/${channelId}?message=${messageId}`;
-              }
-            } else if (workspaceId) {
-              if (typeof window.electronAPI !== 'undefined') {
-                window.location.hash = `/workspace/${workspaceId}/later`;
-              } else {
-                window.location.href = `/workspace/${workspaceId}/later`;
-              }
-            }
-            toast.dismiss(t.id);
-          },
-          onDismiss: () => toast.dismiss(t.id),
-          playSound: true,
-        }),
-        { duration: 6000 },
-      );
-        } else if (normalized.type === 'channel_invite') {
-      const inviterName = normalized.senderName || 'Someone';
-      const channelName = normalized.channelName ? `#${normalized.channelName}` : 'a channel';
-      const toastText = `${inviterName} added you to ${channelName}`;
-
-      toast.custom(
-        (t) => createElement(NotificationToast, {
-          notification: {
-            ...normalized,
-            senderName: inviterName,
-            channelName: normalized.channelName,
-            messagePreview: toastText,
-          },
-          onClick: () => {
-            const chId = normalized.channelId?._id || normalized.channelId || normalized.conversationId;
-            const wsId = normalized.workspaceId;
-            if (chId) {
-              const { setActiveChannel } = useChannelStore.getState();
-              setActiveChannel(chId);
-              if (wsId) {
-                if (typeof window !== 'undefined' && window.electronAPI) {
-                  window.location.hash = `/workspace/${wsId}/channel/${chId}`;
-                } else {
-                  window.location.href = `/workspace/${wsId}/channel/${chId}`;
-                }
-              }
-            }
-            toast.dismiss(t.id);
-          },
-          onDismiss: () => toast.dismiss(t.id),
-          playSound: true,
-        }),
-        { duration: 5000 },
-      );
-    } else if (normalized.type === 'system' || normalized.type === 'bot_alert') {
-      toast.success(normalized.title || 'Notification received', { 
-        duration: 3000,
-        icon: '🔔'
-      });
-    }
+    set((state) => state.notifications.some((n) => n._id === normalized._id)
+      ? state
+      : { notifications: [normalized, ...state.notifications].slice(0, 50) });
   },
 
   clearNotifications: () => set({ notifications: [] }),

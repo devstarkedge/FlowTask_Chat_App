@@ -8,6 +8,7 @@ on:
     paths:
       - 'chat-desktop/**'
       - 'chat-desktop(mac)/**'
+  workflow_dispatch:
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -15,6 +16,13 @@ concurrency:
 
 permissions:
   contents: write
+
+# Vite bakes these public service URLs into the desktop renderer bundle at build time.
+# Keep both platform builds pointed at the same production API and Socket.IO server.
+env:
+  VITE_API_BASE_URL: https://chat-app-api-cyyl.onrender.com/api/chat
+  VITE_SOCKET_URL: https://chat-app-api-cyyl.onrender.com
+  VITE_BACKEND_URL: https://chat-app-api-cyyl.onrender.com
 
 jobs:
   # ─── Job 1: Detect Version Change ──────────────────────────────────────────
@@ -42,6 +50,7 @@ jobs:
         env:
           GITHUB_EVENT_BEFORE: ${{ github.event.before }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_RELEASE: ${{ github.event_name == 'workflow_dispatch' }}
         run: node chat-desktop/scripts/check-version-change.mjs
 
   # ─── Job 2: Build Windows Application ──────────────────────────────────────
@@ -51,7 +60,6 @@ jobs:
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: windows-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
       WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
@@ -111,7 +119,6 @@ jobs:
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: macos-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -139,7 +146,7 @@ jobs:
       - name: Build macOS packages (DMG, ZIP, updater manifest)
         run: |
           cd "chat-desktop(mac)"
-          npm run build:mac
+          npm run build:mac -- --publish never
 
       - name: Verify macOS output files
         shell: bash
@@ -222,7 +229,7 @@ jobs:
           ## What's New in TaskChat ${{ needs.detect-version.outputs.tag_name }}
 
           ### Downloads & Installers
-          - **Windows:** `TaskChat Setup ${{ needs.detect-version.outputs.version }}.exe` (Automatic NSIS installer with delta update support)
+          - **Windows:** `TaskChat-Setup-${{ needs.detect-version.outputs.version }}.exe` (Automatic NSIS installer with delta update support)
           - **macOS:** `TaskChat-${{ needs.detect-version.outputs.version }}.dmg` and `.zip` (Universal macOS installer and auto-updater package)
 
           ### Changes
@@ -244,7 +251,31 @@ jobs:
           TAG="${{ needs.detect-version.outputs.tag_name }}"
           echo "Publishing release $TAG with assets in release-assets..."
 
-          gh release create "$TAG" release-assets/* \
-            --title "TaskChat $TAG" \
-            --notes-file release-notes.md \
-            --latest
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; synchronizing release assets."
+            for asset in release-assets/*; do
+              asset_name="$(basename "$asset")"
+              gh release upload "$TAG" "$asset" --clobber
+            done
+            gh release edit "$TAG" \
+              --draft=false \
+              --latest \
+              --title "TaskChat $TAG" \
+              --notes-file release-notes.md
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "TaskChat $TAG" \
+              --notes-file release-notes.md \
+              --latest
+          fi
+
+          echo "Verifying published release assets..."
+          published_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          while IFS= read -r asset; do
+            asset_name="$(basename "$asset")"
+            if ! printf '%s\n' "$published_assets" | grep -Fqx "$asset_name"; then
+              echo "ERROR: Required release asset was not published: $asset_name"
+              exit 1
+            fi
+            echo "Verified: $asset_name"
+          done < <(find release-assets -maxdepth 1 -type f -print | sort)

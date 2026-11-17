@@ -64,14 +64,19 @@ export function extractMentions(html) {
   if (!html) return [];
 
   const mentions = [];
-  const regex = /data-mention-id="([^"]+)"\s+data-mention-type="([^"]+)"[^>]*>@?([^<]+)</g;
+  const regex = /<span\b([^>]*)>([\s\S]*?)<\/span>/gi;
   let match;
 
   while ((match = regex.exec(html)) !== null) {
+    const attrs = match[1];
+    const id = attrs.match(/\bdata-mention-id="([^"]+)"/i)?.[1];
+    const type = attrs.match(/\bdata-mention-type="([^"]+)"/i)?.[1];
+    if (!id || !type) continue;
+    const name = match[2].replace(/<[^>]*>/g, '').trim().replace(/^@/, '');
     mentions.push({
-      targetId: match[1],
-      type: match[2],
-      name: match[3].trim(),
+      targetId: id,
+      type: type.toLowerCase(),
+      name,
     });
   }
 

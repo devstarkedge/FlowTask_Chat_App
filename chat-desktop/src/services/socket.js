@@ -34,7 +34,20 @@ function purgePrivateLeaveReports() {
 let socket = null
 let disposeHuddleSocket = null
 let _disconnectTime = 0   // timestamp when socket last disconnected
+const seenNotificationEvents = new Map()
 const BRIEF_DISCONNECT_THRESHOLD_MS = 5000  // under 5s = brief blip, skip full cascade
+
+function isDuplicateNotificationEvent(notification) {
+  const id = notification?._id || notification?.notificationId;
+  if (!id) return false;
+  const now = Date.now();
+  for (const [seenId, seenAt] of seenNotificationEvents) {
+    if (now - seenAt > 5 * 60 * 1000) seenNotificationEvents.delete(seenId);
+  }
+  if (seenNotificationEvents.has(String(id))) return true;
+  seenNotificationEvents.set(String(id), now);
+  return false;
+}
 
 function getSocketUrl() {
   const explicit = import.meta.env.VITE_SOCKET_URL
@@ -786,6 +799,7 @@ export function connectSocket() {
   // ─── Notification Events ────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
+    if (isDuplicateNotificationEvent(notification)) return
 
     // Suppress notification if user is actively viewing the channel, EXCEPT for critical system notifications
     const activeChannelId = useChannelStore.getState().activeChannelId
@@ -812,12 +826,14 @@ export function connectSocket() {
     
     // Persist to notification store
     useNotificationStore.getState().addNotification(notification)
-    // Also keep legacy in-memory notification for toast/badge
+    // Keep legacy history in sync; this method no longer presents a toast.
     useChatStore.getState().addNotification(notification)
 
     const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
     if (notification.desktopPushEnabled !== false) {
-      notificationService.processEvent(notification.type || 'notification', notification, { workspaceId: activeWsId })
+      notificationService.processEvent(notification.type || 'notification', notification, {
+        workspaceId: notification.workspaceId || activeWsId,
+      })
     }
   })
 

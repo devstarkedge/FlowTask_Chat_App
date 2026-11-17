@@ -26,6 +26,17 @@ const macYaml = files.find(f => f === 'latest-mac.yml');
 
 let errors = [];
 
+function validateManifestAssetUrls(manifestName) {
+  const content = fs.readFileSync(path.join(assetsDir, manifestName), 'utf8');
+  const urls = [...content.matchAll(/^\s*-\s+url:\s*["']?([^"'\r\n]+)["']?\s*$/gm)];
+  for (const [, rawUrl] of urls) {
+    const assetName = decodeURIComponent(rawUrl.trim().split(/[?#]/, 1)[0].split('/').pop());
+    if (assetName && !files.includes(assetName)) {
+      errors.push(`${manifestName} references missing release asset: ${assetName}`);
+    }
+  }
+}
+
 if (!winInstaller) {
   errors.push('Missing Windows installer (*.exe)');
 } else {
@@ -36,6 +47,7 @@ if (!winYaml) {
   errors.push('Missing Windows update manifest (latest.yml)');
 } else {
   console.log(`[validate-assets] Found Windows update manifest: ${winYaml}`);
+  validateManifestAssetUrls(winYaml);
   if (expectedVersion) {
     const content = fs.readFileSync(path.join(assetsDir, winYaml), 'utf8');
     if (!content.includes(`version: ${expectedVersion}`) && !content.includes(`version: '${expectedVersion}'`) && !content.includes(`version: "${expectedVersion}"`)) {
@@ -60,6 +72,7 @@ if (!macYaml) {
   errors.push('Missing macOS update manifest (latest-mac.yml)');
 } else {
   console.log(`[validate-assets] Found macOS update manifest: ${macYaml}`);
+  validateManifestAssetUrls(macYaml);
   if (expectedVersion) {
     const content = fs.readFileSync(path.join(assetsDir, macYaml), 'utf8');
     if (!content.includes(`version: ${expectedVersion}`) && !content.includes(`version: '${expectedVersion}'`) && !content.includes(`version: "${expectedVersion}"`)) {

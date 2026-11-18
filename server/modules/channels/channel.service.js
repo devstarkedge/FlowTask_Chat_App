@@ -36,6 +36,7 @@ import { isRetryableMongoError, mapWithConcurrency } from "../../utils/mongoRetr
 import { withProjectChannelLock } from "../flowtask/projectChannelLock.service.js";
 import {
   canAccessFlowTaskProjectChannel,
+  getAuthorizedProjectUserIds,
   hasSnapshotProjectAccess,
   isFlowTaskWorkspaceAdmin,
   projectSourceVisibility,
@@ -167,7 +168,7 @@ class ChannelService {
       slug = appendCollisionSuffix(slug, boardId);
     }
 
-    // Project access comes only from the authoritative hierarchy snapshot.
+    // Participant access comes from the authoritative hierarchy snapshot.
     // Keep the actor as audit metadata without granting transient membership.
     const members = [];
 
@@ -210,6 +211,16 @@ class ChannelService {
         channelId: channel._id,
       });
     }
+
+    // Admin access does not create participant records. Subscribe connected
+    // workspace admins before the first project message/activity is emitted.
+    const authorizedUserIds = await getAuthorizedProjectUserIds(channel, workspaceId);
+    await Promise.all(authorizedUserIds.map(async (userId) => {
+      await joinChannelRoom(userId, channel._id.toString(), workspaceId);
+      emitToUser(userId, SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, {
+        workspaceId, channelId: channel._id.toString(), reason: 'project_created',
+      }, workspaceId);
+    }));
 
     logger.info("Project channel created", {
       channelId: channel._id,
@@ -1127,7 +1138,8 @@ class ChannelService {
     const role = membership?.role || 'member';
     const isGuest = role === 'guest';
     const isAdmin = role === 'admin' || role === 'owner';
-    const isProjectAdmin = isFlowTaskWorkspaceAdmin(membership) && String(membership.workspaceId) === String(workspaceId);
+    const isProjectAdmin = isFlowTaskWorkspaceAdmin(membership) &&
+      String(membership.workspaceId) === String(workspaceId) && String(membership.userId) === String(userId);
     const [workspace, memberChannels] = await Promise.all([
       workspaceRepository.findById(workspaceId),
       channelRepository.findByMember(userId, { workspaceId }),
@@ -1137,7 +1149,7 @@ class ChannelService {
 
     if (isAdmin || isProjectAdmin) {
       // FlowTask admin access is independent of ChatApp workspace management.
-      // Project channels are private and use their FlowTask source visibility.
+      // Project channels remain private; scoped admins see all source visibilities.
       const workspaceChannels = await Channel.find({
         workspaceId,
         isArchived: false,
@@ -1146,8 +1158,8 @@ class ChannelService {
         $or: [
           ...(isAdmin ? [{ visibility: CHANNEL_VISIBILITY.PUBLIC }, { type: CHANNEL_TYPES.SYSTEM }] : []),
           ...(isProjectAdmin ? [
-            { type: CHANNEL_TYPES.PROJECT, 'flowTaskMetadata.sourceVisibility': 'public' },
-            { 'flowTaskRef.entityType': 'board', 'flowTaskMetadata.sourceVisibility': 'public' },
+            { type: CHANNEL_TYPES.PROJECT },
+            { 'flowTaskRef.entityType': 'board' },
           ] : []),
         ],
       }).lean();

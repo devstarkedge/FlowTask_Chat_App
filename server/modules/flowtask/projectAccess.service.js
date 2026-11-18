@@ -11,7 +11,10 @@ export function isFlowTaskProjectChannel(channel) {
 const SOURCE_VISIBILITIES = ['public', 'workspace', 'department', 'private'];
 
 export function isFlowTaskWorkspaceAdmin(membership) {
-  return membership?.isActive === true && membership.flowTaskAccess?.role === 'admin';
+  return membership?.isActive === true && (
+    membership.role === 'admin' || membership.role === 'owner' ||
+    membership.flowTaskAccess?.role === 'admin'
+  );
 }
 
 export function projectSourceVisibility(board) {
@@ -28,7 +31,9 @@ export function projectSourceVisibility(board) {
 export function hasSnapshotProjectAccess(channel, membership) {
   if (!isFlowTaskProjectChannel(channel) || !membership?.isActive ||
       !channel.workspaceId || String(channel.workspaceId) !== String(membership.workspaceId)) return false;
-  return isFlowTaskWorkspaceAdmin(membership) && channel.flowTaskMetadata?.sourceVisibility === 'public';
+  // Workspace administrators can access every project, including private and
+  // legacy channels with no source visibility. Assignment still gates members.
+  return isFlowTaskWorkspaceAdmin(membership);
 }
 
 export async function getWorkspaceMembership(userId, workspaceId) {
@@ -53,10 +58,11 @@ export async function getAuthorizedProjectUserIds(channel, workspaceId) {
   const effectiveWsId = workspaceId || channel?.workspaceId;
   if (!effectiveWsId || String(channel?.workspaceId) !== String(effectiveWsId)) return [];
   const directIds = await ChannelMember.getMemberIds(channel._id);
-  const audience = [{ userId: { $in: directIds } }];
-  if (channel.flowTaskMetadata?.sourceVisibility === 'public') {
-    audience.push({ 'flowTaskAccess.role': 'admin' });
-  }
+  const audience = [
+    { userId: { $in: directIds } },
+    { role: { $in: ['owner', 'admin'] } },
+    { 'flowTaskAccess.role': 'admin' },
+  ];
   const memberships = await WorkspaceMembership.find({ workspaceId: effectiveWsId, isActive: true, $or: audience })
     .select('userId').lean();
   return memberships.map(member => String(member.userId));

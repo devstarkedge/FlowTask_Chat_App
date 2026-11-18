@@ -873,6 +873,15 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [channelKey, isContextual]);
 
+  const handleClearRecentSearches = useCallback(() => {
+    const nextHistory = updateHistory(user?._id, workspaceId, (current) => ({
+      ...current,
+      queries: [],
+    }));
+    setHistory(nextHistory);
+    setActiveIndex(0);
+  }, [user?._id, workspaceId]);
+
   const handleRemoveScope = useCallback(() => {
     setQuery(channelQuery);
     setSearchState((prev) => ({
@@ -1114,6 +1123,7 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
               scopeTargetLabel={scopeTargetLabel}
               scopeLabel={scopeLabel}
               onSelect={handleSelectResult}
+              onClearRecentSearches={handleClearRecentSearches}
               onShowResultsPage={handleShowResultsPage}
             />
           </div>

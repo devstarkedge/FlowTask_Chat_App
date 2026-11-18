@@ -22,7 +22,7 @@ import { useLiveProfileData } from '../../hooks/useLiveProfileData';
  *   onShowResultsPage {function}      — channel mode "Show results" action
  */
 
-import { AtSign, Bell, Clock, FileAudio, FileImage, FileText, FileVideo, Hash, Link as LinkIcon, Lock, MessageSquare, Search, Settings, Sparkles, Star, User, Users } from "lucide-react";
+import { AtSign, Bell, Clock, FileAudio, FileImage, FileText, FileVideo, Hash, Link as LinkIcon, Lock, MessageSquare, Search, Settings, Sparkles, Star, Trash2, User, Users } from "lucide-react";
 import Loader from '../shared/Loader';
 import { Avatar } from '../chat/MemberAvatarGroup'
 import SearchResultItem from './SearchResultItem'
@@ -136,12 +136,13 @@ function getItemKey(item) {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function Section({ title, hint, children }) {
+function Section({ title, hint, action, children }) {
   return (
     <section className="global-search-section">
       <div className="global-search-section__header">
         <h3 className="global-search-section__title">{title}</h3>
         {hint && <span className="global-search-section__hint">{hint}</span>}
+        {action}
       </div>
       <div>{children}</div>
     </section>
@@ -202,6 +203,7 @@ export default function SearchDropdown({
   scopeTargetLabel,
   scopeLabel,
   onSelect,
+  onClearRecentSearches,
   onShowResultsPage,
 }) {
   const trimmed = query.trim()
@@ -304,7 +306,14 @@ export default function SearchDropdown({
       {/* Empty state: recent searches + suggested results */}
       {!hasQuery && (
         <>
-          <Section title="Recent Searches">
+          <Section
+            title="Recent Searches"
+            action={emptyStateResults?.recentSearches?.length ? (
+              <button type="button" className="global-search-section__action" onClick={onClearRecentSearches} aria-label="Clear recent searches">
+                <Trash2 size={13} /><span>Clear</span>
+              </button>
+            ) : null}
+          >
             {!emptyStateResults?.recentSearches?.length ? (
               <p className="global-search__empty">Your recent searches will appear here</p>
             ) : (

@@ -515,6 +515,9 @@
   color: var(--text-muted);
 }
 
+.global-search-section__action { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 3px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: 11px; font-weight: 600; cursor: pointer; }
+.global-search-section__action:hover { background: var(--search-row-hover); color: var(--text-primary); }
+
 /* ─── Global Search — Row ────────────────────────────────────────────────── */
 
 .global-search-row {

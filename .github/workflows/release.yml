@@ -8,6 +8,7 @@ on:
     paths:
       - 'chat-desktop/**'
       - 'chat-desktop(mac)/**'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 concurrency:
@@ -95,6 +96,10 @@ jobs:
             echo "ERROR: Windows .exe installer not found!"
             exit 1
           fi
+          if ! ls chat-desktop/dist-electron/*.exe.blockmap 1> /dev/null 2>&1; then
+            echo "ERROR: Windows .exe.blockmap not found!"
+            exit 1
+          fi
           if [ ! -f "chat-desktop/dist-electron/latest.yml" ]; then
             echo "ERROR: Windows latest.yml not found!"
             exit 1
@@ -115,6 +120,10 @@ jobs:
   # ─── Job 3: Build macOS Application ────────────────────────────────────────
   build-macos:
     name: Build macOS Application
+    # macOS assets are opportunistic; they must not block a Windows release.
+    continue-on-error: true
+    outputs:
+      assets_ready: ${{ steps.mark_macos_assets.outputs.ready }}
     needs: detect-version
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: macos-latest
@@ -157,8 +166,16 @@ jobs:
             echo "ERROR: macOS .dmg not found!"
             exit 1
           fi
+          if ! ls "chat-desktop(mac)/dist-electron"/*.dmg.blockmap 1> /dev/null 2>&1; then
+            echo "ERROR: macOS .dmg.blockmap not found!"
+            exit 1
+          fi
           if ! ls "chat-desktop(mac)/dist-electron"/*.zip 1> /dev/null 2>&1; then
             echo "ERROR: macOS .zip update archive not found!"
+            exit 1
+          fi
+          if ! ls "chat-desktop(mac)/dist-electron"/*.zip.blockmap 1> /dev/null 2>&1; then
+            echo "ERROR: macOS .zip.blockmap not found!"
             exit 1
           fi
           if [ ! -f "chat-desktop(mac)/dist-electron/latest-mac.yml" ]; then
@@ -180,10 +197,14 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # ─── Job 4: Validate and Publish GitHub Release ────────────────────────────
-  publish-release:
-    name: Validate and Publish Release
-    needs: [detect-version, build-windows, build-macos]
+      - name: Mark macOS assets ready
+        id: mark_macos_assets
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+
+  # ─── Job 4: Publish Windows release without waiting for macOS ──────────────
+  publish-windows-release:
+    name: Validate and Publish Windows Release
+    needs: [detect-version, build-windows]
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     env:
@@ -208,74 +229,91 @@ jobs:
           name: windows-release-assets
           path: release-assets
 
+      - name: Validate Windows release assets
+        run: node chat-desktop/scripts/validate-release-assets.mjs release-assets ${{ needs.detect-version.outputs.version }}
+
+      - name: Generate Windows release notes
+        shell: bash
+        run: |
+          PREV_TAG="${{ needs.detect-version.outputs.previous_version }}"
+          TAG="${{ needs.detect-version.outputs.tag_name }}"
+          cat << EOF > release-notes.md
+          ## TaskChat $TAG
+
+          ### Windows downloads
+          - TaskChat-Setup-${{ needs.detect-version.outputs.version }}.exe
+          - Windows updater manifest and blockmap
+
+          macOS assets are published separately if the optional macOS build succeeds.
+
+          ### Changes
+          EOF
+          if [ "$PREV_TAG" != "none" ] && git rev-parse "v$PREV_TAG" >/dev/null 2>&1; then
+            git log --pretty=format:"* %s (%h)" "v$PREV_TAG..HEAD" >> release-notes.md
+          else
+            git log -n 10 --pretty=format:"* %s (%h)" >> release-notes.md
+          fi
+          echo "" >> release-notes.md
+
+      - name: Create or update release with Windows assets
+        shell: bash
+        run: |
+          TAG="${{ needs.detect-version.outputs.tag_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            for asset in release-assets/*; do
+              gh release upload "$TAG" "$asset" --clobber
+            done
+            gh release edit "$TAG" --draft=false --latest --title "TaskChat $TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" release-assets/* --title "TaskChat $TAG" --notes-file release-notes.md --latest
+          fi
+
+          published_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          while IFS= read -r asset; do
+            asset_name="$(basename "$asset")"
+            if ! printf '%s\n' "$published_assets" | grep -Fqx "$asset_name"; then
+              echo "ERROR: Windows release asset was not published: $asset_name"
+              exit 1
+            fi
+            echo "Verified Windows asset: $asset_name"
+          done < <(find release-assets -maxdepth 1 -type f -print | sort)
+
+  # ─── Job 5: Add macOS assets only after the Windows release exists ─────────
+  publish-macos-assets:
+    name: Publish Optional macOS Assets
+    needs: [detect-version, build-macos, publish-windows-release]
+    if: >-
+      always() &&
+      needs.detect-version.outputs.should_release == 'true' &&
+      needs.publish-windows-release.result == 'success' &&
+      needs.build-macos.outputs.assets_ready == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Create release directory
+        run: mkdir -p release-assets
+
       - name: Download macOS release assets
         uses: actions/download-artifact@v4
         with:
           name: macos-release-assets
           path: release-assets
 
-      - name: Validate all release assets
-        run: node chat-desktop/scripts/validate-release-assets.mjs release-assets ${{ needs.detect-version.outputs.version }}
-
-      - name: Generate Release Notes
-        id: release_notes
-        shell: bash
-        run: |
-          PREV_TAG="${{ needs.detect-version.outputs.previous_version }}"
-          VERSION="${{ needs.detect-version.outputs.version }}"
-          TAG="${{ needs.detect-version.outputs.tag_name }}"
-
-          cat << 'EOF' > release-notes.md
-          ## What's New in TaskChat ${{ needs.detect-version.outputs.tag_name }}
-
-          ### Downloads & Installers
-          - **Windows:** `TaskChat-Setup-${{ needs.detect-version.outputs.version }}.exe` (Automatic NSIS installer with delta update support)
-          - **macOS:** `TaskChat-${{ needs.detect-version.outputs.version }}.dmg` and `.zip` (Universal macOS installer and auto-updater package)
-
-          ### Changes
-          EOF
-
-          if [ "$PREV_TAG" != "none" ] && git rev-parse "v$PREV_TAG" >/dev/null 2>&1; then
-            echo "" >> release-notes.md
-            git log --pretty=format:"* %s (%h)" "v$PREV_TAG..HEAD" >> release-notes.md
-          else
-            echo "" >> release-notes.md
-            git log -n 10 --pretty=format:"* %s (%h)" >> release-notes.md
-          fi
-
-          echo "" >> release-notes.md
-
-      - name: Create and Publish GitHub Release
+      - name: Upload and verify macOS assets
         shell: bash
         run: |
           TAG="${{ needs.detect-version.outputs.tag_name }}"
-          echo "Publishing release $TAG with assets in release-assets..."
+          for asset in release-assets/*; do
+            gh release upload "$TAG" "$asset" --clobber
+          done
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; synchronizing release assets."
-            for asset in release-assets/*; do
-              asset_name="$(basename "$asset")"
-              gh release upload "$TAG" "$asset" --clobber
-            done
-            gh release edit "$TAG" \
-              --draft=false \
-              --latest \
-              --title "TaskChat $TAG" \
-              --notes-file release-notes.md
-          else
-            gh release create "$TAG" release-assets/* \
-              --title "TaskChat $TAG" \
-              --notes-file release-notes.md \
-              --latest
-          fi
-
-          echo "Verifying published release assets..."
           published_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
           while IFS= read -r asset; do
             asset_name="$(basename "$asset")"
             if ! printf '%s\n' "$published_assets" | grep -Fqx "$asset_name"; then
-              echo "ERROR: Required release asset was not published: $asset_name"
+              echo "ERROR: macOS release asset was not published: $asset_name"
               exit 1
             fi
-            echo "Verified: $asset_name"
+            echo "Verified macOS asset: $asset_name"
           done < <(find release-assets -maxdepth 1 -type f -print | sort)

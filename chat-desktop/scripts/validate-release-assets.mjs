@@ -21,8 +21,11 @@ const winBlockmap = files.find(f => f.endsWith('.exe.blockmap'));
 const winYaml = files.find(f => f === 'latest.yml');
 
 const macDmg = files.find(f => f.endsWith('.dmg'));
+const macDmgBlockmap = files.find(f => f.endsWith('.dmg.blockmap'));
 const macZip = files.find(f => f.endsWith('.zip') && !f.endsWith('.exe.zip'));
+const macZipBlockmap = files.find(f => f.endsWith('.zip.blockmap'));
 const macYaml = files.find(f => f === 'latest-mac.yml');
+const hasAnyMacAsset = Boolean(macDmg || macDmgBlockmap || macZip || macZipBlockmap || macYaml);
 
 let errors = [];
 
@@ -43,6 +46,12 @@ if (!winInstaller) {
   console.log(`[validate-assets] Found Windows installer: ${winInstaller}`);
 }
 
+if (!winBlockmap) {
+  errors.push('Missing Windows installer blockmap (*.exe.blockmap)');
+} else {
+  console.log(`[validate-assets] Found Windows blockmap: ${winBlockmap}`);
+}
+
 if (!winYaml) {
   errors.push('Missing Windows update manifest (latest.yml)');
 } else {
@@ -56,29 +65,45 @@ if (!winYaml) {
   }
 }
 
-if (!macDmg) {
-  errors.push('Missing macOS installer (*.dmg)');
-} else {
-  console.log(`[validate-assets] Found macOS DMG: ${macDmg}`);
-}
+if (hasAnyMacAsset) {
+  if (!macDmg) {
+    errors.push('Missing macOS installer (*.dmg)');
+  } else {
+    console.log(`[validate-assets] Found macOS DMG: ${macDmg}`);
+  }
 
-if (!macZip) {
-  errors.push('Missing macOS update archive (*.zip)');
-} else {
-  console.log(`[validate-assets] Found macOS ZIP: ${macZip}`);
-}
+  if (!macDmgBlockmap) {
+    errors.push('Missing macOS DMG blockmap (*.dmg.blockmap)');
+  } else {
+    console.log(`[validate-assets] Found macOS DMG blockmap: ${macDmgBlockmap}`);
+  }
 
-if (!macYaml) {
-  errors.push('Missing macOS update manifest (latest-mac.yml)');
-} else {
-  console.log(`[validate-assets] Found macOS update manifest: ${macYaml}`);
-  validateManifestAssetUrls(macYaml);
-  if (expectedVersion) {
-    const content = fs.readFileSync(path.join(assetsDir, macYaml), 'utf8');
-    if (!content.includes(`version: ${expectedVersion}`) && !content.includes(`version: '${expectedVersion}'`) && !content.includes(`version: "${expectedVersion}"`)) {
-      errors.push(`macOS latest-mac.yml does not match expected version ${expectedVersion}`);
+  if (!macZip) {
+    errors.push('Missing macOS update archive (*.zip)');
+  } else {
+    console.log(`[validate-assets] Found macOS ZIP: ${macZip}`);
+  }
+
+  if (!macZipBlockmap) {
+    errors.push('Missing macOS ZIP blockmap (*.zip.blockmap)');
+  } else {
+    console.log(`[validate-assets] Found macOS ZIP blockmap: ${macZipBlockmap}`);
+  }
+
+  if (!macYaml) {
+    errors.push('Missing macOS update manifest (latest-mac.yml)');
+  } else {
+    console.log(`[validate-assets] Found macOS update manifest: ${macYaml}`);
+    validateManifestAssetUrls(macYaml);
+    if (expectedVersion) {
+      const content = fs.readFileSync(path.join(assetsDir, macYaml), 'utf8');
+      if (!content.includes(`version: ${expectedVersion}`) && !content.includes(`version: '${expectedVersion}'`) && !content.includes(`version: "${expectedVersion}"`)) {
+        errors.push(`macOS latest-mac.yml does not match expected version ${expectedVersion}`);
+      }
     }
   }
+} else {
+  console.log('[validate-assets] No macOS assets supplied; continuing with the validated Windows release.');
 }
 
 if (errors.length > 0) {
@@ -89,5 +114,5 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log('[validate-assets] All required Windows and macOS release assets validated successfully!');
+console.log('[validate-assets] All supplied release assets validated successfully!');
 process.exit(0);

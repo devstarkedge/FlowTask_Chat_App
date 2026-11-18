@@ -167,6 +167,7 @@ function MemberCard({
   const memberId = memberUser._id || member.userId;
   const isCurrentUser = memberId === currentUserId;
   const role = ROLE_CFG[member.role] || ROLE_CFG.member;
+  const displayRole = member.flowTaskAccess?.role || member.role;
 
   // FlowTask synced workspace check: member is synced if the workspace is FlowTask-synced AND the member has a synced FlowTask identity/role
   const isFlowTaskWorkspace =
@@ -255,7 +256,7 @@ function MemberCard({
             }}
           >
             <span className="mt-role-dot" style={{ background: role.dot }} />
-            {role.label}
+            {displayRole === member.role ? role.label : displayRole.charAt(0).toUpperCase() + displayRole.slice(1)}
           </span>
         )}
       </div>

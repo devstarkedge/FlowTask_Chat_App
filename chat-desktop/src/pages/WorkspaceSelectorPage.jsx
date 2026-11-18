@@ -297,6 +297,7 @@ export default function WorkspaceSelectorPage() {
                           {ws.role && (
                             <span
                               className={`wsp-role-chip ${ws.role === "owner" ? "owner" : "member"}`}
+                              style={{ textTransform: "capitalize" }}
                             >
                               {ws.role === "owner" && (
                                 <Crown
@@ -304,7 +305,7 @@ export default function WorkspaceSelectorPage() {
                                   style={{ display: "inline", marginRight: 3 }}
                                 />
                               )}
-                              {ws.role}
+                              {ws.flowTaskRole || ws.role}
                             </span>
                           )}
                           {ws.plan && (

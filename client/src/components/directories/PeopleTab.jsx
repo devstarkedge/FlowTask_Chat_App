@@ -236,12 +236,12 @@ function PersonCard({ person, currentUserId, index }) {
   const isPending = person.isPendingInvite === true
   const name   = person.name || person.displayName || 'Unknown'
   const avatar = person.avatar || person.profilePicture
-  // Use workspaceRole for display (e.g. 'guest'), fallback to global role
-  const role   = person.workspaceRole || person.role || 'member'
+  // Show FlowTask's source role when present; workspaceRole remains the access role.
+  const role   = person.flowTaskRole || person.workspaceRole || person.role || 'member'
   const title  = person.title || ''
   const dept   = person.department || ''
   const formattedRole = role.charAt(0).toUpperCase() + role.slice(1)
-  const isGuest = role === 'guest'
+  const isGuest = (person.workspaceRole || person.role) === 'guest'
 
   const presenceMap = usePresenceStore((s) => s.presence)
   const personId    = person._id || person.userId

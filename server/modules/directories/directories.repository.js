@@ -47,7 +47,7 @@ class DirectoriesRepository {
     // Title filter
     if (title) {
       const regex = new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      pipeline.push({ $match: { role: regex } });
+      pipeline.push({ $match: { $or: [{ role: regex }, { 'flowTaskAccess.role': regex }] } });
     }
 
     // Sort
@@ -75,6 +75,7 @@ class DirectoriesRepository {
         onlineStatus: '$user.onlineStatus',
         customStatus: '$user.customStatus',
         workspaceRole: '$role',
+        flowTaskRole: '$flowTaskAccess.role',
         joinedAt: '$joinedAt',
       },
     });

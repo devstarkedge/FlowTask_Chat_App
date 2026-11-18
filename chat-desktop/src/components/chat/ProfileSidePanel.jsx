@@ -54,6 +54,7 @@ export default function ProfileSidePanel({ user, onClose }) {
   const [showMore, setShowMore] = useState(false);
   const [sendingDM, setSendingDM] = useState(false);
   const [fetchedWorkspaceRole, setFetchedWorkspaceRole] = useState(null);
+  const [fetchedFlowTaskRole, setFetchedFlowTaskRole] = useState(null);
 
   const userId = user?._id || user?.userId;
   const liveStatus = presenceMap[userId] || presenceMap[user?.flowTaskUserId] || presenceMap[user?.chatUserId] || user?.onlineStatus || "offline";
@@ -117,10 +118,8 @@ export default function ProfileSidePanel({ user, onClose }) {
 
   useEffect(() => {
     if (!userId) return;
-    if (KNOWN_WORKSPACE_ROLES.has(user?.workspaceRole)) {
-      setFetchedWorkspaceRole(null);
-      return;
-    }
+    setFetchedWorkspaceRole(null);
+    setFetchedFlowTaskRole(null);
     let cancelled = false;
     userAPI
       .getProfile(userId)
@@ -128,12 +127,13 @@ export default function ProfileSidePanel({ user, onClose }) {
         if (cancelled) return;
         const profile = data?.data || data;
         if (profile?.workspaceRole) setFetchedWorkspaceRole(profile.workspaceRole);
+        if (profile?.flowTaskRole) setFetchedFlowTaskRole(profile.flowTaskRole);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [userId, workspaceId, user?.workspaceRole]);
+  }, [userId, workspaceId, user?.workspaceRole, user?.flowTaskRole]);
 
   useEffect(() => {
     const h = (e) => {
@@ -177,12 +177,15 @@ export default function ProfileSidePanel({ user, onClose }) {
   const avatar = user.avatar || user.profilePicture;
   const title = user.title || "";
 
-  // Prefer the workspace-level role (from WorkspaceMembership / guest invite)
-  // over ChatUser.role which is synced from FlowTask (job titles like "Employee").
+  // FlowTask's role is the display label for linked workspaces; workspaceRole
+  // remains the authorization role used by TaskChat.
   const memberRecord = wsMembers.find(
     (m) => (m.userId?._id || m.userId)?.toString() === userId?.toString()
   );
   const role =
+    memberRecord?.flowTaskAccess?.role ||
+    fetchedFlowTaskRole ||
+    user.flowTaskRole ||
     (KNOWN_WORKSPACE_ROLES.has(user.workspaceRole) ? user.workspaceRole : null) ||
     (KNOWN_WORKSPACE_ROLES.has(fetchedWorkspaceRole) ? fetchedWorkspaceRole : null) ||
     memberRecord?.role ||

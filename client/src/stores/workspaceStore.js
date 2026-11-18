@@ -420,13 +420,16 @@ export const useWorkspaceStore = create(
       },
 
       // Update member role in store (for socket events, no API call)
-      updateMemberRoleInStore: (userId, newRole) => {
+      updateMemberRoleInStore: (userId, newRole, flowTaskRole = null) => {
         set((state) => ({
-          members: state.members.map((m) =>
-            (m.userId?._id === userId || m.userId === userId || m._id === userId)
-              ? { ...m, role: newRole }
-              : m
-          ),
+          members: state.members.map((m) => {
+            if (!(m.userId?._id === userId || m.userId === userId || m._id === userId)) return m
+            return {
+              ...m,
+              role: newRole,
+              ...(flowTaskRole ? { flowTaskAccess: { ...(m.flowTaskAccess || {}), role: flowTaskRole } } : {}),
+            }
+          }),
         }))
       },
 

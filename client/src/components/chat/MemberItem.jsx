@@ -11,7 +11,7 @@ export default function MemberItem({ member, isHost = false, onOpenProfile, canR
   const status = presenceMap[id] || presenceMap[member?.flowTaskUserId] || presenceMap[member?.chatUserId] || member?.onlineStatus || 'offline';
   const isOnline = status === 'online'
   const effectiveIsHost = Boolean(isHost || member?.isHost || member?.channelRole === 'owner');
-  const displayRole = member.workspaceRole || member.role || member.channelRole;
+  const displayRole = member.flowTaskRole || member.flowTaskAccess?.role || member.workspaceRole || member.role || member.channelRole;
 
   return (
     <div className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-default ${member?.registrationStatus === 'faded' ? 'opacity-60' : 'hover:bg-(--bg-hover)'}`}>

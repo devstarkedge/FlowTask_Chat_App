@@ -766,11 +766,11 @@ export function connectSocket() {
   })
 
   // ─── Workspace Member Updated (for other members seeing role changes) ─
-  socket.on(SOCKET_EVENTS.WORKSPACE_MEMBER_UPDATED, ({ userId, newRole, workspaceId, updatedBy }) => {
+  socket.on(SOCKET_EVENTS.WORKSPACE_MEMBER_UPDATED, ({ userId, newRole, flowTaskRole, workspaceId, updatedBy }) => {
     // Update workspaceStore members array if viewing this workspace
     const store = useWorkspaceStore.getState()
     if (store.activeWorkspaceId === workspaceId) {
-      store.updateMemberRoleInStore(userId, newRole)
+      store.updateMemberRoleInStore(userId, newRole, flowTaskRole)
     }
     
     logger.info('[Socket] Workspace member role updated', { userId, newRole, workspaceId })

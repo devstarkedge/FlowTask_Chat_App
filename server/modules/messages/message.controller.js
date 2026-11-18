@@ -145,7 +145,8 @@ export const editMessage = asyncHandler(async (req, res) => {
     req.body.content,
     req.workspaceId,
     req.body.htmlContent,
-    req.body.fileReferences
+    req.body.fileReferences,
+    req.body.attachments
   );
   res.json({ success: true, data: { message } });
 });

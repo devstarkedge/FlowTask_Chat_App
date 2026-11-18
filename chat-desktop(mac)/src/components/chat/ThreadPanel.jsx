@@ -11,6 +11,7 @@ import { useLaterStore } from "../../stores/laterStore";
 import MessageInput from "./MessageInput";
 import RichTextEditor from "./RichTextEditor";
 import FormattingToolbar from "./FormattingToolbar";
+import { useMessageAttachmentEditor } from "../../hooks/useMessageAttachmentEditor";
 import {
   X,
   MessageSquare,
@@ -25,6 +26,8 @@ import {
   Link2,
   MoreVertical,
   Save,
+  GripVertical,
+  ImagePlus,
 } from "lucide-react";
 import { Avatar } from "./MemberAvatarGroup";
 import { format } from "date-fns";
@@ -91,12 +94,24 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
       align-items: center;
     }
     .tp-inline-editor-attachment-item {
-      display: inline-flex;
-      align-items: center;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 7px;
+      width: 170px;
+      padding: 8px;
+      border: 1px solid var(--border-secondary, rgba(255,255,255,0.18));
+      border-radius: 10px;
+      background: var(--bg-secondary, rgba(255,255,255,0.035));
+      box-sizing: border-box;
+      cursor: grab;
     }
+    .tp-inline-editor-attachment-item:active { cursor: grabbing; }
+    .tp-inline-editor-attachment-item:hover { border-color: var(--accent-primary, #1264a3); }
     .tp-inline-editor-thumb-box {
-      width: 58px;
-      height: 58px;
+      position: relative;
+      width: 100%;
+      height: 92px;
       border-radius: 8px;
       overflow: hidden;
       border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.15));
@@ -115,10 +130,65 @@ if (typeof document !== "undefined" && !document.getElementById(TP_STYLE_ID)) {
     .tp-inline-editor-thumb-box img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
       border-radius: 7px;
     }
+    .tp-inline-editor-attachment-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .tp-inline-editor-drag-hint {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-muted, #888);
+      font-size: 11px;
+      cursor: grab;
+      user-select: none;
+    }
+    .tp-inline-editor-attachment-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 5px;
+    }
+    .tp-inline-editor-attachment-control {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 29px;
+      padding: 3px 7px;
+      border: 1px solid var(--border-secondary, rgba(255,255,255,0.22));
+      border-radius: 6px;
+      color: var(--text-primary, #eee);
+      background: var(--bg-secondary, #30343b);
+      font-size: 11px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .tp-inline-editor-attachment-actions .tp-inline-editor-attachment-control { width: 100%; }
+    .tp-inline-editor-attachment-control:hover { border-color: var(--accent-primary, #1264a3); background: var(--bg-tertiary, #3b414a); }
+    .tp-inline-editor-add-image {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      width: 170px;
+      min-height: 150px;
+      padding: 12px;
+      border: 1px dashed var(--border-secondary, rgba(255,255,255,0.2));
+      border-radius: 7px;
+      background: transparent;
+      color: var(--text-secondary, #aaa);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .tp-inline-editor-add-image:hover { border-color: var(--accent-primary, #1264a3); color: var(--text-primary, #eee); }
+    .tp-inline-editor-add-image:disabled { opacity: 0.55; cursor: wait; }
+    .tp-inline-editor-uploading { flex-basis: 100%; color: var(--text-muted, #888); font-size: 12px; }
     .tp-inline-editor-file-box {
       display: inline-flex;
       align-items: center;
@@ -271,9 +341,21 @@ function getAttachmentThumb(file) {
   return getFileUrl(file) || '';
 }
 
-function InlineEditor({ initialHtml, initialText, channelId, attachments = [], onSave, onCancel }) {
+function InlineEditor({ initialHtml, initialText, channelId, attachments: initialAttachments = [], onSave, onCancel }) {
   const editorRef = useRef(null);
   const wrapRef = useRef(null);
+  const {
+    attachments,
+    attachmentIds,
+    embeddedAttachments,
+    isUploading,
+    fileInputRef,
+    handlePaste,
+    handleFileInput,
+    openPicker,
+    removeAttachment,
+    moveAttachment,
+  } = useMessageAttachmentEditor(channelId, initialAttachments);
 
   const safeChannelId = typeof channelId === "object" ? channelId?._id : channelId;
 
@@ -356,10 +438,10 @@ function InlineEditor({ initialHtml, initialText, channelId, attachments = [], o
     const ed = editorRef.current;
     if (!ed) return;
     const { html, text } = ed.getContent();
-    const hasAttachments = attachments && attachments.length > 0;
+    const hasAttachments = attachmentIds.length > 0 || embeddedAttachments.length > 0;
     if (!hasAttachments && !text?.trim()) return;
-    onSave(html, text);
-  }, [onSave, attachments]);
+    onSave(html, text, attachmentIds, embeddedAttachments);
+  }, [onSave, attachmentIds, embeddedAttachments]);
 
   const handleEditorInput = useCallback(() => {
     syncFormatState();
@@ -379,7 +461,7 @@ function InlineEditor({ initialHtml, initialText, channelId, attachments = [], o
       </div>
 
       {/* TipTap editor */}
-      <div className="tp-inline-editor-content">
+      <div className="tp-inline-editor-content" onPaste={handlePaste}>
         <RichTextEditor
           ref={editorRef}
           placeholder={initialText || initialHtml ? "Edit message…" : "Add message"}
@@ -395,8 +477,7 @@ function InlineEditor({ initialHtml, initialText, channelId, attachments = [], o
 
 
         {/* Attachment Previews in Edit Mode */}
-        {attachments && attachments.length > 0 && (
-          <div className="tp-inline-editor-attachments">
+        <div className="tp-inline-editor-attachments">
             {attachments.map((file, idx) => {
               const isImg = isImageAttachment(file);
               const thumbSrc = getAttachmentThumb(file);
@@ -406,22 +487,42 @@ function InlineEditor({ initialHtml, initialText, channelId, attachments = [], o
                   key={file._id || file.fileId || idx}
                   className="tp-inline-editor-attachment-item"
                   title={name}
+                  draggable
+                  onDragStart={(event) => event.dataTransfer.setData('text/plain', String(idx))}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    moveAttachment(Number(event.dataTransfer.getData('text/plain')), idx);
+                  }}
                 >
                   {isImg && thumbSrc ? (
-                    <div className="tp-inline-editor-thumb-box">
-                      <img src={thumbSrc} alt={name} loading="lazy" />
-                    </div>
+                    <>
+                      <div className="tp-inline-editor-thumb-box">
+                        <img src={thumbSrc} alt={name} loading="lazy" />
+                      </div>
+                      <div className="tp-inline-editor-attachment-controls">
+                        <span className="tp-inline-editor-drag-hint"><GripVertical size={13} /> Drag to move</span>
+                        <div className="tp-inline-editor-attachment-actions">
+                          <button type="button" title="Replace image" aria-label="Replace image" className="tp-inline-editor-attachment-control" onClick={() => openPicker(idx)}><ImagePlus size={13} /> Replace</button>
+                          <button type="button" title="Remove image" aria-label="Remove image" className="tp-inline-editor-attachment-control" onClick={() => removeAttachment(idx)}><X size={13} /> Remove</button>
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <div className="tp-inline-editor-file-box">
                       <FileText size={18} style={{ color: "var(--accent-primary, #1264a3)", flexShrink: 0 }} />
                       <span className="tp-inline-editor-file-name">{name}</span>
+                      <button type="button" title="Remove attachment" aria-label="Remove attachment" className="tp-inline-editor-attachment-control" onClick={() => removeAttachment(idx)}><X size={13} /> Remove</button>
                     </div>
                   )}
                 </div>
               );
             })}
+            <button type="button" className="tp-inline-editor-add-image" onClick={() => openPicker()} disabled={isUploading}><ImagePlus size={20} /> <span>Add image</span></button>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={handleFileInput} />
+            <span className="tp-inline-editor-uploading">Paste with Ctrl+V · Drag thumbnails to reorder</span>
+            {isUploading && <span className="tp-inline-editor-uploading">Uploading…</span>}
           </div>
-        )}
 
         {/* Mention Dropdown */}
         {mentionType && (
@@ -445,7 +546,7 @@ function InlineEditor({ initialHtml, initialText, channelId, attachments = [], o
           <button className="tp-inline-editor-cancel-btn" onClick={onCancel}>
             Cancel
           </button>
-          <button className="tp-inline-editor-save-btn" onClick={handleSave}>
+          <button className="tp-inline-editor-save-btn" onClick={handleSave} disabled={isUploading}>
             <Save size={12} />
             Save changes
           </button>
@@ -632,16 +733,24 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
   const isEditing = editingMessageId === message._id;
 
   // Derive attachments
-  const derivedAttachments =
+  const referencedAttachments =
     message.fileReferences?.length > 0
       ? message.fileReferences
           .map((ref) =>
             ref.fileId
-              ? { ...ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
+              ? { ...ref.fileId, fileReferenceId: ref.fileId._id || ref.fileId, url: ref.fileId.secureUrl || ref.fileId.url }
               : null,
           )
           .filter(Boolean)
-      : message.attachments || [];
+      : [];
+  const derivedAttachments = [...referencedAttachments];
+  (message.attachments || []).forEach((embeddedAttachment) => {
+    const isAlreadyReferenced = derivedAttachments.some((file) =>
+      (file.url && (file.url === embeddedAttachment.url || file.url === embeddedAttachment.secureUrl)) ||
+      (file.originalName && file.originalName === embeddedAttachment.originalName && file.fileSize === embeddedAttachment.fileSize),
+    );
+    if (!isAlreadyReferenced) derivedAttachments.push(embeddedAttachment);
+  });
 
 
 
@@ -674,14 +783,15 @@ function ThreadMessage({ message, isRoot = false, onForwardMessage }) {
    * text  — plain-text equivalent                 — stored as content
    */
   const handleEdit = useCallback(
-    (html, text) => {
-      const hasAttachments = derivedAttachments && derivedAttachments.length > 0;
+    async (html, text, fileReferences, attachments) => {
+      const hasAttachments = fileReferences?.length > 0 || attachments?.length > 0;
       if (text?.trim() || hasAttachments) {
-        editThreadReply(message._id, { content: text || "", htmlContent: html || "" });
+        const saved = await editThreadReply(message._id, { content: text || "", htmlContent: html || "", fileReferences, attachments });
+        if (saved === false) return;
       }
       clearEditingMessageId();
     },
-    [editThreadReply, message._id, clearEditingMessageId, derivedAttachments],
+    [editThreadReply, message._id, clearEditingMessageId],
   );
 
   const handleReaction = (emoji) => {

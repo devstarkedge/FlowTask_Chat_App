@@ -266,15 +266,11 @@ export const messageAPI = {
   get: (id) => api.get(`/messages/${id}`),
   getInfo: (id, channelId) => api.get(`/messages/${id}/info`, { params: { channelId } }),
   edit: (id, content) => {
-    // Server edit endpoint expects `{ content: string }`.
-    // When callers provide an object with `htmlContent`, prefer that
-    // so rich formatting is preserved server-side.
+    // Preserve plain text, rich text, and attachment references together.
     if (typeof content === "string")
       return api.put(`/messages/${id}`, { content });
-    if (content && typeof content === "object") {
-      const payloadContent = content.htmlContent ?? content.content ?? "";
-      return api.put(`/messages/${id}`, { content: payloadContent });
-    }
+    if (content && typeof content === "object")
+      return api.put(`/messages/${id}`, content);
     return api.put(`/messages/${id}`, {});
   },
   delete: (id) => api.delete(`/messages/${id}`),

@@ -619,8 +619,10 @@ export const useChatStore = create((set, get) => ({
           },
         };
       });
-    } catch {
-      toast.error("Failed to edit message");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || "Failed to edit message");
+      return false;
     }
   },
 
@@ -1332,8 +1334,10 @@ export const useChatStore = create((set, get) => ({
           },
         };
       });
-    } catch {
-      toast.error('Failed to edit message');
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to edit message');
+      return false;
     }
   },
 

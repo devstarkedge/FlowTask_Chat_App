@@ -463,6 +463,7 @@ messageSchema.virtual('fileReferences', {
   ref: 'FileReference',
   localField: '_id',
   foreignField: 'messageId',
+  options: { sort: { order: 1, createdAt: 1 } },
 });
 
 // ─── Instance Methods ────────────────────────────────────────────────────────

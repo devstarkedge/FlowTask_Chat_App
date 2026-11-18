@@ -309,8 +309,9 @@ class MessageService {
       // Deduplicate fileIds to prevent E11000 duplicate key error on workspaceId_messageId_fileId index
       const uniqueFileReferences = [...new Set(fileReferences.map(id => id.toString()))];
       
-      const refsToCreate = uniqueFileReferences.map((fileId) => ({
+      const refsToCreate = uniqueFileReferences.map((fileId, order) => ({
         fileId,
+        order,
         channelId,
         messageId: message._id,
         threadId: actualThreadId || null,
@@ -667,7 +668,7 @@ class MessageService {
   /**
    * Edit a message. Only the author can edit. Stores edit history.
    */
-  async editMessage(messageId, userId, newContent, workspaceId, htmlContent, fileReferences) {
+  async editMessage(messageId, userId, newContent, workspaceId, htmlContent, fileReferences, attachments) {
     const message = await messageRepository.findById(messageId, { workspaceId });
     if (!message) throw new NotFoundError('Message not found');
     this._assertWorkspaceMatch(message.workspaceId, workspaceId, 'Message');
@@ -695,14 +696,41 @@ class MessageService {
     const sanitizedHtml = htmlContent ? sanitizeHtml(htmlContent) : sanitizedContent;
 
     if (fileReferences) {
-      const cleanFileIds = fileReferences.map(id => id.toString());
+      const cleanFileIds = [...new Set(fileReferences.map(id => id.toString()))];
+      const referenceWorkspaceId = workspaceId || message.workspaceId || channel?.workspaceId;
+      await authorizeFileReferences(cleanFileIds, userId, referenceWorkspaceId);
       await FileReference.deleteMany({
+        workspaceId: referenceWorkspaceId,
         messageId,
         fileId: { $nin: cleanFileIds },
       });
+
+      const contextType = message.threadId
+        ? 'thread'
+        : channel?.type === CHANNEL_TYPES.DM
+          ? 'dm'
+          : 'channel';
+      if (cleanFileIds.length) {
+        await FileReference.bulkWrite(cleanFileIds.map((fileId, order) => ({
+          updateOne: {
+            filter: { workspaceId: referenceWorkspaceId, messageId, fileId },
+            update: {
+              $set: {
+                channelId: message.channelId,
+                threadId: message.threadId || null,
+                referencedBy: userId,
+                contextType,
+                order,
+              },
+              $setOnInsert: { workspaceId: referenceWorkspaceId, messageId, fileId },
+            },
+            upsert: true,
+          },
+        })));
+      }
     }
 
-    const updatedMessage = await messageRepository.update(messageId, {
+    const editData = {
       content: sanitizedContent,
       htmlContent: sanitizedHtml,
       isEdited: true,
@@ -712,7 +740,10 @@ class MessageService {
           editedAt: new Date(),
         },
       },
-    }, workspaceId);
+    };
+    if (attachments !== undefined) editData.attachments = attachments;
+    else if (fileReferences !== undefined) editData.attachments = [];
+    const updatedMessage = await messageRepository.update(messageId, editData, workspaceId);
 
     const populated = await messageRepository.findById(messageId, { workspaceId });
     const socketPayload = messageSocketPayload(populated);

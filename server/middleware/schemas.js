@@ -108,8 +108,18 @@ export const editMessageSchema = z.object({
   content: z.string().optional().default(""),
   htmlContent: z.string().optional().default(""),
   fileReferences: z.array(objectId).max(10).optional(),
+  attachments: z.array(z.object({
+    fileName: z.string().min(1).max(255),
+    originalName: z.string().max(255).optional().nullable(),
+    mimeType: z.string().min(1).max(100),
+    fileSize: z.number().int().nonnegative().max(env.MAX_FILE_SIZE),
+    url: z.union([z.string().url(), z.string().startsWith("/")]),
+    thumbnailUrl: z.string().nullish(),
+    source: z.enum(["chat_upload", "flowtask_link"]).optional(),
+    flowTaskAttachmentId: z.string().nullish(),
+  })).max(10).optional(),
 }).refine(
-  (data) => (data.content && data.content.trim()) || (data.fileReferences && data.fileReferences.length > 0),
+  (data) => (data.content && data.content.trim()) || (data.fileReferences && data.fileReferences.length > 0) || (data.attachments && data.attachments.length > 0),
   { message: "Message must have content or file references" }
 );
 

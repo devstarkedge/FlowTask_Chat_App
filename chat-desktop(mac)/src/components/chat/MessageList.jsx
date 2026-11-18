@@ -43,6 +43,7 @@ const LIST_COMPONENTS = { Header: MessageListHeader, Footer: MessageListFooter }
 export default function MessageList({
   messages,
   channelId,
+  isActivityTimeline = false,
   onOpenThread,
   onOpenProfile,
   onOpenFilePreview,
@@ -242,11 +243,10 @@ export default function MessageList({
 
   // ─── Load older messages when user scrolls to top ─────────────────────
   const loadMore = useCallback(() => {
-    if (!hasMore || isLoadingMessages || messages.length === 0)
-      return;
-    const oldest = messages[0];
+    if (!hasMore || isLoadingMessages) return;
+    const oldest = useChatStore.getState().selectMessagesForChannel(channelId)[0];
     if (oldest) fetchMessages(channelId, { cursor: oldest._id, limit: 80 });
-  }, [channelId, hasMore, isLoadingMessages, messages, fetchMessages]);
+  }, [channelId, hasMore, isLoadingMessages, fetchMessages]);
 
   // ─── Hard-jump to bottom whenever the active channel changes ──────────
   useLayoutEffect(() => {
@@ -470,7 +470,7 @@ export default function MessageList({
   if (!isLoadingMessages && messages.length === 0) {
     return (
       <div className="flex-1 overflow-hidden">
-        <EmptyState />
+        <EmptyState isActivityTimeline={isActivityTimeline} onLoadEarlier={hasMore ? loadMore : undefined} />
       </div>
     );
   }
@@ -759,7 +759,7 @@ function MessageSkeleton() {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ isActivityTimeline, onLoadEarlier }) {
   return (
     <div
       className="flex items-center justify-center h-full animate-fade-in"
@@ -788,11 +788,15 @@ function EmptyState() {
             marginBottom: 4,
           }}
         >
-          No messages yet
+          {isActivityTimeline ? "No project activity yet" : "No messages yet"}
         </p>
-        <p style={{ fontSize: 13 }}>
-          Start the conversation by sending a message below.
-        </p>
+        {onLoadEarlier ? (
+          <button type="button" className="btn btn-ghost mt-2" onClick={onLoadEarlier}>
+            Load earlier {isActivityTimeline ? "activity" : "messages"}
+          </button>
+        ) : !isActivityTimeline && (
+          <p style={{ fontSize: 13 }}>Start the conversation by sending a message below.</p>
+        )}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { messageTimeline } from '../../../shared/projectActivity.js';
 import { attachReportingHistory } from '../reporting/reportingHistory.service.js';
 import { isReportingChannel, canAccessReportingChannel, reportingRecipients } from '../reporting/reportingAccess.js';
 import { authorizeFileReferences } from '../files/fileAccess.service.js';
@@ -565,7 +566,7 @@ class MessageService {
       .updateLastMessage(channelId, preview, new Date(), workspaceId?.toString())
       .catch(() => {});
 
-    const socketPayload = messageSocketPayload(message);
+    const socketPayload = messageSocketPayload(message, { isFlowTaskSystemMessage: true });
 
     // Emit via socket
     if (normalizedVisibleTo.length > 0) {
@@ -591,7 +592,7 @@ class MessageService {
   /**
    * Get messages for a channel with cursor-based pagination.
    */
-  async getChannelMessages(channelId, query = {}, workspaceId, userId, membership) {
+  async getChannelMessages(channelId, query = {}, workspaceId, userId, membership, channel) {
     const { limit, cursor } = parsePagination(query);
     const direction = query.direction || 'before';
 
@@ -606,7 +607,9 @@ class MessageService {
         isAdmin: membership?.role === 'admin' || membership?.role === 'owner',
       },
     );
-    return cursorPaginationResponse(await attachReportingHistory(messages, userId, workspaceId), limit, '_id');
+    const items = await attachReportingHistory(messages, userId, workspaceId);
+    for (const item of items) item.timelineTab = messageTimeline(channel, item, workspaceId);
+    return cursorPaginationResponse(items, limit, '_id');
   }
 
   /**
@@ -626,8 +629,10 @@ class MessageService {
       throw new NotFoundError('Message not found in this channel');
     }
 
+    const items = await attachReportingHistory(around.messages, userId, workspaceId);
+    for (const item of items) item.timelineTab = messageTimeline(channel, item, workspaceId);
     return {
-      items: await attachReportingHistory(around.messages, userId, workspaceId),
+      items,
       highlightedMessageId: around.highlightedMessageId,
       hasMoreBefore: around.hasMoreBefore,
       hasMoreAfter: around.hasMoreAfter,

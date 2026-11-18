@@ -106,7 +106,8 @@ const channelSchema = new Schema(
     // request on every sidebar/message authorization check.
     flowTaskMetadata: {
       teamId: { type: String, default: null },
-      sourceVisibility: { type: String, enum: ['public', 'private', null], default: null },
+      sourceVisibility: { type: String, enum: ['public', 'workspace', 'department', 'private', null], default: null },
+      sourceUpdatedAt: { type: Date, default: null },
     },
     membershipSyncLock: {
       token: { type: String, default: null },

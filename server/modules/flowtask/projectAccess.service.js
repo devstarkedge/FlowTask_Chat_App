@@ -8,8 +8,15 @@ export function isFlowTaskProjectChannel(channel) {
   return channel?.type === 'project' || channel?.flowTaskRef?.entityType === 'board';
 }
 
-function toStringSet(values) {
-  return new Set((values || []).map((value) => value?.toString()).filter(Boolean));
+const SOURCE_VISIBILITIES = ['public', 'workspace', 'department', 'private'];
+
+export function isFlowTaskWorkspaceAdmin(membership) {
+  return membership?.isActive === true && membership.flowTaskAccess?.role === 'admin';
+}
+
+export function projectSourceVisibility(board) {
+  const visibility = board?.sourceVisibility || board?.visibility;
+  return SOURCE_VISIBILITIES.includes(visibility) ? visibility : null;
 }
 
 /**
@@ -19,8 +26,9 @@ function toStringSet(values) {
  * from becoming a global ChatUser bypass.
  */
 export function hasSnapshotProjectAccess(channel, membership) {
-  if (!isFlowTaskProjectChannel(channel)) return false;
-  return false;
+  if (!isFlowTaskProjectChannel(channel) || !membership?.isActive ||
+      !channel.workspaceId || String(channel.workspaceId) !== String(membership.workspaceId)) return false;
+  return isFlowTaskWorkspaceAdmin(membership) && channel.flowTaskMetadata?.sourceVisibility === 'public';
 }
 
 export async function getWorkspaceMembership(userId, workspaceId) {
@@ -29,12 +37,12 @@ export async function getWorkspaceMembership(userId, workspaceId) {
 }
 
 export async function canAccessFlowTaskProjectChannel(channel, userId, workspaceId, membership = null) {
-  if (!isFlowTaskProjectChannel(channel)) return false;
-  const activeMembership = membership || await getWorkspaceMembership(userId, workspaceId || channel?.workspaceId);
-  if (activeMembership?.role === 'admin' || activeMembership?.role === 'owner') {
-    return true;
-  }
-  return ChannelMember.isMember(channel._id, userId);
+  if (!isFlowTaskProjectChannel(channel) || !channel.workspaceId ||
+      workspaceId && String(channel.workspaceId) !== String(workspaceId)) return false;
+  const activeMembership = membership || await getWorkspaceMembership(userId, channel.workspaceId);
+  if (!activeMembership?.isActive || String(activeMembership.workspaceId) !== String(channel.workspaceId) ||
+      String(activeMembership.userId) !== String(userId)) return false;
+  return hasSnapshotProjectAccess(channel, activeMembership) || ChannelMember.isMember(channel._id, userId);
 }
 
 /**
@@ -43,17 +51,15 @@ export async function canAccessFlowTaskProjectChannel(channel, userId, workspace
  */
 export async function getAuthorizedProjectUserIds(channel, workspaceId) {
   const effectiveWsId = workspaceId || channel?.workspaceId;
+  if (!effectiveWsId || String(channel?.workspaceId) !== String(effectiveWsId)) return [];
   const directIds = await ChannelMember.getMemberIds(channel._id);
-  if (!effectiveWsId) return directIds;
-
-  const adminMemberships = await WorkspaceMembership.find({
-    workspaceId: effectiveWsId,
-    role: { $in: ['admin', 'owner'] },
-    isActive: true,
-  }).select('userId').lean();
-
-  const adminIds = adminMemberships.map((m) => m.userId.toString());
-  return [...new Set([...directIds, ...adminIds])];
+  const audience = [{ userId: { $in: directIds } }];
+  if (channel.flowTaskMetadata?.sourceVisibility === 'public') {
+    audience.push({ 'flowTaskAccess.role': 'admin' });
+  }
+  const memberships = await WorkspaceMembership.find({ workspaceId: effectiveWsId, isActive: true, $or: audience })
+    .select('userId').lean();
+  return memberships.map(member => String(member.userId));
 }
 
 /**
@@ -72,7 +78,7 @@ export async function purgeUnauthorizedProjectActivity(userId, workspaceId, memb
       { type: 'project' },
       { 'flowTaskRef.entityType': 'board' },
     ],
-  }).select('_id type flowTaskRef flowTaskMetadata departmentRef').lean();
+  }).select('_id workspaceId type flowTaskRef flowTaskMetadata departmentRef').lean();
 
   const revokedChannelIds = [];
   for (const channel of projectChannels) {

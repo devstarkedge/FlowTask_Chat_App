@@ -418,8 +418,7 @@ export async function initializeSocket(httpServer, corsOptions) {
           const allowed = await canAccessFlowTaskProjectChannel(
             channel,
             userId,
-            wsId,
-            socket.workspaceMembership
+            wsId
           );
           if (!allowed) {
             socket.emit('error', { message: 'Not authorized for this FlowTask project' });

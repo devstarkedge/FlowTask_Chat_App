@@ -446,8 +446,10 @@ class FlowTaskService {
         ),
         participants,
         membershipVersion: snapshot.membershipVersion || 0,
+        ownerFlowTaskId: snapshot.project?.owner || null,
       };
     } catch (error) {
+      if (options.requireSnapshot) throw error;
       logger.warn('Authoritative project participant fetch failed; using legacy fallback', {
         boardId,
         error: error.message,

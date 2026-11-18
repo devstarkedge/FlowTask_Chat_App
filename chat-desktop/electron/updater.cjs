@@ -1,6 +1,10 @@
 const { app, ipcMain } = require('electron');
 const pkg = require('../package.json');
 
+// Read the public latest.yml directly. This avoids the GitHub release lookup
+// endpoint, which can be reset by some networks even when release assets work.
+const UPDATE_FEED_URL = 'https://github.com/devstarkedge/FlowTask_Chat_App/releases/latest/download';
+
 let isInitialized = false;
 let autoUpdater = null;
 let updateStatus = {
@@ -184,6 +188,13 @@ function initUpdater(mainWindow, options = {}) {
     debug: (msg) => console.debug(`[Updater] ${msg}`),
   };
 
+  try {
+    au.setFeedURL({ provider: 'generic', url: UPDATE_FEED_URL });
+    console.log(`[Updater] Using direct release feed: ${UPDATE_FEED_URL}`);
+  } catch (err) {
+    console.warn('[Updater] Could not configure direct release feed:', err?.message || err);
+  }
+
   // Event handlers
   au.on('checking-for-update', () => {
     updateStatus = {
@@ -254,7 +265,7 @@ function initUpdater(mainWindow, options = {}) {
 
   au.on('error', (err) => {
     const errorMsg = err?.message || String(err) || 'Update check failed';
-    console.error('[Updater] Error:', errorMsg);
+    console.error('[Updater] Error while checking/downloading release assets:', err);
     updateStatus = {
       ...updateStatus,
       status: 'error',

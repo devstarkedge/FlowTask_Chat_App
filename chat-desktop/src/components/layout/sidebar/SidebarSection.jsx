@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 
 /**
  * SidebarSection — Reusable collapsible section with a header.
@@ -28,6 +28,14 @@ const SidebarSection = memo(function SidebarSection({
   editTitle = 'Edit',
   onDelete,
   deleteTitle = 'Delete',
+  searchable = false,
+  searchOpen = false,
+  searchValue = '',
+  searchPlaceholder = 'Search…',
+  collapsible = true,
+  onSearchOpen,
+  onSearchChange,
+  onSearchClose,
   actionMenu,
   children,
 }) {
@@ -42,21 +50,30 @@ const SidebarSection = memo(function SidebarSection({
   return (
     <div className="sidebar-section">
       <div className="sidebar-section-header">
-        <button
-          onClick={onToggle}
-          className={`sidebar-section-toggle ${hasCustomIcon ? 'has-custom-icon' : ''}`}
-        >
-          <span className="sidebar-section-icon-wrapper">
-            <span className="sidebar-section-icon-default">{defaultIconNode}</span>
-            {hasCustomIcon && (
-              <span className="sidebar-section-icon-hover">{hoverChevronNode}</span>
+        {searchable ? (
+          <div className="sidebar-section-toggle sidebar-section-toggle--searchable">
+            <button type="button" className="sidebar-section-icon-wrapper sidebar-section-search-trigger" onClick={onSearchOpen} title={searchPlaceholder} aria-label={searchPlaceholder}>
+              {defaultIconNode}
+            </button>
+            {searchOpen ? (
+              <div className="sidebar-section-search">
+                <input autoFocus type="text" value={searchValue} onChange={(event) => onSearchChange?.(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') onSearchClose?.(); }} placeholder={searchPlaceholder} aria-label={searchPlaceholder} />
+                <button type="button" className="sidebar-section-search-close" onClick={onSearchClose} title="Close search" aria-label="Close search"><X size={14} /></button>
+              </div>
+            ) : collapsible ? (
+              <button type="button" onClick={onToggle} className="sidebar-section-title sidebar-section-title-button">{title}</button>
+            ) : (
+              <span className="sidebar-section-title">{title}</span>
             )}
-          </span>
-          <span className="sidebar-section-title">{title}</span>
-          {count != null && count > 0 && (
-            <span className="sidebar-section-count">{count}</span>
-          )}
-        </button>
+            {count != null && count > 0 && <span className="sidebar-section-count">{count}</span>}
+          </div>
+        ) : (
+          <button onClick={onToggle} className={`sidebar-section-toggle ${hasCustomIcon ? 'has-custom-icon' : ''}`}>
+            <span className="sidebar-section-icon-wrapper"><span className="sidebar-section-icon-default">{defaultIconNode}</span>{hasCustomIcon && <span className="sidebar-section-icon-hover">{hoverChevronNode}</span>}</span>
+            <span className="sidebar-section-title">{title}</span>
+            {count != null && count > 0 && <span className="sidebar-section-count">{count}</span>}
+          </button>
+        )}
         <div style={{ display: 'flex', gap: 4 }}>
           {onEdit && (
             <button

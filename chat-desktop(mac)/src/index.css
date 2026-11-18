@@ -4730,6 +4730,15 @@ body {
   text-overflow: ellipsis;
 }
 
+.sidebar-section-toggle--searchable { flex: 1; min-width: 0; cursor: default; }
+.sidebar-section-search-trigger { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.sidebar-section-title-button { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.sidebar-section-search { display: flex; align-items: center; flex: 1; min-width: 0; height: 25px; gap: 4px; }
+.sidebar-section-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--sidebar-text, var(--text-white)); font: inherit; font-size: 12px; font-weight: 600; letter-spacing: normal; text-transform: none; }
+.sidebar-section-search input::placeholder { color: var(--sidebar-text-dim, var(--text-muted)); opacity: 0.8; }
+.sidebar-section-search-close { display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: 0; border-radius: 4px; background: transparent; color: var(--sidebar-text-dim, var(--text-muted)); cursor: pointer; }
+.sidebar-section-search-close:hover { color: var(--sidebar-text, var(--text-white)); }
+
 .hover-preview-item-time {
   color: var(--text-muted);
   font-size: 11px;

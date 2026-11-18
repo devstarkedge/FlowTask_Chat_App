@@ -9,7 +9,7 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useLaterStore } from '../../stores/laterStore';
 import { useScheduledStore } from '../../stores/scheduledStore';
 import { useFavoritesStore } from '../../stores/favoritesStore';
-import { Hash, Lock, MessageCircle, Users, Volume2, X, MessageSquareText, Globe, Compass, AppWindow, BookMarked, Clock, Star, ChevronDown, ChevronRight, Filter } from "lucide-react";
+import { Hash, Lock, MessageCircle, Users, Volume2, X, MessageSquareText, Globe, Compass, AppWindow, BookMarked, Clock, Star, ChevronDown, ChevronRight, Filter, Search } from "lucide-react";
 import { Avatar } from "../chat/MemberAvatarGroup";
 import CreateChannelModal from "../chat/CreateChannelModal";
 import CreateCategoryModal from "../chat/CreateCategoryModal";
@@ -139,6 +139,8 @@ export default function NavigationSidebar({
 
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
+  const [dmSearchOpen, setDMSearchOpen] = useState(false);
+  const [dmSearchQuery, setDMSearchQuery] = useState("");
 
   const [categoryToEdit, setCategoryToEdit] = useState(null);
   const [channelToMove, setChannelToMove] = useState(null);
@@ -416,8 +418,14 @@ export default function NavigationSidebar({
   );
 
   const displayedDMs = useMemo(() => {
-    return dmChannels.filter((c) => !topChannelIds.has(String(c._id)));
-  }, [dmChannels, topChannelIds]);
+    const query = dmSearchQuery.trim().toLocaleLowerCase();
+    return dmChannels.filter((channel) => {
+      if (topChannelIds.has(String(channel._id))) return false;
+      if (!query) return true;
+      const searchableNames = [channel.name, channel.dmRecipientName, ...(channel.dmParticipantNames || [])];
+      return searchableNames.some((name) => name?.toLocaleLowerCase().includes(query));
+    });
+  }, [dmChannels, topChannelIds, dmSearchQuery]);
 
   const nonTopChannels = useMemo(() => {
     return channels.filter((c) => !topChannelIds.has(String(c._id)));
@@ -873,9 +881,23 @@ export default function NavigationSidebar({
           {/* ── Direct Messages section ── */}
           <SidebarSection
             title={isDMMode ? "Direct messages" : "Direct Messages"}
-            icon={<MessageCircle size={15} />}
-            expanded={expandedSections.dms}
-            onToggle={() => toggleSection("dms")}
+            icon={<Search size={15} />}
+            expanded={isDMMode ? true : expandedSections.dms}
+            onToggle={() => { if (!isDMMode) toggleSection("dms"); }}
+            collapsible={!isDMMode}
+            searchable
+            searchOpen={dmSearchOpen}
+            searchValue={dmSearchQuery}
+            searchPlaceholder="Search direct messages"
+            onSearchOpen={() => {
+              setExpandedSections((sections) => ({ ...sections, dms: true }));
+              setDMSearchOpen(true);
+            }}
+            onSearchChange={setDMSearchQuery}
+            onSearchClose={() => {
+              setDMSearchOpen(false);
+              setDMSearchQuery("");
+            }}
             showAdd
             onAdd={() => setShowUserPicker(true)}
             addTitle="Start direct message"
@@ -914,9 +936,16 @@ export default function NavigationSidebar({
                 className="text-xs px-4 py-2"
                 style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}
               >
-                {isDMMode
+                {dmSearchQuery
+                  ? "No direct messages found"
+                  : isDMMode
                   ? "Start a direct message to begin private conversations."
                   : "No conversations yet"}
+              </p>
+            )}
+            {dmChannels.length > 0 && displayedDMs.length === 0 && dmSearchQuery.trim() && (
+              <p className="text-xs px-4 py-2" style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}>
+                No direct messages found
               </p>
             )}
           </SidebarSection>

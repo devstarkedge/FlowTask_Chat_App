@@ -1,3 +1,4 @@
+import { messageTimeline, supportsProjectActivity } from "../../../../shared/projectActivity.js";
 import HuddlePanel from '../huddles/HuddlePanel';
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
@@ -43,6 +44,7 @@ export default function ChatPanel({
   const channelMessageIds = useChatStore((s) => s.channelMessageIds?.[channelId] || EMPTY_LIST);
   const messagesById = useChatStore((s) => s.messagesById);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
+  const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
 
   // Canvas store: split selectors for the same reasons as above.
   const activeCanvas = useCanvasStore((s) => s.activeCanvas);
@@ -70,20 +72,17 @@ export default function ChatPanel({
     return channelMessageIds.map((id) => messagesById[id]).filter(Boolean);
   }, [legacyMessages, channelMessageIds, messagesById]);
 
-  const isActivityMessage = useCallback((message) =>
-    message?.contentType === "activity" ||
-    message?.contentType === "system" ||
-    message?.contentType === "bot" ||
-    !!message?.activityMeta,
-  []);
-  const activityMessages = useMemo(
-    () => messages.filter(isActivityMessage),
-    [messages, isActivityMessage],
-  );
-  const conversationMessages = useMemo(
-    () => messages.filter((message) => !isActivityMessage(message)),
-    [messages, isActivityMessage],
-  );
+  const showProjectActivity = supportsProjectActivity(channel, workspaceId);
+  const { activityMessages, conversationMessages } = useMemo(() => {
+    if (!showProjectActivity) {
+      return { activityMessages: EMPTY_LIST, conversationMessages: messages };
+    }
+    const tabs = { activity: [], messages: [] };
+    for (const message of messages) {
+      tabs[messageTimeline(channel, message, workspaceId)].push(message);
+    }
+    return { activityMessages: tabs.activity, conversationMessages: tabs.messages };
+  }, [channel, messages, showProjectActivity, workspaceId]);
 
   const isEditingInChannel = useMemo(() => {
     return editingMessageId && messages.some(m => m._id === editingMessageId);
@@ -143,6 +142,18 @@ export default function ChatPanel({
       // ignore
     }
   }, [channelId, fetchMessages, fetchPinnedMessages, requestChannelTabs, location.state, addOpenTab]);
+
+  // Open the right timeline for explicit message links, including targets loaded later.
+  const targetMessageId = scrollToMessageId || location.pathname.match(/\/message\/([^/]+)/)?.[1];
+  const targetTimeline = targetMessageId && messages.some((message) => message._id === targetMessageId)
+    ? activityMessages.some((message) => message._id === targetMessageId) ? "activity" : "messages"
+    : null;
+
+  useEffect(() => {
+    if (targetTimeline) setActiveTab(targetTimeline);
+  }, [targetTimeline]);
+
+  const visibleTab = targetTimeline || (activeTab === "activity" && !showProjectActivity ? "messages" : activeTab);
 
   // Note: persistence now handled by server-side channel tabs; client keeps local view in store
 
@@ -220,7 +231,7 @@ export default function ChatPanel({
     (tab) => {
       // Avoid re-processing the same tab value to prevent duplicate side-effects
       // (e.g., double load or duplicate provider initialization).
-      if (tab === activeTab) return;
+      if (tab === visibleTab || (tab === "activity" && !showProjectActivity)) return;
       setActiveTab(tab);
       
       // If switching to a canvas tab, optimistically set the active canvas ID
@@ -235,7 +246,7 @@ export default function ChatPanel({
         setCanvasIntent(null);
       }
     },
-    [activeTab, setActiveTab, setCanvasIntent, setActiveCanvasId, channelId],
+    [visibleTab, showProjectActivity, setCanvasIntent, setActiveCanvasId, channelId],
   );
 
   const handleOpenCanvasMenu = useCallback(() => setShowCanvasPopup(true), []);
@@ -281,7 +292,8 @@ export default function ChatPanel({
         onToggleSearch={onToggleSearch}
         onTogglePins={onTogglePins}
         onOpenMobileSidebar={onOpenMobileSidebar}
-        activeTab={activeTab}
+        activeTab={visibleTab}
+        showProjectActivity={showProjectActivity}
         onTabChange={handleTabChange}
         // Canvas-specific props
         showCanvasPopup={showCanvasPopup}
@@ -299,17 +311,17 @@ export default function ChatPanel({
       <HuddlePanel channelId={channelId} />
 
       {/* ── Tab Content ── */}
-      {String(activeTab).startsWith("canvas:") ? (
+      {String(visibleTab).startsWith("canvas:") ? (
         <CanvasPanel
           channelId={channelId}
           workspaceId={workspaceId}
           // load a specific canvas by id when activeTab is canvas:<id>
-          canvasId={String(activeTab).split(":")[1]}
+          canvasId={String(visibleTab).split(":")[1]}
           intent={canvasIntent}
           onIntentConsumed={() => setCanvasIntent(null)}
           onCreated={handleAddCanvasCreated}
         />
-      ) : activeTab === "canvas" ? (
+      ) : visibleTab === "canvas" ? (
         <CanvasPanel
           channelId={channelId}
           workspaceId={workspaceId}
@@ -317,11 +329,12 @@ export default function ChatPanel({
           onIntentConsumed={() => setCanvasIntent(null)}
           onCreated={handleAddCanvasCreated}
         />
-      ) : activeTab === "files" ? (
+      ) : visibleTab === "files" ? (
         <FilesTab channelId={channelId} onOpenFilePreview={onOpenFilePreview} />
-      ) : activeTab === "activity" ? (
+      ) : visibleTab === "activity" ? (
         <MessageList
           messages={activityMessages}
+          isActivityTimeline
           channelId={channelId}
           onOpenThread={onOpenThread}
           onOpenProfile={onOpenProfile}

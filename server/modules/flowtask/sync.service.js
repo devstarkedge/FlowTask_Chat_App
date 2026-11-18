@@ -206,7 +206,9 @@ class FlowTaskSyncService {
     // + subtask assignees + nano assignees
     let deepResult;
     try {
-      deepResult = await flowTaskService.getBoardDeepMembers(boardId, token);
+      deepResult = await flowTaskService.getBoardDeepMembers(boardId, token, {
+        requireSnapshot: !['public', 'workspace', 'department'].includes(channel.flowTaskMetadata?.sourceVisibility),
+      });
     } catch (err) {
       logger.warn('[SYNC] Failed to fetch deep board members', {
         boardId,
@@ -229,8 +231,8 @@ class FlowTaskSyncService {
     );
 
     // Determine the board owner for role assignment
-    let ownerFlowTaskId = null;
-    if (deepResult.sources) {
+    let ownerFlowTaskId = deepResult.ownerFlowTaskId || null;
+    if (!Array.isArray(deepResult.participants) && deepResult.sources) {
       for (const [userId, sources] of deepResult.sources) {
         if (sources.includes('board')) {
           ownerFlowTaskId = userId;
@@ -241,9 +243,9 @@ class FlowTaskSyncService {
 
     await channelService.reconcileProjectMembers(
       channel._id,
-      [...memberFlowTaskIds],
+      deepResult.participants ?? [...memberFlowTaskIds],
       workspaceId,
-      { ownerFlowTaskId },
+      { ownerFlowTaskId, membershipVersion: deepResult.membershipVersion || 0 },
     );
 
     report.added = [...memberFlowTaskIds].filter(

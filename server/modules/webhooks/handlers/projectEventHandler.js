@@ -180,6 +180,7 @@ export function registerProjectEventHandlers() {
               departmentRef: populatedChannel.departmentRef,
               adminOverrides: populatedChannel.adminOverrides,
               flowTaskRef: populatedChannel.flowTaskRef,
+              workspaceId: wsId,
               memberCount: populatedChannel.memberCount || populatedChannel.members?.length,
             },
           }, wsId);
@@ -258,14 +259,7 @@ export function registerProjectEventHandlers() {
         updates.departmentRef = { departmentId: null, departmentName: null };
       }
 
-      const boardTeam = normalizeEntityId(board.team || payload.project?.team);
-      const sourceVisibility = board.sourceVisibility || payload.project?.sourceVisibility;
-      updates.flowTaskMetadata = {
-        teamId: boardTeam,
-        sourceVisibility: ['public', 'private'].includes(sourceVisibility)
-          ? sourceVisibility
-          : null,
-      };
+      await channelService.updateProjectAccessMetadata(channel, payload.project || board, wsId);
 
       // Handle unarchiving / restoring via status
       if (board.isArchived === false || changes?.status === 'active' || changes?.isArchived === false) {
@@ -403,6 +397,7 @@ export function registerProjectEventHandlers() {
           departmentRef: channel.departmentRef,
           adminOverrides: channel.adminOverrides,
           flowTaskRef: channel.flowTaskRef,
+          workspaceId: wsId,
         },
       }, wsId);
       emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, {
@@ -414,7 +409,7 @@ export function registerProjectEventHandlers() {
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${member.name} was added to the project${addedBy ? ` by ${addedBy.name}` : ''}`,
-        undefined,
+        channel.flowTaskRef,
         wsId,
       );
     }
@@ -451,7 +446,7 @@ export function registerProjectEventHandlers() {
         await messageService.sendSystemMessage(
           channel._id,
           `👤 ${member.name} was removed from the project by ${removedByName} but still has active task assignments`,
-          undefined,
+          channel.flowTaskRef,
           wsId,
         );
       }
@@ -480,7 +475,7 @@ export function registerProjectEventHandlers() {
         await messageService.sendSystemMessage(
           channel._id,
           `👤 ${removedByName} removed ${member.name} from the project`,
-          undefined,
+          channel.flowTaskRef,
           wsId,
         );
       }
@@ -527,6 +522,7 @@ export function registerProjectEventHandlers() {
           departmentRef: channel.departmentRef,
           adminOverrides: channel.adminOverrides,
           flowTaskRef: channel.flowTaskRef,
+          workspaceId: wsId,
         },
       }, wsId);
       emitToUser(member._id.toString(), SOCKET_EVENTS.CHANNEL_LIST_INVALIDATED, {
@@ -539,7 +535,7 @@ export function registerProjectEventHandlers() {
       await messageService.sendSystemMessage(
         channel._id,
         `👤 ${member.name} was assigned to the project${roleLabel}${assignedBy ? ` by ${assignedBy.name}` : ''}`,
-        undefined,
+        channel.flowTaskRef,
         wsId,
       );
     }

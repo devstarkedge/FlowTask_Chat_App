@@ -34,7 +34,8 @@ export const getMessages = asyncHandler(async (req, res) => {
     req.query,
     req.workspaceId,
     req.user.id,
-    req.membership
+    req.membership,
+    req.channel,
   );
 
   res.json({ success: true, data: result });

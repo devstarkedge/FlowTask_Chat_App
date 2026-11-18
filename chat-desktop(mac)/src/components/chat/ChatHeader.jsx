@@ -24,6 +24,7 @@ const BASE_TABS = [
   { id: "activity", label: "Activity", icon: Activity },
   { id: "files", label: "Files", icon: FileText },
 ];
+const CONVERSATION_TABS = BASE_TABS.filter(({ id }) => id !== "activity");
 
 export default function ChatHeader({
   channel: channelProp,
@@ -31,6 +32,7 @@ export default function ChatHeader({
   onOpenMobileSidebar,
   onTogglePins,
   activeTab = "messages",
+  showProjectActivity = false,
   onTabChange,
   // Multi-tab canvas props
   openCanvasTabs = [],
@@ -159,6 +161,7 @@ export default function ChatHeader({
 
   // Build dynamic tabs. If `openCanvasTabs` is provided, render each opened
   // canvas as its own tab and keep a persistent "+" add button at the end.
+  const baseTabs = showProjectActivity ? BASE_TABS : CONVERSATION_TABS;
   const HEADER_TABS = useMemo(() => {
     if (openCanvasTabs && openCanvasTabs.length > 0) {
       const canvasTabs = openCanvasTabs.map((c) => ({
@@ -171,7 +174,7 @@ export default function ChatHeader({
       }));
 
       const addTab = { id: "canvas:add", label: "Add Canvas", icon: Plus, isCanvas: true, isAdd: true };
-      return [...BASE_TABS, ...canvasTabs, addTab];
+      return [...baseTabs, ...canvasTabs, addTab];
     }
 
     const canvasTab = activeCanvasTitle
@@ -190,8 +193,8 @@ export default function ChatHeader({
           isDynamic: false,
         };
 
-    return [...BASE_TABS, canvasTab];
-  }, [activeCanvasTitle, openCanvasTabs]);
+    return [...baseTabs, canvasTab];
+  }, [activeCanvasTitle, openCanvasTabs, baseTabs]);
 
   // Collapse tabs when header is narrow
   useEffect(() => {
@@ -508,7 +511,7 @@ export default function ChatHeader({
           {narrowTabs ? (
             // Keep conversation navigation fixed while canvas tabs scroll.
             <>
-              {BASE_TABS.map(tab => <SlimTab key={tab.id} tab={tab} compact={compactTabs} isActive={activeTab === tab.id} onClick={() => onTabChange?.(tab.id)} />)}
+              {baseTabs.map(tab => <SlimTab key={tab.id} tab={tab} compact={compactTabs} isActive={activeTab === tab.id} onClick={() => onTabChange?.(tab.id)} />)}
               <div aria-label="Canvas tabs" style={{ display: "flex", gap: 2, minWidth: 0, maxWidth: "100%", overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
                 {HEADER_TABS.filter(tab => tab.isCanvas && tab.isDynamic).map(tab => <div key={tab.id} style={{ flex: '0 0 auto', maxWidth: 220, minWidth: 0 }}>
                 <SlimTab

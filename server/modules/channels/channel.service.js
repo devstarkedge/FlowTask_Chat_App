@@ -37,6 +37,8 @@ import { withProjectChannelLock } from "../flowtask/projectChannelLock.service.j
 import {
   canAccessFlowTaskProjectChannel,
   hasSnapshotProjectAccess,
+  isFlowTaskWorkspaceAdmin,
+  projectSourceVisibility,
   isFlowTaskProjectChannel,
 } from "../flowtask/projectAccess.service.js";
 import {
@@ -98,12 +100,10 @@ class ChannelService {
     const teamId = typeof board.team === 'object'
       ? board.team?._id || board.team?.id || null
       : board.team || null;
-    const sourceVisibility = board.sourceVisibility || null;
     const flowTaskMetadata = {
       teamId: teamId?.toString() || null,
-      sourceVisibility: ['public', 'private'].includes(sourceVisibility)
-        ? sourceVisibility
-        : null,
+      sourceVisibility: projectSourceVisibility(board),
+      sourceUpdatedAt: this.projectSourceUpdatedAt(board),
     };
 
     const existing = await channelRepository.findByFlowTaskRef(
@@ -117,13 +117,7 @@ class ChannelService {
         else existing.__flowTaskCreated = false;
         return existing;
       }
-      const metadataNeedsUpdate =
-        existing.flowTaskMetadata?.teamId !== flowTaskMetadata.teamId
-        || existing.flowTaskMetadata?.sourceVisibility !== flowTaskMetadata.sourceVisibility;
-      if (metadataNeedsUpdate) {
-        await channelRepository.update(existing._id, { flowTaskMetadata }, workspaceId);
-        existing.flowTaskMetadata = flowTaskMetadata;
-      }
+      await this.updateProjectAccessMetadata(existing, board, workspaceId);
       if (existing.visibility !== CHANNEL_VISIBILITY.PRIVATE) {
         const migrated = await channelRepository.update(
           existing._id,
@@ -932,12 +926,13 @@ class ChannelService {
           const deepResult = await flowTaskService.getBoardDeepMembers(
             boardId,
             token,
-            flowTaskRequest,
+            { ...flowTaskRequest, requireSnapshot: projectSourceVisibility(board) === 'private' },
           );
           memberIds = [...deepResult.memberIds];
           participants = deepResult.participants || [];
           membershipVersion = deepResult.membershipVersion || 0;
           authoritativeSnapshotLoaded = Array.isArray(deepResult.participants);
+          if (authoritativeSnapshotLoaded) ownerId = deepResult.ownerFlowTaskId;
 
           // Extract owner from deep result sources
           if (deepResult.sources) {
@@ -949,6 +944,7 @@ class ChannelService {
             }
           }
         } catch (deepErr) {
+          if (projectSourceVisibility(board) === 'private') throw deepErr;
           deepFetchError = deepErr;
           // Fallback to shallow board members if deep fetch fails
           logger.warn('[CHANNEL_SYNC] Deep member fetch failed, using shallow members', {
@@ -1080,6 +1076,33 @@ class ChannelService {
     };
   }
 
+  // Provider deliveries and login synchronization can arrive out of order.
+  projectSourceUpdatedAt(board) {
+    const value = board.sourceUpdatedAt || board.updatedAt;
+    const date = value ? new Date(value) : null;
+    return date && Number.isFinite(+date) ? date : null;
+  }
+
+  async updateProjectAccessMetadata(channel, board, workspaceId) {
+    const sourceVisibility = projectSourceVisibility(board);
+    if (!sourceVisibility) return;
+    const sourceUpdatedAt = this.projectSourceUpdatedAt(board);
+    const updateOrder = [{ 'flowTaskMetadata.sourceUpdatedAt': null }];
+    if (sourceUpdatedAt) updateOrder.push({ 'flowTaskMetadata.sourceUpdatedAt': { $lt: sourceUpdatedAt } });
+    else updateOrder[0]['flowTaskMetadata.sourceVisibility'] = null;
+    const teamId = board.team?._id || board.team?.id || board.team || null;
+    const updated = await Channel.findOneAndUpdate(
+      { _id: channel._id, workspaceId, archivedReason: { $ne: 'project_deleted' }, $or: updateOrder },
+      { $set: { 'flowTaskMetadata.sourceVisibility': sourceVisibility,
+        'flowTaskMetadata.sourceUpdatedAt': sourceUpdatedAt, 'flowTaskMetadata.teamId': teamId ? String(teamId) : null } },
+      { new: true, projection: { flowTaskMetadata: 1 } }
+    ).lean();
+    if (!updated) return;
+    const changed = channel.flowTaskMetadata?.sourceVisibility !== sourceVisibility;
+    channel.flowTaskMetadata = updated.flowTaskMetadata;
+    if (changed) await reconcileChannelRoomAccess(String(channel._id), workspaceId);
+  }
+
   // ──────────────────── Channel Retrieval ───────────────────────────────────
 
   /**
@@ -1104,6 +1127,7 @@ class ChannelService {
     const role = membership?.role || 'member';
     const isGuest = role === 'guest';
     const isAdmin = role === 'admin' || role === 'owner';
+    const isProjectAdmin = isFlowTaskWorkspaceAdmin(membership) && String(membership.workspaceId) === String(workspaceId);
     const [workspace, memberChannels] = await Promise.all([
       workspaceRepository.findById(workspaceId),
       channelRepository.findByMember(userId, { workspaceId }),
@@ -1111,20 +1135,20 @@ class ChannelService {
     const isFlowTaskWorkspace = workspace?.source === 'flowtask';
     let channels;
 
-    if (isAdmin) {
-      // Workspace owners and admins see non-archived public/system/project workspace channels
-      // plus their member channels (including any private channels they were added to) and DMs.
-      // Private custom channels are strictly isolated to their explicit members.
+    if (isAdmin || isProjectAdmin) {
+      // FlowTask admin access is independent of ChatApp workspace management.
+      // Project channels are private and use their FlowTask source visibility.
       const workspaceChannels = await Channel.find({
         workspaceId,
         isArchived: false,
         type: { $ne: 'dm' },
         recipientOnly: { $ne: true },
         $or: [
-          { visibility: CHANNEL_VISIBILITY.PUBLIC },
-          { type: CHANNEL_TYPES.PROJECT },
-          { 'flowTaskRef.entityType': 'board' },
-          { type: CHANNEL_TYPES.SYSTEM },
+          ...(isAdmin ? [{ visibility: CHANNEL_VISIBILITY.PUBLIC }, { type: CHANNEL_TYPES.SYSTEM }] : []),
+          ...(isProjectAdmin ? [
+            { type: CHANNEL_TYPES.PROJECT, 'flowTaskMetadata.sourceVisibility': 'public' },
+            { 'flowTaskRef.entityType': 'board', 'flowTaskMetadata.sourceVisibility': 'public' },
+          ] : []),
         ],
       }).lean();
       const nonDmMemberChannels = memberChannels.filter(
@@ -1132,7 +1156,10 @@ class ChannelService {
       );
       const dmOnly = memberChannels.filter(isRecipientChannel);
 
-      channels = [...workspaceChannels, ...nonDmMemberChannels, ...dmOnly];
+      channels = [
+        ...workspaceChannels.filter(channel => !isFlowTaskProjectChannel(channel) || hasSnapshotProjectAccess(channel, membership)),
+        ...nonDmMemberChannels, ...dmOnly,
+      ];
     } else {
       // Regular members and guests only see channels they are explicitly members of (plus public system channels below).
       channels = memberChannels;
@@ -1673,7 +1700,7 @@ class ChannelService {
     if (!channel) throw new NotFoundError("Channel not found");
 
     if (
-      membershipVersion > 0 &&
+      (membershipVersion > 0 || channel.flowTaskMetadata?.sourceVisibility === 'private') &&
       (channel.flowTaskMembershipVersion || 0) > membershipVersion
     ) {
       logger.info("Ignored stale project membership snapshot", {
@@ -2232,6 +2259,9 @@ class ChannelService {
     });
     if (!channel || channel.archivedReason === "project_deleted") throw new NotFoundError("Channel not found");
     if (isReportingChannel(channel)) throw new ForbiddenError('Attendance reporting channels are managed by FlowTask');
+    if (isFlowTaskProjectChannel(channel) && updates.visibility !== undefined && updates.visibility !== CHANNEL_VISIBILITY.PRIVATE) {
+      throw new ForbiddenError('FlowTask project channels must remain private');
+    }
     if (channel.recipientOnly && updates.visibility !== undefined && updates.visibility !== CHANNEL_VISIBILITY.PRIVATE) {
       throw new ForbiddenError('Recipient conversations must remain private');
     }

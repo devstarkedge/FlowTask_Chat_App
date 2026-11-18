@@ -1,3 +1,5 @@
+import { hasFlowTaskSystemAuthor } from '../../shared/projectActivity.js';
+
 /**
  * Socket Payload Utilities — create minimal payloads for socket emissions.
  * Full data remains in REST responses; sockets only send what clients need for real-time updates.
@@ -116,6 +118,8 @@ export function messageSocketPayload(message, extras = {}) {
   return {
     _id: toId(plain._id),
     channelId: toId(plain.channelId),
+    ...(plain.workspaceId && { workspaceId: toId(plain.workspaceId) }),
+    ...(hasFlowTaskSystemAuthor(plain) && { isFlowTaskSystemMessage: true }),
     threadId: plain.threadId ? toId(plain.threadId) : null,
     parentMessageId: plain.parentMessageId ? toId(plain.parentMessageId) : null,
     replyTo: serializeReplyTo(plain.replyTo),

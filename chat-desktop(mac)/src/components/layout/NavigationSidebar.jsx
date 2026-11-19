@@ -139,7 +139,6 @@ export default function NavigationSidebar({
 
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
-  const [dmSearchOpen, setDMSearchOpen] = useState(false);
   const [dmSearchQuery, setDMSearchQuery] = useState("");
 
   const [categoryToEdit, setCategoryToEdit] = useState(null);
@@ -417,15 +416,33 @@ export default function NavigationSidebar({
     (c) => (c.type === "department" || c.type === "team") && !c.isArchived && !topChannelIds.has(String(c._id)),
   );
 
+    const selfMatches = useMemo(() => {
+    if (!selfChannel) return false;
+    if (!isDMMode) return true;
+    const query = dmSearchQuery.trim().toLowerCase();
+    if (!query) return true;
+    const searchable = [
+      user?.name,
+      "you",
+      "saved messages",
+      selfChannel.name,
+    ].filter(Boolean);
+    return searchable.some((n) => n.toLowerCase().includes(query));
+  }, [selfChannel, user, dmSearchQuery, isDMMode]);
+
   const displayedDMs = useMemo(() => {
-    const query = dmSearchQuery.trim().toLocaleLowerCase();
+    const query = isDMMode ? dmSearchQuery.trim().toLowerCase() : "";
     return dmChannels.filter((channel) => {
       if (topChannelIds.has(String(channel._id))) return false;
       if (!query) return true;
-      const searchableNames = [channel.name, channel.dmRecipientName, ...(channel.dmParticipantNames || [])];
-      return searchableNames.some((name) => name?.toLocaleLowerCase().includes(query));
+      const searchableNames = [
+        channel.name,
+        channel.dmRecipientName,
+        ...(Array.isArray(channel.dmParticipantNames) ? channel.dmParticipantNames : []),
+      ].filter(Boolean);
+      return searchableNames.some((name) => name.toLowerCase().includes(query));
     });
-  }, [dmChannels, topChannelIds, dmSearchQuery]);
+  }, [dmChannels, topChannelIds, dmSearchQuery, isDMMode]);
 
   const nonTopChannels = useMemo(() => {
     return channels.filter((c) => !topChannelIds.has(String(c._id)));
@@ -880,38 +897,55 @@ export default function NavigationSidebar({
 
           {/* ── Direct Messages section ── */}
           <SidebarSection
+            className={`sidebar-section--dms ${isDMMode ? 'is-dm-mode' : ''}`}
             title={isDMMode ? "Direct messages" : "Direct Messages"}
-            icon={<Search size={15} />}
+            icon={<MessageCircle size={15} />}
             expanded={isDMMode ? true : expandedSections.dms}
             onToggle={() => { if (!isDMMode) toggleSection("dms"); }}
             collapsible={!isDMMode}
-            searchable
-            searchOpen={dmSearchOpen}
-            searchValue={dmSearchQuery}
-            searchPlaceholder="Search direct messages"
-            onSearchOpen={() => {
-              setExpandedSections((sections) => ({ ...sections, dms: true }));
-              setDMSearchOpen(true);
-            }}
-            onSearchChange={setDMSearchQuery}
-            onSearchClose={() => {
-              setDMSearchOpen(false);
-              setDMSearchQuery("");
-            }}
             showAdd
             onAdd={() => setShowUserPicker(true)}
             addTitle="Start direct message"
+            sticky={isDMMode}
+            subHeader={isDMMode ? (
+              <div className="dm-search-bar">
+                <div className="dm-search-bar__inner">
+                  <Search size={14} className="dm-search-bar__icon" />
+                  <input
+                    type="text"
+                    className="dm-search-bar__input"
+                    placeholder="Search direct messages"
+                    value={dmSearchQuery}
+                    onChange={(e) => setDMSearchQuery(e.target.value)}
+                    aria-label="Search direct messages"
+                  />
+                  {dmSearchQuery && (
+                    <button
+                      type="button"
+                      className="dm-search-bar__clear"
+                      onClick={() => setDMSearchQuery("")}
+                      aria-label="Clear search"
+                      title="Clear search"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null}
           >
             {/* ── SAVED MESSAGES (self-DM) — pinned at top ── */}
-            <SavedMessagesItem
-              user={user}
-              channel={selfChannel}
-              isActive={!isLaterPage && selfChannel?._id === activeChannelId}
-              unread={selfChannel ? unreads[selfChannel._id] || 0 : 0}
-              isLoading={selfDmLoading}
-              hasDraft={selfChannel ? hasDraft(selfChannel._id) : false}
-              onClick={handleSavedMessages}
-            />
+            {selfMatches && (
+              <SavedMessagesItem
+                user={user}
+                channel={selfChannel}
+                isActive={!isLaterPage && selfChannel?._id === activeChannelId}
+                unread={selfChannel ? unreads[selfChannel._id] || 0 : 0}
+                isLoading={selfDmLoading}
+                hasDraft={selfChannel ? hasDraft(selfChannel._id) : false}
+                onClick={handleSavedMessages}
+              />
+            )}
             {/* ── CHATBOT ── */}
             {/* <SidebarItem
               icon={<Bot size={18} />}
@@ -931,7 +965,7 @@ export default function NavigationSidebar({
               />
             ))}
 
-            {dmChannels.length === 0 && (
+            {dmChannels.length === 0 && !selfChannel && (
               <p
                 className="text-xs px-4 py-2"
                 style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}
@@ -943,8 +977,8 @@ export default function NavigationSidebar({
                   : "No conversations yet"}
               </p>
             )}
-            {dmChannels.length > 0 && displayedDMs.length === 0 && dmSearchQuery.trim() && (
-              <p className="text-xs px-4 py-2" style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}>
+            {isDMMode && dmSearchQuery.trim() && !selfMatches && displayedDMs.length === 0 && (
+              <p className="text-xs px-4 py-3 text-center" style={{ color: "var(--sidebar-text-dim, var(--text-muted))" }}>
                 No direct messages found
               </p>
             )}

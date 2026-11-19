@@ -1263,9 +1263,19 @@ export default function ThreadPanel({ thread, onClose }) {
     fetchThreadReplies(thread.rootMessageId);
   }, [thread.rootMessageId, fetchThreadReplies]);
 
+  const isThreadAtBottomRef = useRef(true);
+  const handleThreadScroll = useCallback(() => {
+    const el = contentRef.current;
+    if (el) {
+      isThreadAtBottomRef.current = el.scrollHeight - el.clientHeight - el.scrollTop <= 60;
+    }
+  }, []);
+
   useEffect(() => {
     if (replies.length > prevReplyCountRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (isThreadAtBottomRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
     }
     prevReplyCountRef.current = replies.length;
   }, [replies.length]);
@@ -1312,7 +1322,7 @@ export default function ThreadPanel({ thread, onClose }) {
       </div>
 
       {/* ── Scrollable Content ─────────────────────────────────────────── */}
-      <div className="thread-panel__content" ref={contentRef}>
+      <div className="thread-panel__content" ref={contentRef} onScroll={handleThreadScroll}>
         {isLoadingThread && replies.length === 0 ? (
           <ThreadSkeleton />
         ) : (

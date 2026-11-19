@@ -22,6 +22,12 @@ import {
   getVirtuosoMessageKey,
   measureMessageItem,
 } from "../../utils/virtuosoMessageIndex";
+import {
+  AT_BOTTOM_THRESHOLD,
+  checkIfAtBottom,
+  calculatePreservedScrollTop,
+  shouldLoadOlderMessages,
+} from "../../utils/chatScrollUtils";
 
 // Stable component types keep Virtuoso's measured spacers mounted on rerenders.
 function MessageListHeader({ context }) {
@@ -52,7 +58,11 @@ export default function MessageList({
 }) {
   // Use individual subscriptions to avoid returning new object snapshots
   // from a single selector (this can trigger React's getSnapshot warning).
-  const isLoadingMessages = useChatStore((s) => !!s.loadingMessagesByChannel?.[channelId]);
+  const isLoadingMessages = useChatStore((s) =>
+    s.loadingMessagesByChannel?.[channelId] != null
+      ? !!s.loadingMessagesByChannel[channelId]
+      : !!s.isLoadingMessages
+  );
   const hasMore = useChatStore((s) => s.hasMore?.[channelId]);
   const fetchMessages = useChatStore((s) => s.fetchMessages);
   const highlightMessageId = useChatStore((s) => s.highlightMessageId);
@@ -84,6 +94,16 @@ export default function MessageList({
   const consumedScrollToLatestRequestRef = useRef(scrollToLatestRequest);
   const messageScrollerRef = useRef(null);
   const firstItemIndexTrackerRef = useRef(null);
+
+  // Snapshot of scroll metrics to restore position accurately across prepends and resizes
+  const scrollSnapshotRef = useRef({
+    scrollHeight: 0,
+    scrollTop: 0,
+    wasAtBottom: true,
+    distanceToBottom: 0,
+    firstMessageId: null,
+    messageCount: 0,
+  });
 
   // Forward message modal state
   const [forwardTarget, setForwardTarget] = useState(null);
@@ -118,61 +138,100 @@ export default function MessageList({
 
   // Tracks whether the user is at (or very near) the bottom of the list.
   const isAtBottomRef = useRef(true);
+  // Guard to prevent initial mount measurement from triggering startReached pagination
+  const isInitialMountRef = useRef(true);
 
   // Show/hide the "scroll to bottom" floating button
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-  const scrollToLatest = useCallback(() => {
+  const scrollToLatest = useCallback((behavior = "auto") => {
+    isAtBottomRef.current = true;
+    setShowScrollBtn(false);
+
     virtuosoRef.current?.scrollToIndex({
       index: "LAST",
       align: "end",
-      behavior: "auto",
+      behavior,
     });
+
+    const scroller = messageScrollerRef.current;
+    if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
   }, []);
 
   useEffect(() => {
     if (scrollToLatestRequest <= consumedScrollToLatestRequestRef.current) return;
     consumedScrollToLatestRequestRef.current = scrollToLatestRequest;
-    let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(scrollToLatest);
-    });
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      if (secondFrame) cancelAnimationFrame(secondFrame);
-    };
+    scrollToLatest("auto");
   }, [scrollToLatestRequest, scrollToLatest]);
 
   const cancelPendingFollow = useCallback(() => {
     previousAppendVersionRef.current = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
   }, [channelId]);
 
+  // ─── Load older messages only when user explicitly scrolls near top ───
+  const loadMore = useCallback(() => {
+    if (isInitialMountRef.current) return;
+    if (!hasMore || isLoadingMessages) return;
+
+    const scroller = messageScrollerRef.current;
+    // CRITICAL: Never auto-fetch older messages when user is at the bottom or not near the top!
+    if (scroller && (isAtBottomRef.current || scroller.scrollTop > 200)) return;
+
+    const oldest = useChatStore.getState().selectMessagesForChannel(channelId)[0];
+    if (oldest) fetchMessages(channelId, { cursor: oldest._id, limit: 80 });
+  }, [channelId, hasMore, isLoadingMessages, fetchMessages]);
+
+  const handleStartReached = useCallback(() => {
+    if (isInitialMountRef.current || isAtBottomRef.current) return;
+    const scroller = messageScrollerRef.current;
+    if (scroller && scroller.scrollTop > 200) return;
+    loadMore();
+  }, [loadMore]);
+
   const trackScrollPosition = useCallback(() => {
     const element = messageScrollerRef.current;
-    if (element) {
-      isAtBottomRef.current = element.scrollHeight - element.clientHeight - element.scrollTop <= 8;
+    if (!element) return;
+
+    const atBottom = checkIfAtBottom(element, AT_BOTTOM_THRESHOLD);
+    isAtBottomRef.current = atBottom;
+    setShowScrollBtn(!atBottom);
+
+    // If user scrolled near the very top, trigger pagination for earlier messages
+    if (element.scrollTop < 150 && !atBottom && hasMore && !isLoadingMessages && !isInitialMountRef.current) {
+      loadMore();
     }
-  }, []);
+  }, [hasMore, isLoadingMessages, loadMore]);
 
   const setMessageScroller = useCallback((element) => {
-    messageScrollerRef.current?.removeEventListener("scroll", trackScrollPosition);
+    if (messageScrollerRef.current && messageScrollerRef.current !== element) {
+      messageScrollerRef.current.removeEventListener("scroll", trackScrollPosition);
+    }
     messageScrollerRef.current = element;
-    element?.addEventListener("scroll", trackScrollPosition, { passive: true });
+    if (!element) return;
+
+    element.addEventListener("scroll", trackScrollPosition, { passive: true });
   }, [trackScrollPosition]);
 
   const followNewMessages = useCallback(() => {
     const appendVersion = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
     if (appendVersion <= previousAppendVersionRef.current) return false;
     previousAppendVersionRef.current = appendVersion;
+
     const scroller = messageScrollerRef.current;
-    const isCurrentlyAtBottom = scroller
-      ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 8
-      : isAtBottomRef.current;
-    if (!isCurrentlyAtBottom) return false;
-    // Virtuoso waits for the new row measurements before consuming this one
-    // request. Height-only changes and acknowledgements cannot enter this path.
+    const isCurrentlyAtBottom = scroller ? checkIfAtBottom(scroller, AT_BOTTOM_THRESHOLD) : isAtBottomRef.current;
+
+    if (!isCurrentlyAtBottom) {
+      setShowScrollBtn(true);
+      return false;
+    }
+
+    requestAnimationFrame(() => {
+      scrollToLatest("auto");
+    });
     return { index: "LAST", align: "end", behavior: "auto" };
-  }, [channelId]);
+  }, [channelId, scrollToLatest]);
 
 
   // ─── Multi-message selection helpers ───────────────────────────────────
@@ -241,23 +300,80 @@ export default function MessageList({
     clearSelection();
   }, [channelId, clearSelection]);
 
-  // ─── Load older messages when user scrolls to top ─────────────────────
-  const loadMore = useCallback(() => {
-    if (!hasMore || isLoadingMessages) return;
-    const oldest = useChatStore.getState().selectMessagesForChannel(channelId)[0];
-    if (oldest) fetchMessages(channelId, { cursor: oldest._id, limit: 80 });
-  }, [channelId, hasMore, isLoadingMessages, fetchMessages]);
-
   // ─── Hard-jump to bottom whenever the active channel changes ──────────
   useLayoutEffect(() => {
     cancelPendingFollow();
+    isInitialMountRef.current = true;
     isAtBottomRef.current = true;
     setShowScrollBtn(false);
     previousAppendVersionRef.current = messageAppendVersion;
-
     lastScrolledHighlightId.current = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId]);
+    firstItemIndexTrackerRef.current = null;
+
+    scrollSnapshotRef.current = {
+      scrollHeight: 0,
+      scrollTop: 0,
+      wasAtBottom: true,
+      distanceToBottom: 0,
+      firstMessageId: null,
+      messageCount: 0,
+    };
+
+    const t = requestAnimationFrame(() => {
+      scrollToLatest("auto");
+    });
+
+    const initTimer = setTimeout(() => {
+      isInitialMountRef.current = false;
+    }, 400);
+
+    return () => {
+      cancelAnimationFrame(t);
+      clearTimeout(initTimer);
+    };
+  }, [channelId, scrollToLatest, cancelPendingFollow, messageAppendVersion]);
+
+  // ─── Maintain scroll position across prepends and content updates ────
+  const currentFirstMessageId = messages[0]?._id;
+  const currentMessageCount = messages.length;
+
+  useLayoutEffect(() => {
+    const scroller = messageScrollerRef.current;
+    if (!scroller) return;
+
+    const prev = scrollSnapshotRef.current;
+    const isPrepended =
+      prev.firstMessageId &&
+      currentFirstMessageId &&
+      prev.firstMessageId !== currentFirstMessageId &&
+      currentMessageCount > prev.messageCount;
+
+    if (isPrepended) {
+      const targetScrollTop = calculatePreservedScrollTop({
+        newScrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+        previousDistanceToBottom: prev.distanceToBottom,
+        wasAtBottom: prev.wasAtBottom,
+      });
+      scroller.scrollTop = targetScrollTop;
+      if (prev.wasAtBottom) {
+        isAtBottomRef.current = true;
+        setShowScrollBtn(false);
+      }
+    } else if (prev.wasAtBottom && isAtBottomRef.current && !isInitialMountRef.current) {
+      // Content expanded or new message arrived while at bottom: stay pinned
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+
+    scrollSnapshotRef.current = {
+      scrollHeight: scroller.scrollHeight,
+      scrollTop: scroller.scrollTop,
+      wasAtBottom: isAtBottomRef.current,
+      distanceToBottom: Math.max(0, scroller.scrollHeight - scroller.scrollTop),
+      firstMessageId: currentFirstMessageId,
+      messageCount: currentMessageCount,
+    };
+  }, [messages, currentFirstMessageId, currentMessageCount]);
 
   // ─── Flatten: date separators + unread marker ─────────────────────────
   const isActivityMessage = (msg) =>
@@ -415,6 +531,8 @@ export default function MessageList({
     if (index === -1 || !virtuosoRef.current) return;
 
     cancelPendingFollow();
+    isAtBottomRef.current = false;
+    setShowScrollBtn(true);
     if (lastScrolledHighlightId.current !== targetId || scrollToMessageId || pendingMessageScroll) {
       lastScrolledHighlightId.current = targetId;
       virtuosoRef.current.scrollToIndex({ index, align: "center", behavior: "smooth" });
@@ -486,7 +604,6 @@ export default function MessageList({
       style={{ minHeight: 0 }}
       onWheelCapture={cancelPendingFollow}
       onTouchMoveCapture={cancelPendingFollow}
-      onPointerDownCapture={cancelPendingFollow}
       onKeyDownCapture={(event) => {
         if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
           cancelPendingFollow();
@@ -504,14 +621,16 @@ export default function MessageList({
         className="w-full h-full"
         style={{ overflowAnchor: "none", scrollBehavior: "auto" }}
         firstItemIndex={virtuosoFirstItemIndex}
-        initialTopMostItemIndex={flattenedItems.length - 1}
-        startReached={loadMore}
+        initialTopMostItemIndex={flattenedItems.length > 0 ? flattenedItems.length - 1 : 0}
+        startReached={handleStartReached}
         alignToBottom={true}
-        increaseViewportBy={{ top: 400, bottom: 200 }}
+        increaseViewportBy={{ top: 300, bottom: 150 }}
         followOutput={false}
         scrollIntoViewOnChange={followNewMessages}
-        atBottomThreshold={8}
+        atBottomThreshold={AT_BOTTOM_THRESHOLD}
         atBottomStateChange={(atBottom) => {
+          if (isInitialMountRef.current) return;
+          isAtBottomRef.current = atBottom;
           setShowScrollBtn(!atBottom);
         }}
         context={{ isLoadingMessages }}
@@ -676,7 +795,7 @@ export default function MessageList({
         <button
           aria-label="Scroll to latest message"
           title="Jump to latest"
-          onClick={scrollToLatest}
+          onClick={() => scrollToLatest("smooth")}
           style={{
             position: "absolute",
             bottom: 16,

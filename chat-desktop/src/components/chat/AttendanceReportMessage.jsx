@@ -18,6 +18,8 @@ export default function AttendanceReportMessage({ message }) {
   const validInitial = initialWork?.revision === revision && initialWork?.viewerId === viewerId && initialWork?.workspaceId === workspaceId
   const report = reportPresentation({ ...message, reportingHistory: validInitial ? { canView: true, initialWork } : null })
   const employee = useLiveProfileData(message.reportingEmployee || { _id: message.reportingMeta?.employeeId, flowTaskUserId: message.reportingMeta?.flowTaskUserId, name: report.employee, avatar: null })
+  const normalDetails = report.details.filter(d => !d.total)
+  const totals = report.details.filter(d => d.total)
   return (
     <article className="attendance-report" aria-label={report.title + ' by ' + report.employee}>
       <header className="attendance-report__header">
@@ -34,12 +36,22 @@ export default function AttendanceReportMessage({ message }) {
         {report.time && <time className="attendance-report__time" dateTime={message.reportingMeta?.occurredAt}>{report.time}</time>}
       </header>
       <dl className="attendance-report__details">
-        {report.details.map((detail, index) => (
-          <div className={'attendance-report__row' + (detail.total ? ' attendance-report__row--total' : detail.label ? '' : ' attendance-report__row--full')} key={index}>
+        {normalDetails.map((detail, index) => (
+          <div className={'attendance-report__row' + (detail.label ? '' : ' attendance-report__row--full')} key={index}>
             {detail.label && <dt>{detail.label}</dt>}
-            <dd>{detail.total ? "- " : ""}{detail.value}</dd>
+            <dd>{detail.value}</dd>
           </div>
         ))}
+        {totals.length > 0 && (
+          <div className="attendance-report__totals">
+            {totals.map((detail, index) => (
+              <div className="attendance-report__total-item" key={index}>
+                <dt>{detail.label}</dt>
+                <dd>- {detail.value}</dd>
+              </div>
+            ))}
+          </div>
+        )}
       </dl>
       {message.reportingMeta?.eventType === 'attendance.checked_in' && <ReportingHistory message={message} present={reportPresentation} onInitialWork={setInitialWork} />}
     </article>

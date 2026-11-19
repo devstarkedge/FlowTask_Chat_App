@@ -32,10 +32,15 @@
 @media (max-width: 480px) {
   .attendance-report { width: calc(100% - 24px); margin-inline: 12px; }
   .attendance-report__row { grid-template-columns: 76px minmax(0, 1fr); }
+  .attendance-report__totals { gap: 6px 12px; }
 }
 
 .attendance-report__row--total { display: flex; justify-content: flex-start; gap: 6px; border-top: 1px solid var(--border-primary, var(--border-color)); margin-top: 3px; padding-top: 6px; font-weight: 600; }
 .attendance-report__row--total dt { color: var(--text-primary); font-size: 13px; }
+.attendance-report__totals { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--border-primary, var(--border-color)); margin-top: 6px; padding-top: 6px; }
+.attendance-report__total-item { display: flex; align-items: baseline; gap: 6px; font-weight: 600; }
+.attendance-report__total-item dt { color: var(--text-primary); font-size: 13px; margin: 0; }
+.attendance-report__total-item dd { color: var(--text-primary); font-size: 13px; margin: 0; white-space: nowrap; }
 .attendance-report__history { margin-top: 7px; }
 .attendance-report__eye { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid var(--border-primary, var(--border-color)); border-radius: 5px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px; }
 .attendance-report__eye:hover, .attendance-report__eye:focus-visible { background: var(--bg-hover, var(--bg-primary)); color: var(--text-primary); }

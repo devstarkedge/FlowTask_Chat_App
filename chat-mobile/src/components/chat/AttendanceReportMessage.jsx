@@ -21,6 +21,8 @@ export default function AttendanceReportMessage({ message, colors }) {
   const employee = message.reportingEmployee || { _id: message.reportingMeta?.employeeId, name: report.employee };
   const text = { color: colors.textPrimary, fontSize: 13, lineHeight: 18 };
   const checkedIn = message.reportingMeta?.eventType === 'attendance.checked_in';
+  const normalDetails = report.details.filter(d => !d.total);
+  const totals = report.details.filter(d => d.total);
   return <View accessibilityLabel={report.title + ' by ' + report.employee} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
     <View style={styles.header}>
       <AppAvatar member={employee} size={28} showStatus={false}/>
@@ -33,12 +35,15 @@ export default function AttendanceReportMessage({ message, colors }) {
       </View>
       {!!report.time && <Text style={[text, styles.bold]}>{report.time}</Text>}
     </View>
-    {report.details.map((detail, index) => <View key={index} style={[styles.row, detail.total && { borderTopWidth: 1, borderColor: colors.border, paddingTop: 6, marginTop: 3 }]}>
-      {detail.total ? <Text style={[text, styles.bold]}>{detail.label} - {detail.value}</Text> : <>
-        {!!detail.label && <Text style={{ color: colors.textSecondary, fontSize: 12, width: 80 }}>{detail.label}</Text>}
-        <Text style={[text, { flex: 1, flexShrink: 1 }]}>{detail.value}</Text>
-      </>}
+    {normalDetails.map((detail, index) => <View key={index} style={styles.row}>
+      {!!detail.label && <Text style={{ color: colors.textSecondary, fontSize: 12, width: 80 }}>{detail.label}</Text>}
+      <Text style={[text, { flex: 1, flexShrink: 1 }]}>{detail.value}</Text>
     </View>)}
+    {totals.length > 0 && <View style={[styles.totalsRow, { borderColor: colors.border }]}>
+      {totals.map((detail, index) => (
+        <Text key={index} style={[text, styles.bold]}>{detail.label} - {detail.value}</Text>
+      ))}
+    </View>}
     {checkedIn && <ReportingHistory message={message} present={reportPresentation} onInitialWork={setInitialWork} colors={colors}/>}
   </View>;
 }
@@ -50,4 +55,5 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   bold: { fontWeight: '600' },
   row: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  totalsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, borderTopWidth: 1, paddingTop: 6, marginTop: 6 },
 });

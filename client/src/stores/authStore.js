@@ -4,6 +4,10 @@ import { useChannelStore } from './channelStore'
 import { connectSocket, disconnectSocket, emitPresenceUpdate } from '../services/socket'
 import { useWorkspaceStore } from './workspaceStore'
 import logger from '../utils/logger'
+import { isAuthRevokedOrInvalid } from '../utils/networkErrors'
+import { broadcastSessionEvent, SESSION_EVENTS, initSessionCoordinator } from '../services/sessionCoordinator'
+import { scheduleNextRefresh, stopProactiveRefresh } from '../services/tokenRefreshScheduler'
+
 
 const FLOWTASK_ENABLED = import.meta.env.VITE_FLOWTASK_ENABLED !== 'false'
 let flowTaskLoginInFlight = null
@@ -13,12 +17,86 @@ function createAuthAttemptId() {
   return `flowtask-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+function getSavedUser() {
+  try {
+    const raw = localStorage.getItem('chat_user')
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+function saveUser(user) {
+  try {
+    if (user) {
+      localStorage.setItem('chat_user', JSON.stringify(user))
+    } else {
+      localStorage.removeItem('chat_user')
+    }
+  } catch (e) {}
+}
+
+const hasNativeAuthCache = () => typeof window !== 'undefined' && Boolean(window.electronAPI?.readAuthSession)
+
+function readLegacySession() {
+  try {
+    return {
+      accessToken: localStorage.getItem('chat_access_token'),
+      refreshToken: localStorage.getItem('chat_refresh_token'),
+      flowTaskToken: localStorage.getItem('flowtask_token'),
+      user: getSavedUser(),
+    }
+  } catch (e) {
+    return { accessToken: null, refreshToken: null, flowTaskToken: null, user: null }
+  }
+}
+
+async function writeAuthSession(session) {
+  const value = {
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    flowTaskToken: session.flowTaskToken || null,
+    user: session.user || null,
+  }
+  try {
+    if (hasNativeAuthCache()) {
+      await window.electronAPI.writeAuthSession(value)
+      localStorage.removeItem('chat_access_token')
+      localStorage.removeItem('chat_refresh_token')
+      localStorage.removeItem('flowtask_token')
+      localStorage.removeItem('chat_user')
+      return
+    }
+    if (value.accessToken) localStorage.setItem('chat_access_token', value.accessToken)
+    else localStorage.removeItem('chat_access_token')
+    if (value.refreshToken) localStorage.setItem('chat_refresh_token', value.refreshToken)
+    else localStorage.removeItem('chat_refresh_token')
+    if (value.flowTaskToken) localStorage.setItem('flowtask_token', value.flowTaskToken)
+    else localStorage.removeItem('flowtask_token')
+    saveUser(value.user)
+  } catch (error) {
+    logger.warn('Failed to persist auth session:', error)
+  }
+}
+
+async function clearAuthSession() {
+  try {
+    if (hasNativeAuthCache()) await window.electronAPI.clearAuthSession()
+  } catch (error) {
+    logger.warn('Failed to clear native auth session:', error)
+  }
+  for (const key of ['chat_access_token', 'chat_refresh_token', 'flowtask_token', 'chat_user']) {
+    localStorage.removeItem(key)
+  }
+}
+
 export const useAuthStore = create((set, get) => ({
-  accessToken: localStorage.getItem('chat_access_token') || null,
-  refreshToken: localStorage.getItem('chat_refresh_token') || null,
-  user: null,
+  accessToken: hasNativeAuthCache() ? null : localStorage.getItem('chat_access_token') || null,
+  refreshToken: hasNativeAuthCache() ? null : localStorage.getItem('chat_refresh_token') || null,
+  flowTaskToken: hasNativeAuthCache() ? null : localStorage.getItem('flowtask_token') || null,
+  user: hasNativeAuthCache() ? null : getSavedUser(),
   isLoading: false,
-  isInitialized: !localStorage.getItem('chat_access_token'),
+  isInitialized: hasNativeAuthCache() ? false : !localStorage.getItem('chat_access_token') || !!getSavedUser(),
   error: null,
   flowtaskEnabled: FLOWTASK_ENABLED,
   channelSync: null,
@@ -51,10 +129,43 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ─── Token management ─────────────────────────────────────────────
-  setTokens: (accessToken, refreshToken) => {
-    localStorage.setItem('chat_access_token', accessToken)
-    if (refreshToken) localStorage.setItem('chat_refresh_token', refreshToken)
-    set({ accessToken, refreshToken: refreshToken || get().refreshToken })
+  setTokens: (accessToken, refreshToken, isRemote = false) => {
+    const nextRefreshToken = refreshToken || get().refreshToken
+    const state = { ...get(), accessToken, refreshToken: nextRefreshToken }
+    set({ accessToken, refreshToken: nextRefreshToken })
+    scheduleNextRefresh(accessToken, useAuthStore)
+    if (!isRemote) {
+      broadcastSessionEvent(SESSION_EVENTS.TOKEN_REFRESHED, { accessToken, refreshToken: nextRefreshToken })
+    }
+    return writeAuthSession(state)
+  },
+
+  restoreSession: async () => {
+    let session = null
+    if (hasNativeAuthCache()) {
+      try {
+        session = await window.electronAPI.readAuthSession()
+      } catch (error) {
+        logger.warn('Failed to read native auth session; checking previous session cache:', error)
+      }
+    }
+    if (!session) {
+      session = readLegacySession()
+      if (hasNativeAuthCache() && session.accessToken && session.refreshToken) {
+        await writeAuthSession(session)
+      }
+    }
+    set({
+      accessToken: session?.accessToken || null,
+      refreshToken: session?.refreshToken || null,
+      flowTaskToken: session?.flowTaskToken || null,
+      user: session?.user || null,
+      isInitialized: true,
+    })
+    if (session?.accessToken) {
+      scheduleNextRefresh(session.accessToken, useAuthStore)
+    }
+    return session
   },
 
   // Alias for backward compat — used by api interceptor
@@ -82,9 +193,10 @@ export const useAuthStore = create((set, get) => ({
     try {
       const { data } = await authAPI.login({ email, password })
       const { user, accessToken, refreshToken } = data.data
-      localStorage.setItem('chat_access_token', accessToken)
-      localStorage.setItem('chat_refresh_token', refreshToken)
+      await writeAuthSession({ accessToken, refreshToken, flowTaskToken: get().flowTaskToken, user })
       set({ accessToken, refreshToken, user, isLoading: false, isInitialized: true })
+      scheduleNextRefresh(accessToken, useAuthStore)
+      broadcastSessionEvent(SESSION_EVENTS.LOGIN, { user, accessToken, refreshToken })
       // Fetch workspaces for workspace selector; socket connects when workspace is selected
       await useWorkspaceStore.getState().fetchWorkspaces()
       return data
@@ -112,21 +224,22 @@ export const useAuthStore = create((set, get) => ({
           flowTaskToken,
           channelSync,
         } = data.data
-        localStorage.setItem('chat_access_token', accessToken)
-        localStorage.setItem('chat_refresh_token', refreshToken)
-        if (flowTaskToken) localStorage.setItem('flowtask_token', flowTaskToken)
+        await writeAuthSession({ accessToken, refreshToken, flowTaskToken, user })
         set({
           accessToken,
           refreshToken,
+          flowTaskToken: flowTaskToken || null,
           user,
           channelSync: channelSync || null,
           isInitialized: true,
         })
+        scheduleNextRefresh(accessToken, useAuthStore)
+        broadcastSessionEvent(SESSION_EVENTS.LOGIN, { user, accessToken, refreshToken, flowTaskToken })
         if (Array.isArray(channels)) {
           // setChannels (not a raw setState) — drops a stale, persisted
           // activeChannelId from an earlier session/workspace if it isn't
           // in this login's channel list. See channelStore.js#setChannels.
-          useChannelStore.getState().setChannels(channels)
+          useChannelStore.getState().setChannels?.(channels)
         }
         useWorkspaceStore.getState().fetchWorkspaces().catch((error) => {
           logger.error('Post-login workspace reconciliation failed:', error)
@@ -159,12 +272,25 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const { data } = await authAPI.me()
-      set({ user: data.data.user || data.data, isLoading: false, isInitialized: true })
-      await useWorkspaceStore.getState().fetchWorkspaces()
-      // Socket connects when workspace is selected via WorkspaceLayout
-      return data.data.user || data.data
+      const user = data.data.user || data.data
+      await writeAuthSession({ ...get(), user })
+      set({ user, isLoading: false, isInitialized: true, error: null })
+      await useWorkspaceStore.getState().fetchWorkspaces().catch((e) => {
+        logger.warn('fetchWorkspaces in fetchUser caught error:', e)
+      })
+      return user
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Failed to fetch user'
+      const cachedUser = getSavedUser()
+      // If we have an existing access token or refresh token and a cached user profile,
+      // and the error is a temporary network/server outage (not a 401/403 revocation),
+      // preserve the authenticated state with the cached user profile!
+      if ((get().accessToken || get().refreshToken) && cachedUser && !isAuthRevokedOrInvalid(error)) {
+        logger.warn('fetchUser failed (network or server error), preserving session with cached user profile:', error)
+        set({ user: cachedUser, isLoading: false, isInitialized: true, error: null })
+        useWorkspaceStore.getState().fetchWorkspaces().catch(() => {})
+        return cachedUser
+      }
       set({ isLoading: false, error: msg, isInitialized: true })
       // Don't call logout() here — the API 401 interceptor handles token refresh
       // and calls logout only when refresh fails. Calling it here would be premature.
@@ -187,16 +313,17 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  logout: () => {
+  logout: (isRemote = false) => {
+    stopProactiveRefresh()
     const user = get().user
     const refreshToken = get().refreshToken
-    // Fire-and-forget server logout
-    if (refreshToken) {
-      authAPI.logout(refreshToken).catch(() => {})
+    // Fire-and-forget server logout (only if local action)
+    if (!isRemote && refreshToken) {
+      try {
+        authAPI.logout(refreshToken)?.catch?.(() => {})
+      } catch {}
     }
-    localStorage.removeItem('chat_access_token')
-    localStorage.removeItem('chat_refresh_token')
-    localStorage.removeItem('flowtask_token')
+    const clearSessionPromise = clearAuthSession()
     if (user?._id) {
       localStorage.removeItem(`taskchat_active_workspace_${user._id}`)
     }
@@ -204,7 +331,11 @@ export const useAuthStore = create((set, get) => ({
     disconnectSocket()
     useWorkspaceStore.getState().clearWorkspaceState()
     flowTaskLoginInFlight = null
-    set({ accessToken: null, refreshToken: null, user: null, channelSync: null, error: null, isLoading: false, isInitialized: true })
+    set({ accessToken: null, refreshToken: null, flowTaskToken: null, user: null, channelSync: null, error: null, isLoading: false, isInitialized: true })
+    if (!isRemote) {
+      broadcastSessionEvent(SESSION_EVENTS.LOGOUT)
+    }
+    return clearSessionPromise
   },
 
   // ─── Account Deletion ─────────────────────────────────────────────
@@ -219,15 +350,14 @@ export const useAuthStore = create((set, get) => ({
     }
 
     // Wipe local session state (same cleanup as logout)
-    localStorage.removeItem('chat_access_token');
-    localStorage.removeItem('chat_refresh_token');
-    localStorage.removeItem('flowtask_token');
+    await clearAuthSession();
     disconnectSocket();
     useWorkspaceStore.getState().clearWorkspaceState();
     flowTaskLoginInFlight = null;
     set({
       accessToken: null,
       refreshToken: null,
+      flowTaskToken: null,
       user: null,
       channelSync: null,
       error: null,
@@ -267,7 +397,9 @@ export const useAuthStore = create((set, get) => ({
   updatePreferences: async (prefs) => {
     try {
       const { data } = await authAPI.updatePreferences(prefs)
-      set({ user: data.data.user })
+      const updatedUser = data.data.user
+      saveUser(updatedUser)
+      set({ user: updatedUser })
     } catch (error) {
       logger.error('Failed to update preferences:', error)
     }
@@ -301,3 +433,36 @@ export const useAuthStore = create((set, get) => ({
 
   clearError: () => set({ error: null }),
 }))
+if (typeof window !== 'undefined') {
+  initSessionCoordinator({
+    onTokenRefreshed: ({ accessToken, refreshToken }) => {
+      logger.info('[AuthStore] Syncing refreshed token from another tab/window')
+      useAuthStore.getState().setTokens(accessToken, refreshToken, true)
+    },
+    onLogout: () => {
+      logger.info('[AuthStore] Syncing logout from another tab/window')
+      useAuthStore.getState().logout(true)
+    },
+    onLogin: ({ user, accessToken, refreshToken, flowTaskToken }) => {
+      logger.info('[AuthStore] Syncing login from another tab/window')
+      useAuthStore.setState({ user, accessToken, refreshToken, flowTaskToken: flowTaskToken || null, isInitialized: true })
+      scheduleNextRefresh(accessToken, useAuthStore)
+      useWorkspaceStore.getState().fetchWorkspaces().catch(() => {})
+    },
+    onWorkspaceChanged: ({ workspaceId }) => {
+      logger.info('[AuthStore] Syncing workspace change from another tab:', workspaceId)
+      const currentId = useWorkspaceStore.getState().activeWorkspaceId
+      if (workspaceId && currentId !== workspaceId) {
+        useWorkspaceStore.getState().switchWorkspace(workspaceId).catch(() => {})
+      }
+    },
+  })
+
+  // If already initialized with access token, schedule silent refresh
+  try {
+    const initialToken = localStorage.getItem('chat_access_token')
+    if (initialToken) {
+      scheduleNextRefresh(initialToken, useAuthStore)
+    }
+  } catch (e) {}
+}

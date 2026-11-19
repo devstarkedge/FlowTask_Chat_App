@@ -4,6 +4,7 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import logger from "../utils/logger";
 import { useUserProfileStore } from '../stores/userProfileStore';
 import { projectUserProfiles } from '../utils/userProfiles';
+import { isAuthRevokedOrInvalid, isOfflineOrServerUnavailable } from '../utils/networkErrors';
 
 export function getApiOrigin() {
   const explicitApiBase = import.meta.env.VITE_API_BASE_URL;
@@ -122,10 +123,25 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      const refreshToken = useAuthStore.getState().refreshToken;
+    const url = originalRequest?.url || '';
+    const isAuthRoute =
+      url.includes('/auth/login') ||
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/logout');
+
+    if (error.response?.status === 401 && !originalRequest?._retry && !isAuthRoute) {
+      let refreshToken = useAuthStore.getState().refreshToken;
+      if (!refreshToken && typeof useAuthStore.getState().restoreSession === 'function') {
+        try {
+          await useAuthStore.getState().restoreSession();
+          refreshToken = useAuthStore.getState().refreshToken;
+        } catch {}
+      }
+
       if (!refreshToken) {
-        useAuthStore.getState().logout();
+        if (!isOfflineOrServerUnavailable(error)) {
+          useAuthStore.getState().logout();
+        }
         return Promise.reject(error);
       }
 
@@ -147,7 +163,7 @@ api.interceptors.response.use(
         const { data } = await axios.post(
           `${api.defaults.baseURL}/auth/refresh`,
           { refreshToken },
-          { headers: { "Content-Type": "application/json" } },
+          { headers: { "Content-Type": "application/json" }, timeout: 15000 },
         );
 
         const { accessToken: newAccess, refreshToken: newRefresh } = data.data;
@@ -166,11 +182,14 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        if (refreshError.response?.status === 401) {
+        // A temporary network/server failure must NOT erase the locally saved session.
+        // Only clear when the server explicitly rejects the refresh token (401 or 403).
+        if (isAuthRevokedOrInvalid(refreshError)) {
+          logger.warn("Token refresh rejected by server (401/403); logging out:", refreshError);
           useAuthStore.getState().logout();
         } else {
           logger.warn(
-            "Token refresh failed temporarily; preserving the local session:",
+            "Token refresh failed temporarily (offline / server unreachable); preserving local session:",
             refreshError,
           );
         }

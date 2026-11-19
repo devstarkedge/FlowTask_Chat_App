@@ -8,6 +8,7 @@ import { useNotificationStore } from './notificationStore'
 import { useDraftStore } from './draftStore'
 import { reconnectWithWorkspace, disconnectSocket } from '../services/socket'
 import logger from '../utils/logger'
+import { isOfflineOrServerUnavailable } from '../utils/networkErrors'
 
 // Helper for user-scoped active workspace persistence
 export const getSavedWorkspaceId = (userId) => {
@@ -72,6 +73,7 @@ export const useWorkspaceStore = create(
       isLoading: false,
       isWorkspacesLoaded: false,
       isSwitching: false,
+      isOffline: false,
       error: null,
 
       // ─── Fetch user's workspaces ───────────────────────────────────────
@@ -112,15 +114,19 @@ export const useWorkspaceStore = create(
               activeWorkspace: targetWorkspace,
               isLoading: false,
               isWorkspacesLoaded: true,
+              isOffline: false,
+              error: null,
             })
             saveActiveWorkspaceId(userId, targetWorkspace._id)
           } else {
             set({
               workspaces,
-              activeWorkspaceId: null,
-              activeWorkspace: null,
+              activeWorkspaceId: workspaces.length > 0 ? get().activeWorkspaceId : null,
+              activeWorkspace: workspaces.length > 0 ? get().activeWorkspace : null,
               isLoading: false,
               isWorkspacesLoaded: true,
+              isOffline: false,
+              error: null,
             })
             if (savedId && !workspaces.some((w) => w._id === savedId)) {
               clearSavedWorkspaceId(userId)
@@ -130,9 +136,23 @@ export const useWorkspaceStore = create(
           return workspaces
         } catch (error) {
           const msg = error.response?.data?.error?.message || 'Failed to fetch workspaces'
-          set({ isLoading: false, isWorkspacesLoaded: true, error: msg })
+          const cached = get().workspaces || []
+          const isOffline = isOfflineOrServerUnavailable(error)
+          
+          if (isOffline && cached.length > 0) {
+            logger.warn('Failed to fetch workspaces due to network/server outage; preserving cached workspaces:', error)
+            set({
+              isLoading: false,
+              isWorkspacesLoaded: true,
+              isOffline: true,
+              error: null,
+            })
+            return cached
+          }
+
+          set({ isLoading: false, isWorkspacesLoaded: true, isOffline, error: msg })
           logger.error('Failed to fetch workspaces:', error)
-          return []
+          return cached
         }
       },
 
@@ -507,6 +527,7 @@ export const useWorkspaceStore = create(
           members: [],
           error: null,
           isWorkspacesLoaded: false,
+          isOffline: false,
         })
       },
 
@@ -565,7 +586,27 @@ export const useWorkspaceStore = create(
               flowTaskRole: state.activeWorkspace.flowTaskRole,
             }
           : null,
+        // Persist workspaces list locally so offline/server down does not leave user empty-handed
+        workspaces: (state.workspaces || []).map((w) => ({
+          _id: w._id,
+          name: w.name,
+          slug: w.slug,
+          logo: w.logo,
+          source: w.source,
+          settings: w.settings,
+          plan: w.plan,
+          flowTaskRole: w.flowTaskRole,
+          owner: w.owner,
+          role: w.role,
+        })),
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          if (Array.isArray(state.workspaces) && state.workspaces.length > 0) {
+            state.isWorkspacesLoaded = true;
+          }
+        }
+      },
     },
   ),
 )

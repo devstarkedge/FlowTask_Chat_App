@@ -40,32 +40,43 @@ export default function WorkspaceLayout() {
     init()
   }, [fetchWorkspaces])
 
-  // Sync URL workspaceId → store
+  // 1. Sync URL workspaceId → store
+  useEffect(() => {
+    if (workspaceId && workspaceId !== activeWorkspaceId) {
+      switchWorkspace(workspaceId)
+    }
+  }, [workspaceId, activeWorkspaceId, switchWorkspace])
+
+  // 2. Validate the workspace ID only after we've fetched workspaces
   useEffect(() => {
     if (!workspaceId) return
 
     // Don't validate until we've at least tried to load workspaces once
     if (!hasInitialFetchRun || isLoading) return
 
-    if (!isLoading && hasInitialFetchRun) {
-      const valid = workspaces.find((w) => w._id === workspaceId)
-      if (!valid) {
-        if (workspaces.length > 0) {
-          const user = useAuthStore.getState().user
-          const savedId = getSavedWorkspaceId(user?._id)
-          const fallback = workspaces.find((w) => w._id === savedId) || workspaces[0]
-          navigate(`/workspace/${fallback._id}`, { replace: true })
-        } else {
-          navigate('/select-workspace', { replace: true })
-        }
+    const { error, isOffline, activeWorkspace } = useWorkspaceStore.getState()
+
+    // If there was a network/server outage, or the active workspace is already loaded/cached for this ID,
+    // do NOT boot the user to /select-workspace!
+    if (isOffline || error) {
+      if (activeWorkspaceId === workspaceId || activeWorkspace?._id === workspaceId) {
         return
       }
     }
 
-    if (workspaceId !== activeWorkspaceId) {
-      switchWorkspace(workspaceId)
+    if (workspaces.length > 0) {
+      const valid = workspaces.find((w) => w._id === workspaceId)
+      if (!valid) {
+        const user = useAuthStore.getState().user
+        const savedId = getSavedWorkspaceId(user?._id)
+        const fallback = workspaces.find((w) => w._id === savedId) || workspaces[0]
+        navigate(`/workspace/${fallback._id}`, { replace: true })
+      }
+    } else if (!isOffline && !error) {
+      // Genuinely 0 workspaces returned from successful server response
+      navigate('/select-workspace', { replace: true })
     }
-  }, [workspaceId, activeWorkspaceId, workspaces, isLoading, hasInitialFetchRun, switchWorkspace, navigate])
+  }, [workspaceId, workspaces, isLoading, hasInitialFetchRun, activeWorkspaceId, navigate])
 
   // Ensure socket is connected once workspace context is ready
   const connectionStatus = useChatStore((s) => s.connectionStatus)

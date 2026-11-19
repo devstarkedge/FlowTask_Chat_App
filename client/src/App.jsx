@@ -7,6 +7,7 @@ import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
+import OfflineBanner from './components/shared/OfflineBanner'
 
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
@@ -97,7 +98,14 @@ function App() {
 
   useEffect(() => {
     const state = useAuthStore.getState()
-    if (state.accessToken && !state.user && !state.isLoading) {
+    if (typeof state.restoreSession === 'function') {
+      state.restoreSession().then(() => {
+        const restored = useAuthStore.getState()
+        if (restored.accessToken && !restored.isLoading) {
+          restored.fetchUser().catch(() => {})
+        }
+      }).catch(() => {})
+    } else if (state.accessToken && !state.user && !state.isLoading) {
       state.fetchUser().catch(() => {})
     }
   }, [])
@@ -122,6 +130,7 @@ function App() {
 
   return (
     <Suspense fallback={<PageFallback />}>
+      <OfflineBanner />
       <HuddleAudioOutput />
       <HuddleWindow />
       <HuddleInvitations />

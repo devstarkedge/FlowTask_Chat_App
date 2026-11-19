@@ -54,18 +54,29 @@ export default function WorkspaceLayout() {
     // Don't validate until we've at least tried to load workspaces once
     if (!hasInitialFetchRun || isLoading) return
 
-    const valid = workspaces.find((w) => w._id === workspaceId)
-    if (!valid) {
-      if (workspaces.length > 0) {
+    const { error, isOffline, activeWorkspace } = useWorkspaceStore.getState()
+
+    // If there was a network/server outage, or the active workspace is already loaded/cached for this ID,
+    // do NOT boot the user to /select-workspace!
+    if (isOffline || error) {
+      if (activeWorkspaceId === workspaceId || activeWorkspace?._id === workspaceId) {
+        return
+      }
+    }
+
+    if (workspaces.length > 0) {
+      const valid = workspaces.find((w) => w._id === workspaceId)
+      if (!valid) {
         const user = useAuthStore.getState().user
         const savedId = getSavedWorkspaceId(user?._id)
         const fallback = workspaces.find((w) => w._id === savedId) || workspaces[0]
         navigate(`/workspace/${fallback._id}`, { replace: true })
-      } else {
-        navigate('/select-workspace', { replace: true })
       }
+    } else if (!isOffline && !error) {
+      // Genuinely 0 workspaces returned from successful server response
+      navigate('/select-workspace', { replace: true })
     }
-  }, [workspaceId, workspaces, isLoading, hasInitialFetchRun, navigate])
+  }, [workspaceId, workspaces, isLoading, hasInitialFetchRun, activeWorkspaceId, navigate])
 
   // Ensure socket is connected once workspace context is ready
   const connectionStatus = useChatStore((s) => s.connectionStatus)

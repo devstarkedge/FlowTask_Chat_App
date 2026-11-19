@@ -9,6 +9,7 @@ import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
 import { useUpdateStore } from './stores/updateStore'
 import { isDesktopApp, setWindowControlsColor } from './services/desktopService'
+import OfflineBanner from './components/shared/OfflineBanner'
 
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
@@ -227,6 +228,7 @@ function App() {
 
   return (
     <Suspense fallback={<PageFallback />}>
+      <OfflineBanner />
       <HuddleAudioOutput /><HuddleWindow /><HuddleInvitations />
       <Routes>
         {/* Public routes */}

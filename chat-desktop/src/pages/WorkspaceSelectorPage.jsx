@@ -7,7 +7,6 @@ import Loader from "../components/shared/Loader";
 import JoinWorkspaceModal from "../components/workspace/JoinWorkspaceModal";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
-import { setWindowControlsColor } from "../services/desktopService";
 import "./custom-css/workspaceSelectorPage.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -39,7 +38,7 @@ const listItem = {
 ───────────────────────────────────────────────────────────────────────── */
 export default function WorkspaceSelectorPage() {
   const navigate = useNavigate();
-  const { workspaces, isLoading, error, fetchWorkspaces, switchWorkspace } =
+  const { workspaces, isLoading, isOffline, error, fetchWorkspaces, switchWorkspace } =
     useWorkspaceStore();
   const { user, logout } = useAuthStore();
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -106,12 +105,7 @@ export default function WorkspaceSelectorPage() {
                   toast.success("Signed out successfully 👋");
 
                   onClose?.();
-                  if (typeof window.electronAPI !== "undefined") {
-                    window.location.hash = "/login";
-                    window.location.reload();
-                  } else {
-                    window.location.href = "/login";
-                  }
+                  window.location.href = "/login";
                 } catch (err) {
                   toast.dismiss(loadingToast);
                   toast.error("Something went wrong");
@@ -139,8 +133,8 @@ export default function WorkspaceSelectorPage() {
     }
   };
 
-  /* ── error state ── */
-  if (error) {
+  /* ── error state: only show full-screen error if NO cached workspaces exist ── */
+  if (error && (!workspaces || workspaces.length === 0)) {
     return (
       <div className="wsp">
         <div className="wsp-center">
@@ -267,6 +261,23 @@ export default function WorkspaceSelectorPage() {
                 ? "Select a workspace to continue, or create a new one."
                 : "You're not part of any workspace yet. Create one or join with an invite code."}
             </motion.p>
+
+            {/* ── Offline or server notice ── */}
+            {(isOffline || error) && (
+              <motion.div variants={fadeUp} className="wsp-offline-alert" role="status">
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="wsp-offline-dot" />
+                  <span>
+                    {isOffline
+                      ? "You're offline or the server is unavailable. Showing cached workspaces."
+                      : error}
+                  </span>
+                </div>
+                <button className="wsp-retry-chip" onClick={fetchWorkspaces}>
+                  Retry
+                </button>
+              </motion.div>
+            )}
 
             {/* ── Workspace list ── */}
             {hasWorkspaces && (

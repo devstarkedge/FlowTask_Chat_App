@@ -4,6 +4,10 @@ import { useChannelStore } from './channelStore'
 import { connectSocket, disconnectSocket, emitPresenceUpdate } from '../services/socket'
 import { useWorkspaceStore } from './workspaceStore'
 import logger from '../utils/logger'
+import { isAuthRevokedOrInvalid } from '../utils/networkErrors'
+import { broadcastSessionEvent, SESSION_EVENTS, initSessionCoordinator } from '../services/sessionCoordinator'
+import { scheduleNextRefresh, stopProactiveRefresh } from '../services/tokenRefreshScheduler'
+
 
 const FLOWTASK_ENABLED = import.meta.env.VITE_FLOWTASK_ENABLED !== 'false'
 let flowTaskLoginInFlight = null
@@ -130,10 +134,14 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ─── Token management ─────────────────────────────────────────────
-  setTokens: (accessToken, refreshToken) => {
+  setTokens: (accessToken, refreshToken, isRemote = false) => {
     const nextRefreshToken = refreshToken || get().refreshToken
     const state = { ...get(), accessToken, refreshToken: nextRefreshToken }
     set({ accessToken, refreshToken: nextRefreshToken })
+    scheduleNextRefresh(accessToken, useAuthStore)
+    if (!isRemote) {
+      broadcastSessionEvent(SESSION_EVENTS.TOKEN_REFRESHED, { accessToken, refreshToken: nextRefreshToken })
+    }
     return writeAuthSession(state)
   },
 
@@ -159,6 +167,9 @@ export const useAuthStore = create((set, get) => ({
       user: session?.user || null,
       isInitialized: true,
     })
+    if (session?.accessToken) {
+      scheduleNextRefresh(session.accessToken, useAuthStore)
+    }
     return session
   },
 
@@ -189,6 +200,8 @@ export const useAuthStore = create((set, get) => ({
       const { user, accessToken, refreshToken } = data.data
       await writeAuthSession({ accessToken, refreshToken, flowTaskToken: get().flowTaskToken, user })
       set({ accessToken, refreshToken, user, isLoading: false, isInitialized: true })
+      scheduleNextRefresh(accessToken, useAuthStore)
+      broadcastSessionEvent(SESSION_EVENTS.LOGIN, { user, accessToken, refreshToken })
       // Fetch workspaces for workspace selector; socket connects when workspace is selected
       await useWorkspaceStore.getState().fetchWorkspaces()
       return data
@@ -225,6 +238,8 @@ export const useAuthStore = create((set, get) => ({
           channelSync: channelSync || null,
           isInitialized: true,
         })
+        scheduleNextRefresh(accessToken, useAuthStore)
+        broadcastSessionEvent(SESSION_EVENTS.LOGIN, { user, accessToken, refreshToken, flowTaskToken })
         if (Array.isArray(channels)) {
           // setChannels (not a raw setState) — drops a stale, persisted
           // activeChannelId from an earlier session/workspace if it isn't
@@ -272,7 +287,7 @@ export const useAuthStore = create((set, get) => ({
       const msg = error.response?.data?.error?.message || 'Failed to fetch user'
       const status = error.response?.status
       const cachedUser = get().user || getSavedUser()
-      if (get().accessToken && cachedUser && status !== 401 && status !== 403) {
+      if ((get().accessToken || get().refreshToken) && cachedUser && !isAuthRevokedOrInvalid(error)) {
         logger.warn('fetchUser failed (network or server error), preserving session with cached user profile:', error)
         set({ user: cachedUser, isLoading: false, isInitialized: true, error: null })
         useWorkspaceStore.getState().fetchWorkspaces().catch(() => {})
@@ -304,8 +319,11 @@ export const useAuthStore = create((set, get) => ({
     const user = get().user
     const refreshToken = get().refreshToken
     // Fire-and-forget server logout
+    // Fire-and-forget server logout
     if (refreshToken) {
-      authAPI.logout(refreshToken).catch(() => {})
+      try {
+        authAPI.logout(refreshToken)?.catch?.(() => {})
+      } catch {}
     }
     const clearSessionPromise = clearAuthSession()
     if (user?._id) {
@@ -412,3 +430,36 @@ export const useAuthStore = create((set, get) => ({
 
   clearError: () => set({ error: null }),
 }))
+if (typeof window !== 'undefined') {
+  initSessionCoordinator({
+    onTokenRefreshed: ({ accessToken, refreshToken }) => {
+      logger.info('[AuthStore] Syncing refreshed token from another tab/window')
+      useAuthStore.getState().setTokens(accessToken, refreshToken, true)
+    },
+    onLogout: () => {
+      logger.info('[AuthStore] Syncing logout from another tab/window')
+      useAuthStore.getState().logout(true)
+    },
+    onLogin: ({ user, accessToken, refreshToken, flowTaskToken }) => {
+      logger.info('[AuthStore] Syncing login from another tab/window')
+      useAuthStore.setState({ user, accessToken, refreshToken, flowTaskToken: flowTaskToken || null, isInitialized: true })
+      scheduleNextRefresh(accessToken, useAuthStore)
+      useWorkspaceStore.getState().fetchWorkspaces().catch(() => {})
+    },
+    onWorkspaceChanged: ({ workspaceId }) => {
+      logger.info('[AuthStore] Syncing workspace change from another tab:', workspaceId)
+      const currentId = useWorkspaceStore.getState().activeWorkspaceId
+      if (workspaceId && currentId !== workspaceId) {
+        useWorkspaceStore.getState().switchWorkspace(workspaceId).catch(() => {})
+      }
+    },
+  })
+
+  // If already initialized with access token, schedule silent refresh
+  try {
+    const initialToken = localStorage.getItem('chat_access_token')
+    if (initialToken) {
+      scheduleNextRefresh(initialToken, useAuthStore)
+    }
+  } catch (e) {}
+}

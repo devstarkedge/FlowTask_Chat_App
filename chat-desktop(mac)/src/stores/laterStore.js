@@ -1,33 +1,42 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { savedMessageAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { useNotificationStore } from './notificationStore';
 import { useWorkspaceStore } from './workspaceStore';
+import { isOfflineOrServerUnavailable } from '../utils/networkErrors';
+import logger from '../utils/logger';
 
-export const useLaterStore = create((set, get) => ({
-  savedMessages: [],
-  loading: false,
-  activeTab: 'in_progress',
-  activeSavedMessageId: null,
-  savedMessageIds: new Set(), // Track which messages are saved for instant UI updates
-  
-  fetchSavedMessages: async (status = null) => {
-    if (!useWorkspaceStore.getState().activeWorkspaceId) return;
-    set({ loading: true });
-    try {
-      // Always fetch all to keep counts in background accurate across all status tabs
-      const { data } = await savedMessageAPI.list(null);
-      const messages = (data.data?.messages || []).filter(
-        m => m.type === 'standalone' || (m.messageId && !m.messageId.isDeleted)
-      );
-      // Build saved message ID set for instant lookup in ChatPanel
-      const ids = new Set(messages.map(m => m.messageId?._id).filter(Boolean));
-      set({ savedMessages: messages, loading: false, savedMessageIds: ids });
-    } catch (error) {
-      set({ loading: false });
-      toast.error('Failed to load saved messages');
-    }
-  },
+export const useLaterStore = create(
+  persist(
+    (set, get) => ({
+      savedMessages: [],
+      loading: false,
+      activeTab: 'in_progress',
+      activeSavedMessageId: null,
+      savedMessageIds: new Set(), // Track which messages are saved for instant UI updates
+      
+      fetchSavedMessages: async (status = null) => {
+        if (!useWorkspaceStore.getState().activeWorkspaceId) return;
+        set({ loading: true });
+        try {
+          // Always fetch all to keep counts in background accurate across all status tabs
+          const { data } = await savedMessageAPI.list(null);
+          const messages = (data.data?.messages || []).filter(
+            m => m.type === 'standalone' || (m.messageId && !m.messageId.isDeleted)
+          );
+          // Build saved message ID set for instant lookup in ChatPanel
+          const ids = new Set(messages.map(m => m.messageId?._id).filter(Boolean));
+          set({ savedMessages: messages, loading: false, savedMessageIds: ids });
+        } catch (error) {
+          set({ loading: false });
+          if (!isOfflineOrServerUnavailable(error)) {
+            toast.error('Failed to load saved messages');
+          } else {
+            logger.warn('Failed to load saved messages (network or server unavailable):', error);
+          }
+        }
+      },
 
   toggleSaveMessage: async (messageId) => {
     if (!messageId) return;
@@ -308,4 +317,19 @@ export const useLaterStore = create((set, get) => ({
   },
 
   clearSavedMessages: () => set({ savedMessages: [], activeTab: 'in_progress', savedMessageIds: new Set(), activeSavedMessageId: null }),
-}));
+    }),
+    {
+      name: 'flowtask-later-storage',
+      partialize: (state) => ({
+        savedMessages: state.savedMessages,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state && Array.isArray(state.savedMessages)) {
+          state.savedMessageIds = new Set(
+            state.savedMessages.map((m) => m.messageId?._id).filter(Boolean)
+          );
+        }
+      },
+    }
+  )
+);

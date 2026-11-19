@@ -5,6 +5,7 @@ import storage from './storage';
 import { secureGet, secureSet, secureMultiRemove } from '../utils/secureStorage';
 import ENV from '../config/environment';
 import logger from '../utils/logger';
+import { isAuthRevokedOrInvalid } from '../utils/networkErrors';
 
 // Use ENV (which already resolves app.json extra + .env + production fallback)
 const BASE_URL = ENV.API_BASE_URL;
@@ -259,19 +260,24 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh failed — clear tokens, user will be redirected to login
-        clearApiCache();
-        await secureMultiRemove([
-          'chat_access_token',
-          'chat_refresh_token',
-        ]);
-        await storage.removeItem('chat_user');
-        try {
-          const { useAuthStore } = require('../stores/authStore');
-          useAuthStore.getState().logout();
-        } catch (storeError) {
-          logger.error('[API] Failed to trigger store logout:', storeError);
+        // Only clear tokens if the refresh token was explicitly revoked/rejected (401/403)
+        if (isAuthRevokedOrInvalid(refreshError)) {
+          clearApiCache();
+          await secureMultiRemove([
+            'chat_access_token',
+            'chat_refresh_token',
+          ]);
+          await storage.removeItem('chat_user');
+          try {
+            const { useAuthStore } = require('../stores/authStore');
+            useAuthStore.getState().logout();
+          } catch (storeError) {
+            logger.error('[API] Failed to trigger store logout:', storeError);
+          }
+        } else {
+          logger.warn('[API] Token refresh failed temporarily (network or server unavailable); preserving session:', refreshError);
         }
+        return Promise.reject(refreshError);
       }
     }
 

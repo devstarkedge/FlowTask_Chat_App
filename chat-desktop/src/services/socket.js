@@ -387,17 +387,24 @@ export function connectSocket() {
 
     useChatStore.getState().addMessage(message)
 
-    // ── Instant blue-tick for DMs ────────────────────────────────────────
-    // If the incoming message is in a DM AND the recipient is currently viewing
-    // that exact channel, emit dm:markSeen immediately at the socket event level.
-    // This fires BEFORE any React render cycle, so it's immune to state race
-    // conditions in conversationPresence.isActive() or component re-renders.
-    if (channelId) {
+    // Notify backend that this message was successfully delivered to this client
+    if (message?._id && authorId && String(authorId) !== String(currentUserId)) {
+      socket.emit('message:delivered', {
+        messageId: message._id,
+        channelId: message.channelId,
+      })
+    }
+
+    // ── Instant read status for active viewer ────────────────────────────
+    // If the recipient is currently viewing that exact channel, emit read
+    // immediately at the socket event level.
+    if (channelId && authorId && String(authorId) !== String(currentUserId)) {
       const activeChannelId = useChannelStore.getState().activeChannelId
-      if (activeChannelId === channelId) {
+      if (activeChannelId === channelId && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        socket.emit('message:read', { messageId: message._id, channelId })
         const channels = useChannelStore.getState().channels
         const channel = channels.find((c) => c._id === channelId)
-        if (channel?.type === 'dm' && document.visibilityState === 'visible') {
+        if (channel?.type === 'dm') {
           socket.emit('dm:markSeen', { channelId })
         }
       }

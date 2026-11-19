@@ -780,10 +780,11 @@ export async function initializeSocket(httpServer, corsOptions) {
     // ─── Real-Time Message Receipts (Delivery & Read) ────────────────
     socket.on(SOCKET_EVENTS.MESSAGE_DELIVERED, async ({ messageId, channelId }) => {
       if (await isSocketRateLimited(socket.id)) return;
-      if (!messageId || !channelId) return;
+      if (!messageId) return;
       try {
+        const effectiveWsId = wsId || socket.workspaceId || socket.data?.workspaceId;
         const { markAsDelivered } = await import('../modules/readReceipts/readReceipt.service.js');
-        await markAsDelivered(messageId, channelId, userId, wsId);
+        await markAsDelivered(messageId, channelId, userId, effectiveWsId);
       } catch (err) {
         logger.debug('message:delivered handling failed', { userId, messageId, error: err?.message });
       }
@@ -791,10 +792,11 @@ export async function initializeSocket(httpServer, corsOptions) {
 
     socket.on(SOCKET_EVENTS.MESSAGE_READ, async ({ messageId, channelId }) => {
       if (await isSocketRateLimited(socket.id)) return;
-      if (!messageId || !channelId) return;
+      if (!messageId) return;
       try {
+        const effectiveWsId = wsId || socket.workspaceId || socket.data?.workspaceId;
         const { markAsRead } = await import('../modules/readReceipts/readReceipt.service.js');
-        await markAsRead(messageId, channelId, userId, wsId);
+        await markAsRead(messageId, channelId, userId, effectiveWsId);
       } catch (err) {
         logger.debug('message:read handling failed', { userId, messageId, error: err?.message });
       }

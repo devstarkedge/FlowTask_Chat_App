@@ -424,7 +424,7 @@ class MessageService {
     }
 
     // Update unread counts for other members
-    this._incrementUnreadForChannel(channelId, authorId, wsId).catch(() => {});
+    this._incrementUnreadForChannel(channelId, authorId, wsId, message._id).catch(() => {});
 
     // ── Unified Notification Engine ──────────────────────────────────────
     // The engine handles ALL notification logic: mentions, DMs, thread replies,
@@ -988,6 +988,27 @@ class MessageService {
         const workspaceId = channel.workspaceId?.toString();
         const result = await messageRepository.markDelivered(message._id, workspaceId, now);
         if (result.modifiedCount) {
+          const { default: ReadReceipt } = await import('../readReceipts/readReceipt.model.js');
+          await ReadReceipt.findOneAndUpdate(
+            { messageId: message._id, channelId: channel._id, userId: recipientParticipantId, workspaceId: channel.workspaceId },
+            { $setOnInsert: { deliveredAt: now } },
+            { upsert: true }
+          ).catch(() => {});
+
+          emitToChannel(channel._id.toString(), SOCKET_EVENTS.MESSAGE_DELIVERED, {
+            messageId: message._id.toString(),
+            channelId: channel._id.toString(),
+            userId: recipientParticipantId.toString(),
+            deliveredAt: now,
+          }, workspaceId);
+
+          emitToUser(senderIdStr, SOCKET_EVENTS.MESSAGE_DELIVERED, {
+            messageId: message._id.toString(),
+            channelId: channel._id.toString(),
+            userId: recipientParticipantId.toString(),
+            deliveredAt: now,
+          }, workspaceId);
+
           emitToUser(senderIdStr, SOCKET_EVENTS.MESSAGE_STATUS, {
             messageId: message._id.toString(),
             channelId: channel._id.toString(),
@@ -1038,19 +1059,72 @@ class MessageService {
           }
         );
 
+        // Synchronize with ReadReceipt collection
+        const { default: ReadReceipt } = await import('../readReceipts/readReceipt.model.js');
+        const bulkReceiptOps = messageIds.map((mId) => ({
+          updateOne: {
+            filter: {
+              messageId: mId,
+              channelId: channel._id,
+              userId,
+              workspaceId: channel.workspaceId,
+            },
+            update: {
+              $set: { readAt: now },
+              $setOnInsert: { deliveredAt: now },
+            },
+            upsert: true,
+          },
+        }));
+        await ReadReceipt.bulkWrite(bulkReceiptOps).catch((err) => {
+          logger.debug('bulkWrite ReadReceipt in markDMMessagesAsSeen failed', {
+            error: err.message,
+            channelId,
+          });
+        });
+
+        // Broadcast real-time MESSAGE_READ to channel
+        for (const mId of messageIds) {
+          emitToChannel(
+            channelId.toString(),
+            SOCKET_EVENTS.MESSAGE_READ,
+            {
+              messageId: mId.toString(),
+              channelId: channelId.toString(),
+              userId: userId.toString(),
+              readAt: now,
+            },
+            channel.workspaceId?.toString()
+          );
+        }
+
         // Group by author and notify each
         const authorIds = [...new Set(unseenMessages.map(m => m.authorId.toString()))];
         for (const authorId of authorIds) {
-          const messageIds = unseenMessages
+          const authorMessageIds = unseenMessages
             .filter(m => m.authorId.toString() === authorId)
             .map(m => m._id.toString());
 
           emitToUser(authorId, SOCKET_EVENTS.MESSAGE_STATUS, {
             channelId: channelId.toString(),
-            messageIds,
+            messageIds: authorMessageIds,
             status: 'seen',
             seenAt: now,
           }, channel.workspaceId?.toString());
+
+          for (const mId of authorMessageIds) {
+            emitToUser(
+              authorId,
+              SOCKET_EVENTS.MESSAGE_READ,
+              {
+                messageId: mId,
+                channelId: channelId.toString(),
+                userId: userId.toString(),
+                readAt: now,
+              },
+              channel.workspaceId?.toString()
+            );
+          }
         }
       }
     } catch (error) {
@@ -1068,7 +1142,7 @@ class MessageService {
    * will have messages auto-marked as read instead of incrementing unread.
    * @private
    */
-  async _incrementUnreadForChannel(channelId, senderUserId, workspaceId) {
+  async _incrementUnreadForChannel(channelId, senderUserId, workspaceId, messageId = null) {
     try {
       const { getIO } = await import('../../sockets/socketManager.js');
       const { buildRoomName } = await import('../../config/constants.js');
@@ -1139,6 +1213,11 @@ class MessageService {
             channelId 
           });
           await readReceiptRepository.markChannelAsRead(userId, channelId, null, workspaceId);
+
+          if (messageId) {
+            const { markAsRead } = await import('../readReceipts/readReceipt.service.js');
+            await markAsRead(messageId, channelId, userId, workspaceId).catch(() => {});
+          }
           
           // Emit zero unread count to client
           emitToUser(userId, SOCKET_EVENTS.UNREAD_UPDATED, {

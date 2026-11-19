@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 const isMac = process.platform === 'darwin';
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  readAuthSession: () => ipcRenderer.invoke('auth-session:read'),
+  writeAuthSession: value => ipcRenderer.invoke('auth-session:write', value),
+  clearAuthSession: () => ipcRenderer.invoke('auth-session:clear'),
   getHuddleShareSource: () => ipcRenderer.invoke('huddle-share:source'),
   getHuddleCaptureResult: () => ipcRenderer.invoke('huddle-capture:result'),
   screenCaptureAudioSupported: process.platform === 'win32',

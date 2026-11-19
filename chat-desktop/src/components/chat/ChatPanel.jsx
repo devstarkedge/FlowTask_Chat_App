@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
+import { useAuthStore } from "../../stores/authStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { shallow } from "zustand/shallow";
-import { joinChannel, leaveChannel } from "../../services/socket";
+import { getSocket, joinChannel, leaveChannel } from "../../services/socket";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
 import ChatHeader from "./ChatHeader";
@@ -33,6 +34,8 @@ export default function ChatPanel({
   const channel = useChannelStore((s) =>
     s.channels.find((c) => c._id === channelId),
   );
+  const activeChannelId = useChannelStore((s) => s.activeChannelId);
+  const currentUserId = useAuthStore((s) => s.user?._id);
 
   // Split selectors into individual subscriptions to avoid returning a new
   // object snapshot from a single selector (React's useSyncExternalStore
@@ -154,6 +157,34 @@ export default function ChatPanel({
   }, [targetTimeline]);
 
   const visibleTab = targetTimeline || (activeTab === "activity" && !showProjectActivity ? "messages" : activeTab);
+
+  // Per-message receipts are separate from channel unread state. Persist a
+  // receipt when a message is actually loaded in the active Messages view so
+  // Message Info can list the people who have read it.
+  const readReceiptTrackerRef = useRef({ channelId: null, messageIds: new Set() });
+  useEffect(() => {
+    if (readReceiptTrackerRef.current.channelId !== channelId) {
+      readReceiptTrackerRef.current = { channelId, messageIds: new Set() };
+    }
+    if (
+      !channelId ||
+      !currentUserId ||
+      String(activeChannelId) !== String(channelId) ||
+      visibleTab !== "messages" ||
+      (typeof document !== "undefined" && document.visibilityState === "hidden")
+    ) return;
+
+    const socket = getSocket();
+    if (!socket) return;
+    const markedIds = readReceiptTrackerRef.current.messageIds;
+    for (const message of conversationMessages) {
+      const messageId = message?._id;
+      const authorId = message?.authorId?._id || message?.authorId;
+      if (!messageId || !authorId || String(authorId) === String(currentUserId) || markedIds.has(String(messageId))) continue;
+      socket.emit("message:read", { messageId, channelId });
+      markedIds.add(String(messageId));
+    }
+  }, [channelId, activeChannelId, visibleTab, conversationMessages, currentUserId]);
 
   // Note: persistence now handled by server-side channel tabs; client keeps local view in store
 

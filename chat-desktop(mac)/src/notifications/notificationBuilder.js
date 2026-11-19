@@ -70,6 +70,12 @@ export class NotificationBuilder {
     let extraNav = {}
 
     switch (type) {
+      case NotificationType.ATTENDANCE_REPORT:
+        title = rawTitle || 'Attendance update'
+        body = body || 'Attendance status changed'
+        calculatedPriority = NotificationPriority.HIGH
+        break
+
       case NotificationType.NEW_MESSAGE:
         if (isDm) {
           title = senderName || channelName || 'Direct Message'
@@ -101,8 +107,8 @@ export class NotificationBuilder {
         break
 
       case NotificationType.MENTION_RECEIVED:
-        title = `Mentioned by ${senderName}`
-        body = channelName ? `#${channelName}: ${body}` : body
+        title = rawTitle || `Mentioned by ${senderName}`
+        body = rawTitle ? body : channelName ? `#${channelName}: ${body}` : body
         calculatedPriority = NotificationPriority.HIGH
         break
 

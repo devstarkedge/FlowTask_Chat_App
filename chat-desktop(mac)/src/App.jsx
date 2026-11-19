@@ -199,9 +199,12 @@ function App() {
 
   useEffect(() => {
     const state = useAuthStore.getState()
-    if (state.accessToken && !state.user && !state.isLoading) {
-      state.fetchUser().catch(() => {})
-    }
+    state.restoreSession().then(() => {
+      const restored = useAuthStore.getState()
+      if (restored.accessToken && (!restored.user || restored.user._cachedIdentityOnly) && !restored.isLoading) {
+        restored.fetchUser().catch(() => {})
+      }
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {

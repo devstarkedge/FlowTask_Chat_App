@@ -346,9 +346,13 @@ class EventMapperRegistry {
   _mapNotificationRecord(notification, context = {}) {
     const channelId = notification.channelId?._id || notification.channelId || notification.conversationId
     const sender = resolveSender(notification, context)
+    const serverType = String(notification.type || '').toLowerCase()
+    const normalizedType = serverType === 'mention'
+      ? NotificationType.MENTION_RECEIVED
+      : notification.type || NotificationType.SYSTEM_ALERT
 
     return {
-      type: notification.reportingEventType ? NotificationType.ATTENDANCE_REPORT : notification.type || NotificationType.SYSTEM_ALERT,
+      type: notification.reportingEventType ? NotificationType.ATTENDANCE_REPORT : normalizedType,
       eventId: notification._id || notification.id || `notif_${Date.now()}`,
       messageId: notification.messageId || notification.sourceId,
       channelId: channelId ? String(channelId) : undefined,

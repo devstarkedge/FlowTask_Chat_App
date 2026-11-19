@@ -4,7 +4,7 @@ const {installHuddlePopout}=require('./huddlePopout.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
 const { installWindowSecurity } = require('./security.cjs');
 const { initUpdater } = require('./updater.cjs');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification, desktopCapturer, screen, clipboard, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeImage, Notification, desktopCapturer, screen, clipboard, systemPreferences, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -258,6 +258,50 @@ ipcMain.on('window-close', (event) => {
 ipcMain.handle('window-is-maximized', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
   return win ? win.isMaximized() : false;
+});
+
+function assertMainWindowAuthRequest(event) {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('Auth session storage is only available to the main app window');
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure desktop storage is unavailable');
+  }
+}
+
+function getAuthSessionPath() {
+  return path.join(app.getPath('userData'), 'auth-session.enc');
+}
+
+ipcMain.handle('auth-session:read', async (event) => {
+  assertMainWindowAuthRequest(event);
+  try {
+    const encrypted = await fs.promises.readFile(getAuthSessionPath());
+    return JSON.parse(safeStorage.decryptString(encrypted));
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+});
+
+ipcMain.handle('auth-session:write', async (event, value) => {
+  assertMainWindowAuthRequest(event);
+  if (!value || typeof value.accessToken !== 'string' || typeof value.refreshToken !== 'string') {
+    throw new Error('Invalid auth session');
+  }
+  const encrypted = safeStorage.encryptString(JSON.stringify(value));
+  await fs.promises.writeFile(getAuthSessionPath(), encrypted, { mode: 0o600 });
+  return true;
+});
+
+ipcMain.handle('auth-session:clear', async (event) => {
+  assertMainWindowAuthRequest(event);
+  try {
+    await fs.promises.unlink(getAuthSessionPath());
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  return true;
 });
 
 // IPC handler for notification diagnostics

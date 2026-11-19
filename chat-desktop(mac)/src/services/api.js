@@ -91,7 +91,7 @@ api.interceptors.request.use((config) => {
     config.headers["X-Workspace-Id"] = workspaceId;
   }
   // Forward FlowTask JWT for endpoints that need FlowTask API access (e.g., getDMContacts)
-  const flowTaskToken = localStorage.getItem("flowtask_token");
+  const flowTaskToken = useAuthStore.getState().flowTaskToken || localStorage.getItem("flowtask_token");
   if (flowTaskToken) {
     config.headers["X-FlowTask-Token"] = flowTaskToken;
   }
@@ -151,7 +151,7 @@ api.interceptors.response.use(
         );
 
         const { accessToken: newAccess, refreshToken: newRefresh } = data.data;
-        useAuthStore.getState().setTokens(newAccess, newRefresh);
+        await useAuthStore.getState().setTokens(newAccess, newRefresh);
         try {
           const { getSocket } = await import("./socket");
           const sock = getSocket();
@@ -166,7 +166,14 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        useAuthStore.getState().logout();
+        if (refreshError.response?.status === 401) {
+          useAuthStore.getState().logout();
+        } else {
+          logger.warn(
+            "Token refresh failed temporarily; preserving the local session:",
+            refreshError,
+          );
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

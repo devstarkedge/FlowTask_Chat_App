@@ -32,12 +32,67 @@ function saveUser(user) {
   } catch (e) {}
 }
 
+const hasNativeAuthCache = () => typeof window !== 'undefined' && Boolean(window.electronAPI?.readAuthSession)
+
+function readLegacySession() {
+  try {
+    return {
+      accessToken: localStorage.getItem('chat_access_token'),
+      refreshToken: localStorage.getItem('chat_refresh_token'),
+      flowTaskToken: localStorage.getItem('flowtask_token'),
+      user: getSavedUser(),
+    }
+  } catch (e) {
+    return { accessToken: null, refreshToken: null, flowTaskToken: null, user: null }
+  }
+}
+
+async function writeAuthSession(session) {
+  const value = {
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    flowTaskToken: session.flowTaskToken || null,
+    user: session.user || null,
+  }
+  try {
+    if (hasNativeAuthCache()) {
+      await window.electronAPI.writeAuthSession(value)
+      localStorage.removeItem('chat_access_token')
+      localStorage.removeItem('chat_refresh_token')
+      localStorage.removeItem('flowtask_token')
+      localStorage.removeItem('chat_user')
+      return
+    }
+    if (value.accessToken) localStorage.setItem('chat_access_token', value.accessToken)
+    else localStorage.removeItem('chat_access_token')
+    if (value.refreshToken) localStorage.setItem('chat_refresh_token', value.refreshToken)
+    else localStorage.removeItem('chat_refresh_token')
+    if (value.flowTaskToken) localStorage.setItem('flowtask_token', value.flowTaskToken)
+    else localStorage.removeItem('flowtask_token')
+    saveUser(value.user)
+  } catch (error) {
+    logger.warn('Failed to persist auth session:', error)
+  }
+}
+
+async function clearAuthSession() {
+  try {
+    if (hasNativeAuthCache()) await window.electronAPI.clearAuthSession()
+  } catch (error) {
+    logger.warn('Failed to clear native auth session:', error)
+  }
+  for (const key of ['chat_access_token', 'chat_refresh_token', 'flowtask_token', 'chat_user']) {
+    localStorage.removeItem(key)
+  }
+}
+
 export const useAuthStore = create((set, get) => ({
-  accessToken: localStorage.getItem('chat_access_token') || null,
-  refreshToken: localStorage.getItem('chat_refresh_token') || null,
-  user: getSavedUser(),
+  accessToken: hasNativeAuthCache() ? null : localStorage.getItem('chat_access_token') || null,
+  refreshToken: hasNativeAuthCache() ? null : localStorage.getItem('chat_refresh_token') || null,
+  flowTaskToken: hasNativeAuthCache() ? null : localStorage.getItem('flowtask_token') || null,
+  user: hasNativeAuthCache() ? null : getSavedUser(),
   isLoading: false,
-  isInitialized: !localStorage.getItem('chat_access_token') || !!getSavedUser(),
+  isInitialized: hasNativeAuthCache() ? false : !localStorage.getItem('chat_access_token') || !!getSavedUser(),
   error: null,
   flowtaskEnabled: FLOWTASK_ENABLED,
   channelSync: null,
@@ -71,9 +126,35 @@ export const useAuthStore = create((set, get) => ({
 
   // ─── Token management ─────────────────────────────────────────────
   setTokens: (accessToken, refreshToken) => {
-    localStorage.setItem('chat_access_token', accessToken)
-    if (refreshToken) localStorage.setItem('chat_refresh_token', refreshToken)
-    set({ accessToken, refreshToken: refreshToken || get().refreshToken })
+    const nextRefreshToken = refreshToken || get().refreshToken
+    const state = { ...get(), accessToken, refreshToken: nextRefreshToken }
+    set({ accessToken, refreshToken: nextRefreshToken })
+    return writeAuthSession(state)
+  },
+
+  restoreSession: async () => {
+    let session = null
+    if (hasNativeAuthCache()) {
+      try {
+        session = await window.electronAPI.readAuthSession()
+      } catch (error) {
+        logger.warn('Failed to read native auth session; checking the previous session cache:', error)
+      }
+    }
+    if (!session) {
+      session = readLegacySession()
+      if (hasNativeAuthCache() && session.accessToken && session.refreshToken) {
+        await writeAuthSession(session)
+      }
+    }
+    set({
+      accessToken: session?.accessToken || null,
+      refreshToken: session?.refreshToken || null,
+      flowTaskToken: session?.flowTaskToken || null,
+      user: session?.user || null,
+      isInitialized: true,
+    })
+    return session
   },
 
   // Alias for backward compat — used by api interceptor
@@ -101,9 +182,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       const { data } = await authAPI.login({ email, password })
       const { user, accessToken, refreshToken } = data.data
-      localStorage.setItem('chat_access_token', accessToken)
-      localStorage.setItem('chat_refresh_token', refreshToken)
-      saveUser(user)
+      await writeAuthSession({ accessToken, refreshToken, flowTaskToken: get().flowTaskToken, user })
       set({ accessToken, refreshToken, user, isLoading: false, isInitialized: true })
       // Fetch workspaces for workspace selector; socket connects when workspace is selected
       await useWorkspaceStore.getState().fetchWorkspaces()
@@ -132,13 +211,11 @@ export const useAuthStore = create((set, get) => ({
           flowTaskToken,
           channelSync,
         } = data.data
-        localStorage.setItem('chat_access_token', accessToken)
-        localStorage.setItem('chat_refresh_token', refreshToken)
-        if (flowTaskToken) localStorage.setItem('flowtask_token', flowTaskToken)
-        saveUser(user)
+        await writeAuthSession({ accessToken, refreshToken, flowTaskToken, user })
         set({
           accessToken,
           refreshToken,
+          flowTaskToken: flowTaskToken || null,
           user,
           channelSync: channelSync || null,
           isInitialized: true,
@@ -181,7 +258,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       const { data } = await authAPI.me()
       const user = data.data.user || data.data
-      saveUser(user)
+      await writeAuthSession({ ...get(), user })
       set({ user, isLoading: false, isInitialized: true })
       await useWorkspaceStore.getState().fetchWorkspaces()
       return user
@@ -226,10 +303,7 @@ export const useAuthStore = create((set, get) => ({
     if (refreshToken) {
       authAPI.logout(refreshToken).catch(() => {})
     }
-    localStorage.removeItem('chat_access_token')
-    localStorage.removeItem('chat_refresh_token')
-    localStorage.removeItem('flowtask_token')
-    saveUser(null)
+    const clearSessionPromise = clearAuthSession()
     if (user?._id) {
       localStorage.removeItem(`taskchat_active_workspace_${user._id}`)
     }
@@ -237,7 +311,8 @@ export const useAuthStore = create((set, get) => ({
     disconnectSocket()
     useWorkspaceStore.getState().clearWorkspaceState()
     flowTaskLoginInFlight = null
-    set({ accessToken: null, refreshToken: null, user: null, channelSync: null, error: null, isLoading: false, isInitialized: true })
+    set({ accessToken: null, refreshToken: null, flowTaskToken: null, user: null, channelSync: null, error: null, isLoading: false, isInitialized: true })
+    return clearSessionPromise
   },
 
   // ─── Account Deletion ─────────────────────────────────────────────
@@ -252,16 +327,14 @@ export const useAuthStore = create((set, get) => ({
     }
 
     // Wipe local session state (same cleanup as logout)
-    localStorage.removeItem('chat_access_token');
-    localStorage.removeItem('chat_refresh_token');
-    localStorage.removeItem('flowtask_token');
-    saveUser(null);
+    await clearAuthSession();
     disconnectSocket();
     useWorkspaceStore.getState().clearWorkspaceState();
     flowTaskLoginInFlight = null;
     set({
       accessToken: null,
       refreshToken: null,
+      flowTaskToken: null,
       user: null,
       channelSync: null,
       error: null,

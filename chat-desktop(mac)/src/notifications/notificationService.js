@@ -101,7 +101,7 @@ export class NotificationService {
    * @returns {boolean}
    */
   shouldSuppressNotification(event, { activeChannelId, notifStore }) {
-    const isCritical = event.priority === NotificationPriority.HIGH
+    const isCritical = event.priority === NotificationPriority.HIGH || event.type === NotificationType.ATTENDANCE_REPORT
 
     // Check pause / DND mode
     if (notifStore?.isPaused && !isCritical) {

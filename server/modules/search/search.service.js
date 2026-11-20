@@ -153,6 +153,157 @@ function scoreChannelSignal(channelSignals, channelId, { pinned = 14, starred = 
   return score;
 }
 
+export function getEntityMatchRank(item, query, options = {}) {
+  const cleanTerm = (query || '').replace(/^[#@]+/, '').trim();
+  const q = normalizeText(cleanTerm);
+  if (!q) return 0;
+
+  const rawQuery = (query || '').trim();
+  const isExplicitChannel = rawQuery.startsWith('#');
+  const isExplicitUser = rawQuery.startsWith('@');
+  const type = item.type || (item.channelType === 'dm' ? 'dm' : 'channel');
+
+  if (type === 'channel') {
+    const normName = normalizeText(item.name || '');
+    const normSlug = normalizeText(item.slug || '');
+    const normDesc = normalizeText(item.description || '');
+    const normTopic = normalizeText(item.topic || '');
+    const nameTokens = normName.split(' ').filter(Boolean);
+    const slugTokens = normSlug.split(' ').filter(Boolean);
+
+    let score = 0;
+    // 1. Exact channel name match
+    if (normName === q || normSlug === q) {
+      score = 100000;
+    }
+    // 2. Partial channel name match (starts with, word boundary match, or substring)
+    else if (normName.startsWith(q) || normSlug.startsWith(q)) {
+      score = 85000 - Math.min((normName.length - q.length) * 10, 500);
+    } else if (nameTokens.some((t) => t.startsWith(q)) || slugTokens.some((t) => t.startsWith(q))) {
+      score = 80000;
+    } else if (normName.includes(q) || normSlug.includes(q)) {
+      score = 75000;
+    }
+    // 3. Other relevant channel results (topic, description, tokens)
+    else if (normDesc.includes(q) || normTopic.includes(q)) {
+      score = 50000;
+    } else if (nameTokens.some((t) => t.includes(q)) || slugTokens.some((t) => t.includes(q))) {
+      score = 45000;
+    } else {
+      return 0;
+    }
+
+    if (isExplicitChannel) score += 10000;
+    if (isExplicitUser) score -= 20000;
+
+    score += scoreRecency(item.lastMessageAt, 50);
+    score += Math.min(Math.floor((item.memberCount || 0) / 5), 30);
+    if (options.channelSignals) {
+      score += scoreChannelSignal(options.channelSignals, item.id, { pinned: 40, starred: 20 });
+    }
+    return score;
+  }
+
+  if (type === 'user') {
+    const normName = normalizeText(item.name || '');
+    const normEmail = normalizeText(item.email || '');
+    const emailPrefix = normEmail.split('@')[0] || '';
+    const nameTokens = normName.split(' ').filter(Boolean);
+
+    let score = 0;
+    // 1. Exact person name match
+    if (normName === q || emailPrefix === q || nameTokens.some((t) => t === q)) {
+      score = 100000;
+    }
+    // 2. Partial person name match
+    else if (normName.startsWith(q) || emailPrefix.startsWith(q)) {
+      score = 85000 - Math.min((normName.length - q.length) * 10, 500);
+    } else if (nameTokens.some((t) => t.startsWith(q))) {
+      score = 80000;
+    } else if (normName.includes(q) || normEmail.includes(q)) {
+      score = 75000;
+    } else {
+      return 0;
+    }
+
+    if (isExplicitUser) score += 10000;
+    if (isExplicitChannel) score -= 20000;
+
+    score += (item.status === 'online' ? 40 : 0) + (item.status === 'away' ? 20 : 0);
+    score += scoreRecency(item.lastSeenAt || item.updatedAt, 30);
+    return score;
+  }
+
+  if (type === 'dm') {
+    const normName = normalizeText(item.name || '');
+    const nameTokens = normName.split(' ').filter(Boolean);
+
+    let score = 0;
+    // 1. Exact person / DM conversation name match
+    if (normName === q || nameTokens.some((t) => t === q)) {
+      score = 90000;
+    }
+    // 2. Partial person / DM name match
+    else if (normName.startsWith(q)) {
+      score = 75000 - Math.min((normName.length - q.length) * 10, 500);
+    } else if (nameTokens.some((t) => t.startsWith(q))) {
+      score = 72000;
+    } else if (normName.includes(q)) {
+      score = 65000;
+    } else {
+      return 0;
+    }
+
+    if (isExplicitUser) score += 10000;
+    if (isExplicitChannel) score -= 20000;
+
+    score += scoreRecency(item.lastMessageAt, 50);
+    if (options.channelSignals) {
+      score += scoreChannelSignal(options.channelSignals, item.id, { pinned: 40, starred: 20 });
+    }
+    return score;
+  }
+
+  if (type === 'project') {
+    const normName = normalizeText(item.name || '');
+    const normDesc = normalizeText(item.description || '');
+    let score = 0;
+    if (normName === q) score = 45000;
+    else if (normName.startsWith(q)) score = 43000;
+    else if (normName.includes(q)) score = 41000;
+    else if (normDesc.includes(q)) score = 40000;
+    else return 0;
+    score += scoreRecency(item.lastMessageAt, 50);
+    return score;
+  }
+
+  if (type === 'file' || type === 'link' || type === 'page') {
+    const name = normalizeText(item.name || item.title || item.label || '');
+    let score = 0;
+    if (name === q) score = 25000;
+    else if (name.startsWith(q)) score = 23000;
+    else if (name.includes(q)) score = 21000;
+    else return 0;
+    score += scoreRecency(item.createdAt, 30);
+    return score;
+  }
+
+  if (type === 'message') {
+    // 4. Messages containing the search keyword
+    let score = 1000;
+    const textScore = scoreText(q, item.snippet, item.senderName);
+    score += textScore;
+    score += scoreRecency(item.createdAt, 50);
+    score += Math.min(item.replyCount || 0, 20);
+    if (options.channelSignals) {
+      score += scoreChannelSignal(options.channelSignals, item.channelId, { pinned: 20, starred: 10 });
+    }
+    return score;
+  }
+
+  return 0;
+}
+
 function applyLimit(items, limit) {
   return {
     items: items.slice(0, limit),
@@ -352,7 +503,8 @@ async function getAccessibleChannelIds(userId, workspaceId) {
 
   const { default: channelService } = await import('../channels/channel.service.js');
   const authorized = channels.filter(channel => !isReportingChannel(channel) || hasReportingAccess(channel, membership));
-  const decorated = await channelService._decorateRecipientGroups(authorized, workspaceId);
+  const decoratedGroups = await channelService._decorateRecipientGroups(authorized, workspaceId);
+  const decorated = await channelService._decorateDMChannels(decoratedGroups, userId, workspaceId);
   return { channelIds: decorated.map((channel) => channel._id), channels: decorated };
 }
 
@@ -412,12 +564,7 @@ async function searchUsers(query, regex, workspaceId) {
       updatedAt: user.updatedAt,
       type: 'user',
     };
-  }), (item) => (
-    scoreText(query, item.name, item.email, item.role, item.status, item.department, item.customStatus?.text)
-    + (item.status === 'online' ? 8 : 0)
-    + (item.status === 'away' ? 4 : 0)
-    + scoreRecency(item.lastSeenAt || item.updatedAt, 10)
-  ));
+  }), (item) => getEntityMatchRank(item, query));
 
   return applyLimit(ranked, limit);
 }
@@ -507,12 +654,7 @@ async function searchMessages(query, regex, workspaceId, userId, channelIds, cha
     createdAt: message.createdAt,
     replyCount: message.replyCount || 0,
     type: 'message',
-  })), (item) => (
-    scoreText(query, item.snippet, item.senderName, item.channelName)
-    + scoreRecency(item.createdAt, 18)
-    + Math.min(item.replyCount || 0, 4)
-    + scoreChannelSignal(channelSignals, item.channelId, { pinned: 16, starred: 12 })
-  ));
+  })), (item) => getEntityMatchRank(item, query, { channelSignals }));
 
   return {
     items: ranked,
@@ -523,79 +665,120 @@ async function searchMessages(query, regex, workspaceId, userId, channelIds, cha
   };
 }
 
-function searchChannels(query, regex, channels, channelSignals) {
+export function searchChannels(query, regex, channels, channelSignals, matchedUsers = []) {
   const cleanTerm = (query || '').replace(/^[#@]+/, '').trim();
   const termRegex = cleanTerm ? new RegExp(escapeRegex(cleanTerm), 'i') : regex;
   const normQuery = normalizeText(cleanTerm);
   const queryTokens = normQuery.split(' ').filter(Boolean);
 
-  const matches = channels
-    .filter((channel) => {
-      if (channel.type === CHANNEL_TYPES.DM) return false;
-
-      const directMatch = regex.test(channel.name || '')
-        || regex.test(channel.slug || '')
-        || regex.test(channel.description || '')
-        || regex.test(channel.topic || '');
-
-      const cleanMatch = termRegex.test(channel.name || '')
-        || termRegex.test(channel.slug || '')
-        || termRegex.test(channel.description || '')
-        || termRegex.test(channel.topic || '');
-
-      const normName = normalizeText(channel.name);
-      const normSlug = normalizeText(channel.slug);
-      const normDesc = normalizeText(channel.description);
-      const normTopic = normalizeText(channel.topic);
-
-      const normMatch = normQuery.length > 0 && (
-        normName.includes(normQuery)
-        || normSlug.includes(normQuery)
-        || normDesc.includes(normQuery)
-        || normTopic.includes(normQuery)
-        || (queryTokens.length > 1 && queryTokens.every((token) =>
-          normName.includes(token) || normSlug.includes(token) || normDesc.includes(token) || normTopic.includes(token)
-        ))
-      );
-
-      return directMatch || cleanMatch || normMatch;
-    })
-    .map((channel) => ({
-      id: channel._id.toString(),
-      name: channel.name,
-      ...(channel.recipientOnly ? { recipientOnly: true, nameFromMembers: channel.nameFromMembers, participants: channel.participants } : {}),
-      slug: channel.slug,
-      description: channel.description,
-      topic: channel.topic,
-      channelType: channel.type,
-      type: 'channel',
-      visibility: channel.visibility,
-      memberCount: channel.memberCount || 0,
-      lastMessageAt: channel.lastMessageAt,
-      flowTaskRef: channel.flowTaskRef,
-    }));
-
-  const ranked = sortByRank(matches, (item) => (
-    scoreText(cleanTerm || query, item.name, item.slug, item.description, item.topic)
-    + scoreRecency(item.lastMessageAt, 14)
-    + Math.min(Math.floor((item.memberCount || 0) / 25), 6)
-    + scoreChannelSignal(channelSignals, item.id)
-  ));
-
   const regularMatches = [];
   const projectMatches = [];
+  const dmMatches = [];
 
-  for (const item of ranked) {
-    if (item.channelType === CHANNEL_TYPES.PROJECT || item.flowTaskRef?.entityType === 'board') {
-      projectMatches.push(item);
+  for (const channel of channels) {
+    const isDM = channel.type === CHANNEL_TYPES.DM || channel.type === 'dm';
+    const isProject = channel.type === CHANNEL_TYPES.PROJECT || channel.flowTaskRef?.entityType === 'board';
+
+    const directMatch = regex.test(channel.name || '')
+      || regex.test(channel.slug || '')
+      || regex.test(channel.description || '')
+      || regex.test(channel.topic || '');
+
+    const cleanMatch = termRegex.test(channel.name || '')
+      || termRegex.test(channel.slug || '')
+      || termRegex.test(channel.description || '')
+      || termRegex.test(channel.topic || '');
+
+    const normName = normalizeText(channel.name);
+    const normSlug = normalizeText(channel.slug);
+    const normDesc = normalizeText(channel.description);
+    const normTopic = normalizeText(channel.topic);
+
+    const normMatch = normQuery.length > 0 && (
+      normName.includes(normQuery)
+      || normSlug.includes(normQuery)
+      || normDesc.includes(normQuery)
+      || normTopic.includes(normQuery)
+      || (queryTokens.length > 1 && queryTokens.every((token) =>
+        normName.includes(token) || normSlug.includes(token) || normDesc.includes(token) || normTopic.includes(token)
+      ))
+    );
+
+    const matchedUserMatch = isDM && matchedUsers.length > 0 && matchedUsers.some((u) => {
+      const uId = u.id?.toString();
+      const dmRecipId = channel.dmRecipientId?.toString();
+      const participants = Array.isArray(channel.dmParticipants) ? channel.dmParticipants.map((p) => p.toString()) : [];
+      return (dmRecipId && dmRecipId === uId) || participants.includes(uId);
+    });
+
+    if (!directMatch && !cleanMatch && !normMatch && !matchedUserMatch) {
+      continue;
+    }
+
+    if (isDM) {
+      dmMatches.push({
+        id: channel._id.toString(),
+        name: channel.name || 'Direct message',
+        slug: channel.slug,
+        description: channel.description,
+        topic: channel.topic,
+        channelType: 'dm',
+        type: 'dm',
+        visibility: 'private',
+        avatar: channel.avatar || null,
+        dmRecipientId: channel.dmRecipientId?.toString() || null,
+        memberCount: 2,
+        lastMessageAt: channel.lastMessageAt,
+        reasonLabel: 'Direct message',
+      });
+    } else if (isProject) {
+      projectMatches.push({
+        id: channel._id.toString(),
+        name: channel.name,
+        slug: channel.slug,
+        description: channel.description,
+        topic: channel.topic,
+        channelType: channel.type,
+        type: 'channel',
+        visibility: channel.visibility,
+        memberCount: channel.memberCount || 0,
+        lastMessageAt: channel.lastMessageAt,
+        flowTaskRef: channel.flowTaskRef,
+      });
     } else {
-      regularMatches.push(item);
+      regularMatches.push({
+        id: channel._id.toString(),
+        name: channel.name,
+        ...(channel.recipientOnly ? { recipientOnly: true, nameFromMembers: channel.nameFromMembers, participants: channel.participants } : {}),
+        slug: channel.slug,
+        description: channel.description,
+        topic: channel.topic,
+        channelType: channel.type,
+        type: 'channel',
+        visibility: channel.visibility,
+        memberCount: channel.memberCount || 0,
+        lastMessageAt: channel.lastMessageAt,
+        flowTaskRef: channel.flowTaskRef,
+      });
     }
   }
 
+  const rankedChannels = sortByRank(regularMatches, (item) =>
+    getEntityMatchRank(item, cleanTerm || query, { channelSignals })
+  );
+
+  const rankedProjects = sortByRank(projectMatches, (item) =>
+    getEntityMatchRank({ ...item, type: 'project' }, cleanTerm || query, { channelSignals })
+  );
+
+  const rankedDMs = sortByRank(dmMatches, (item) =>
+    getEntityMatchRank(item, cleanTerm || query, { channelSignals })
+  );
+
   return {
-    channels: applyLimit(regularMatches, SECTION_LIMITS.channels),
-    dms: applyLimit(projectMatches, SECTION_LIMITS.dms),
+    channels: applyLimit(rankedChannels, SECTION_LIMITS.channels),
+    dms: applyLimit(rankedProjects, SECTION_LIMITS.dms),
+    dmConversations: applyLimit(rankedDMs, SECTION_LIMITS.channels),
   };
 }
 
@@ -645,11 +828,7 @@ async function searchFiles(query, regex, workspaceId, channelIds, channelSignals
     uploadedById: ref.referencedBy?._id?.toString(),
     createdAt: ref.createdAt,
     type: 'file',
-  })), (item) => (
-    scoreText(query, item.name, item.mimeType, item.uploadedBy, item.channelName)
-    + scoreRecency(item.createdAt, 12)
-    + scoreChannelSignal(channelSignals, item.channelId, { pinned: 12, starred: 8 })
-  ));
+  })), (item) => getEntityMatchRank(item, query, { channelSignals }));
 
   return applyLimit(ranked, limit);
 }
@@ -698,11 +877,7 @@ async function searchLinks(query, regex, workspaceId, userId, channelIds, channe
       };
     })
     .filter((item) => item && (regex.test(item.url) || regex.test(item.snippet) || regex.test(item.channelName)))
-  , (item) => (
-    scoreText(query, item.title, item.url, item.snippet, item.channelName)
-    + scoreRecency(item.createdAt, 10)
-    + scoreChannelSignal(channelSignals, item.channelId, { pinned: 10, starred: 8 })
-  ));
+  , (item) => getEntityMatchRank(item, query, { channelSignals }));
 
   return applyLimit(ranked, limit);
 }
@@ -711,23 +886,36 @@ function searchPages(query) {
   const regex = new RegExp(escapeRegex(query), 'i');
   const ranked = sortByRank(PAGE_RESULTS
     .filter((page) => regex.test(page.label) || page.keywords.some((keyword) => regex.test(keyword)))
-    .map((page) => ({ ...page, type: 'page' })), (item) => scoreText(query, item.label, item.path, ...(item.keywords || [])));
+    .map((page) => ({ ...page, type: 'page' })), (item) => getEntityMatchRank(item, query));
 
   return applyLimit(ranked, SECTION_LIMITS.pages);
 }
 
-function buildTopMatches({ users, channels, messages, files, links, pages, dms = [] }) {
+export function buildTopMatches({ users = [], channels = [], messages = [], files = [], links = [], pages = [], dms = [], dmConversations = [] }, query = '') {
+  const allCandidates = [
+    ...users,
+    ...channels,
+    ...dmConversations,
+    ...dms,
+    ...messages,
+    ...files,
+    ...links,
+    ...pages,
+  ];
+
   const typePriority = {
-    user: 7,
+    user: 8,
+    channel: 7,
     dm: 6,
-    channel: 5,
+    project: 5,
     message: 4,
     file: 3,
     link: 2,
     page: 1,
   };
 
-  return [...users, ...channels, ...messages, ...files, ...links, ...pages, ...dms]
+  const sortedCandidates = allCandidates
+    .filter((item) => (item.rank || 0) > 0)
     .sort((a, b) => {
       if ((b.rank || 0) !== (a.rank || 0)) {
         return (b.rank || 0) - (a.rank || 0);
@@ -735,11 +923,42 @@ function buildTopMatches({ users, channels, messages, files, links, pages, dms =
       if ((typePriority[b.type] || 0) !== (typePriority[a.type] || 0)) {
         return (typePriority[b.type] || 0) - (typePriority[a.type] || 0);
       }
-      const bTime = new Date(b.lastMessageAt || b.createdAt || 0).getTime();
-      const aTime = new Date(a.lastMessageAt || a.createdAt || 0).getTime();
+      const bTime = new Date(b.lastMessageAt || b.createdAt || b.updatedAt || 0).getTime();
+      const aTime = new Date(a.lastMessageAt || a.createdAt || a.updatedAt || 0).getTime();
       return bTime - aTime;
-    })
-    .slice(0, SECTION_LIMITS.topMatches);
+    });
+
+  const seen = new Set();
+  const seenPersonIds = new Set();
+  const seenPersonNames = new Set();
+
+  const dedupedCandidates = sortedCandidates.filter((item) => {
+    const key = `${item.type || 'item'}:${item.id}`;
+    if (seen.has(key)) return false;
+
+    // Deduplicate person between user and 1-on-1 dm conversation
+    if (item.type === 'user') {
+      const normName = normalizeText(item.name || '');
+      if (seenPersonIds.has(item.id) || (normName && seenPersonNames.has(normName))) {
+        return false;
+      }
+      seenPersonIds.add(item.id);
+      if (normName) seenPersonNames.add(normName);
+    } else if (item.type === 'dm') {
+      const recipId = item.dmRecipientId?.toString();
+      const normName = normalizeText(item.name || '');
+      if ((recipId && seenPersonIds.has(recipId)) || (normName && seenPersonNames.has(normName))) {
+        return false;
+      }
+      if (recipId) seenPersonIds.add(recipId);
+      if (normName) seenPersonNames.add(normName);
+    }
+
+    seen.add(key);
+    return true;
+  });
+
+  return dedupedCandidates.slice(0, SECTION_LIMITS.topMatches);
 }
 
 export async function globalSearch({ query, scope = null, limit = null, cursor = null, userId, workspaceId }) {
@@ -899,9 +1118,43 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
   const users = usersResult.items;
   const messages = messagesResult.items;
   const regularChannels = channelResults.channels.items;
+  const dmConversations = channelResults.dmConversations ? [...channelResults.dmConversations.items] : [];
   const files = filesResult.items;
   const links = linksResult.items;
   const pages = pagesResult.items;
+
+  // Match any DM conversations for matched users if not already present
+  if (users.length > 0) {
+    const matchedUserIds = new Set(users.map((u) => u.id));
+    const existingDmIds = new Set(dmConversations.map((dm) => dm.id));
+    for (const channel of scopedChannels) {
+      if (channel.type === CHANNEL_TYPES.DM || channel.type === 'dm') {
+        const recipId = channel.dmRecipientId?.toString();
+        const participants = Array.isArray(channel.dmParticipants) ? channel.dmParticipants.map((p) => p.toString()) : [];
+        const isMatched = (recipId && matchedUserIds.has(recipId)) || participants.some((p) => matchedUserIds.has(p));
+        if (isMatched && !existingDmIds.has(channel._id.toString())) {
+          existingDmIds.add(channel._id.toString());
+          const dmItem = {
+            id: channel._id.toString(),
+            name: channel.name || 'Direct message',
+            slug: channel.slug,
+            description: channel.description,
+            topic: channel.topic,
+            channelType: 'dm',
+            type: 'dm',
+            visibility: 'private',
+            avatar: channel.avatar || null,
+            dmRecipientId: recipId || null,
+            memberCount: 2,
+            lastMessageAt: channel.lastMessageAt,
+            reasonLabel: 'Direct message',
+            rank: getEntityMatchRank({ ...channel, type: 'dm' }, activeQuery, { channelSignals }),
+          };
+          dmConversations.push(dmItem);
+        }
+      }
+    }
+  }
 
   // Find project channels that the matched users are members of.
   // Must be accessible to the searching user (i.e. in scopedChannels).
@@ -935,12 +1188,9 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
         lastMessageAt: channel.lastMessageAt,
       }));
 
-      projectsForUsers = sortByRank(matches, (item) => (
-        scoreText(activeQuery, item.name, item.slug, item.description, item.topic)
-        + scoreRecency(item.lastMessageAt, 14)
-        + Math.min(Math.floor((item.memberCount || 0) / 25), 6)
-        + scoreChannelSignal(channelSignals, item.id)
-      ));
+      projectsForUsers = sortByRank(matches, (item) =>
+        getEntityMatchRank({ ...item, type: 'project' }, activeQuery, { channelSignals })
+      ).filter((item) => (item.rank || 0) > 0);
     } catch (err) {
       logger.error('Failed to search projects for matched users', { error: err.message });
     }
@@ -952,6 +1202,7 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
   ];
   const seenProjectIds = new Set();
   const dedupedProjects = combinedProjects.filter((item) => {
+    if ((item.rank || 0) <= 0) return false;
     if (seenProjectIds.has(item.id)) return false;
     seenProjectIds.add(item.id);
     return true;
@@ -960,7 +1211,16 @@ export async function globalSearch({ query, scope = null, limit = null, cursor =
   const dmsLimitResult = applyLimit(dedupedProjects, SECTION_LIMITS.dms);
   const dms = dmsLimitResult.items;
 
-  const topMatches = buildTopMatches({ users, channels: regularChannels, messages, files, links, pages, dms });
+  const topMatches = buildTopMatches({
+    users,
+    channels: regularChannels,
+    messages,
+    files,
+    links,
+    pages,
+    dms,
+    dmConversations,
+  }, activeQuery);
 
   return {
     query: activeQuery,

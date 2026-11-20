@@ -34,6 +34,7 @@ import {
   getScopeTargetLabel,
   normalizeRecentMessages,
   normalizeSearchMessages,
+  prioritizeGlobalResults,
 } from "./searchUtils";
 import "./UnifiedSearch.css";
 
@@ -61,9 +62,9 @@ const DEBOUNCE_MS = 300;
 const GLOBAL_SECTION_KEYS = [
   "topMatches",
   "users",
-  "messages",
   "channels",
   "dms",
+  "messages",
   "files",
   "links",
   "pages",
@@ -764,7 +765,8 @@ const UnifiedSearch = forwardRef(function UnifiedSearch(
           workspaceId,
           signal: controller.signal,
         });
-        const results = normalizeGlobalResults(data?.data || {});
+        const rawResults = normalizeGlobalResults(data?.data || {});
+        const results = prioritizeGlobalResults(rawResults, trimmed);
         const meta = data?.data?.meta || EMPTY_META;
         cacheRef.current.set(cacheKey, { results, meta });
         setGlobalResults(results);

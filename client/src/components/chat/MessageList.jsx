@@ -11,7 +11,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useChannelStore } from "../../stores/channelStore";
 import MessageItem from "./MessageItem";
 import AutoActivityMessage from "./AutoActivityMessage";
-import {getHuddleTimeline} from "../huddles/huddleTimeline";
+import { getHuddleTimeline } from "../huddles/huddleTimeline";
 import ForwardMessageModal from "./ForwardMessageModal";
 import { MessageCircle, ChevronDown, Forward } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
@@ -22,12 +22,8 @@ import {
   getVirtuosoMessageKey,
   measureMessageItem,
 } from "../../utils/virtuosoMessageIndex";
-import {
-  AT_BOTTOM_THRESHOLD,
-  checkIfAtBottom,
-  calculatePreservedScrollTop,
-  shouldLoadOlderMessages,
-} from "../../utils/chatScrollUtils";
+import { AT_BOTTOM_THRESHOLD } from "../../utils/chatScrollUtils";
+import { useChatScrollManager } from "../../hooks/useChatScrollManager";
 
 // Stable component types keep Virtuoso's measured spacers mounted on rerenders.
 function MessageListHeader({ context }) {
@@ -70,9 +66,6 @@ export default function MessageList({
   const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
   const setScrollToMessageId = useChatStore((s) => s.setScrollToMessageId);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
-  const messageAppendVersion = useChatStore(
-    (s) => s.messageAppendVersionByChannel?.[channelId] || 0,
-  );
   const scrollToLatestRequest = useChatStore(
     (s) => s.scrollToLatestRequestByChannel?.[channelId] || 0,
   );
@@ -90,19 +83,31 @@ export default function MessageList({
   const virtuosoRef = useRef(null);
   const lastScrolledHighlightId = useRef(null);
   const lastScrolledEditingId = useRef(null);
-  const previousAppendVersionRef = useRef(messageAppendVersion);
   const consumedScrollToLatestRequestRef = useRef(scrollToLatestRequest);
-  const messageScrollerRef = useRef(null);
   const firstItemIndexTrackerRef = useRef(null);
 
-  // Snapshot of scroll metrics to restore position accurately across prepends and resizes
-  const scrollSnapshotRef = useRef({
-    scrollHeight: 0,
-    scrollTop: 0,
-    wasAtBottom: true,
-    distanceToBottom: 0,
-    firstMessageId: null,
-    messageCount: 0,
+  // ─── Intent-Aware Scroll Manager ──────────────────────────────────────
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMessages) return;
+    const oldest = useChatStore.getState().selectMessagesForChannel(channelId)[0];
+    if (oldest) fetchMessages(channelId, { cursor: oldest._id, limit: 80 });
+  }, [channelId, hasMore, isLoadingMessages, fetchMessages]);
+
+  const {
+    setScroller,
+    showScrollBtn,
+    scrollToLatest,
+    handleUserIntent,
+    handleAtBottomStateChange,
+    followOutput,
+    handleStartReached,
+    handleLayoutUpdate,
+  } = useChatScrollManager({
+    channelId,
+    virtuosoRef,
+    hasMore,
+    isLoadingMessages,
+    onLoadEarlier: loadMore,
   });
 
   // Forward message modal state
@@ -136,103 +141,12 @@ export default function MessageList({
     }
   }, [location.pathname]);
 
-  // Tracks whether the user is at (or very near) the bottom of the list.
-  const isAtBottomRef = useRef(true);
-  // Guard to prevent initial mount measurement from triggering startReached pagination
-  const isInitialMountRef = useRef(true);
-
-  // Show/hide the "scroll to bottom" floating button
-  const [showScrollBtn, setShowScrollBtn] = useState(false);
-
-  const scrollToLatest = useCallback((behavior = "auto") => {
-    isAtBottomRef.current = true;
-    setShowScrollBtn(false);
-
-    virtuosoRef.current?.scrollToIndex({
-      index: "LAST",
-      align: "end",
-      behavior,
-    });
-
-    const scroller = messageScrollerRef.current;
-    if (scroller) {
-      scroller.scrollTop = scroller.scrollHeight;
-    }
-  }, []);
-
+  // Respond to explicit request to scroll to latest (e.g. newly sent message)
   useEffect(() => {
     if (scrollToLatestRequest <= consumedScrollToLatestRequestRef.current) return;
     consumedScrollToLatestRequestRef.current = scrollToLatestRequest;
     scrollToLatest("auto");
   }, [scrollToLatestRequest, scrollToLatest]);
-
-  const cancelPendingFollow = useCallback(() => {
-    previousAppendVersionRef.current = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
-  }, [channelId]);
-
-  // ─── Load older messages only when user explicitly scrolls near top ───
-  const loadMore = useCallback(() => {
-    if (isInitialMountRef.current) return;
-    if (!hasMore || isLoadingMessages) return;
-
-    const scroller = messageScrollerRef.current;
-    // CRITICAL: Never auto-fetch older messages when user is at the bottom or not near the top!
-    if (scroller && (isAtBottomRef.current || scroller.scrollTop > 200)) return;
-
-    const oldest = useChatStore.getState().selectMessagesForChannel(channelId)[0];
-    if (oldest) fetchMessages(channelId, { cursor: oldest._id, limit: 80 });
-  }, [channelId, hasMore, isLoadingMessages, fetchMessages]);
-
-  const handleStartReached = useCallback(() => {
-    if (isInitialMountRef.current || isAtBottomRef.current) return;
-    const scroller = messageScrollerRef.current;
-    if (scroller && scroller.scrollTop > 200) return;
-    loadMore();
-  }, [loadMore]);
-
-  const trackScrollPosition = useCallback(() => {
-    const element = messageScrollerRef.current;
-    if (!element) return;
-
-    const atBottom = checkIfAtBottom(element, AT_BOTTOM_THRESHOLD);
-    isAtBottomRef.current = atBottom;
-    setShowScrollBtn(!atBottom);
-
-    // If user scrolled near the very top, trigger pagination for earlier messages
-    if (element.scrollTop < 150 && !atBottom && hasMore && !isLoadingMessages && !isInitialMountRef.current) {
-      loadMore();
-    }
-  }, [hasMore, isLoadingMessages, loadMore]);
-
-  const setMessageScroller = useCallback((element) => {
-    if (messageScrollerRef.current && messageScrollerRef.current !== element) {
-      messageScrollerRef.current.removeEventListener("scroll", trackScrollPosition);
-    }
-    messageScrollerRef.current = element;
-    if (!element) return;
-
-    element.addEventListener("scroll", trackScrollPosition, { passive: true });
-  }, [trackScrollPosition]);
-
-  const followNewMessages = useCallback(() => {
-    const appendVersion = useChatStore.getState().messageAppendVersionByChannel?.[channelId] || 0;
-    if (appendVersion <= previousAppendVersionRef.current) return false;
-    previousAppendVersionRef.current = appendVersion;
-
-    const scroller = messageScrollerRef.current;
-    const isCurrentlyAtBottom = scroller ? checkIfAtBottom(scroller, AT_BOTTOM_THRESHOLD) : isAtBottomRef.current;
-
-    if (!isCurrentlyAtBottom) {
-      setShowScrollBtn(true);
-      return false;
-    }
-
-    requestAnimationFrame(() => {
-      scrollToLatest("auto");
-    });
-    return { index: "LAST", align: "end", behavior: "auto" };
-  }, [channelId, scrollToLatest]);
-
 
   // ─── Multi-message selection helpers ───────────────────────────────────
   const toggleSelectMessage = useCallback((msgId, shiftKey = false) => {
@@ -269,25 +183,15 @@ export default function MessageList({
     lastSelectedIdRef.current = null;
   }, []);
 
-  // Build forward target: if a specific message is passed (single-message click),
-  // ALWAYS forward exactly that message — never the multi-selection batch.
-  // Bulk forwarding (selectedMessageIds) applies ONLY when the multi-select
-  // toolbar's Forward button is clicked, which passes null as singleMessage.
-  // options.attachmentFileIds — when set, only these files are cloned by the backend.
   const handleForwardSelected = useCallback((singleMessage, options = {}) => {
     if (singleMessage) {
-      // Single-message forward: target ONLY this message by its _id.
-      // Ignores any stale selectedMessageIds to prevent accidental bulk forward.
       setForwardTarget({ message: singleMessage, attachmentFileIds: options.attachmentFileIds });
     } else if (selectedMessageIds.size > 1) {
-      // Bulk forward: only triggered from the multi-select toolbar (null arg).
-      // Collect selected messages in chronological order.
       const selectedMessages = messages
         .filter(m => selectedMessageIds.has(m._id))
         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
       setForwardTarget({ messages: selectedMessages });
     } else {
-      // Fallback: single selected message from toolbar (size === 1)
       const selectedMessages = messages.filter(m => selectedMessageIds.has(m._id));
       if (selectedMessages.length === 1) {
         setForwardTarget({ message: selectedMessages[0] });
@@ -295,85 +199,38 @@ export default function MessageList({
     }
   }, [selectedMessageIds, messages]);
 
-  // Reset selection when channel changes
-  useEffect(() => {
+  // Reset selection and channel-specific refs when channel changes
+  useLayoutEffect(() => {
+    firstItemIndexTrackerRef.current = null;
+    lastScrolledHighlightId.current = null;
+    lastScrolledEditingId.current = null;
     clearSelection();
   }, [channelId, clearSelection]);
-
-  // ─── Hard-jump to bottom whenever the active channel changes ──────────
-  useLayoutEffect(() => {
-    cancelPendingFollow();
-    isInitialMountRef.current = true;
-    isAtBottomRef.current = true;
-    setShowScrollBtn(false);
-    previousAppendVersionRef.current = messageAppendVersion;
-    lastScrolledHighlightId.current = null;
-    firstItemIndexTrackerRef.current = null;
-
-    scrollSnapshotRef.current = {
-      scrollHeight: 0,
-      scrollTop: 0,
-      wasAtBottom: true,
-      distanceToBottom: 0,
-      firstMessageId: null,
-      messageCount: 0,
-    };
-
-    const t = requestAnimationFrame(() => {
-      scrollToLatest("auto");
-    });
-
-    const initTimer = setTimeout(() => {
-      isInitialMountRef.current = false;
-    }, 400);
-
-    return () => {
-      cancelAnimationFrame(t);
-      clearTimeout(initTimer);
-    };
-  }, [channelId, scrollToLatest, cancelPendingFollow, messageAppendVersion]);
 
   // ─── Maintain scroll position across prepends and content updates ────
   const currentFirstMessageId = messages[0]?._id;
   const currentMessageCount = messages.length;
+  const prevMetricsRef = useRef({
+    firstMessageId: currentFirstMessageId,
+    messageCount: currentMessageCount,
+  });
 
   useLayoutEffect(() => {
-    const scroller = messageScrollerRef.current;
-    if (!scroller) return;
-
-    const prev = scrollSnapshotRef.current;
-    const isPrepended =
+    const prev = prevMetricsRef.current;
+    const isPrepended = Boolean(
       prev.firstMessageId &&
       currentFirstMessageId &&
       prev.firstMessageId !== currentFirstMessageId &&
-      currentMessageCount > prev.messageCount;
+      currentMessageCount > prev.messageCount
+    );
 
-    if (isPrepended) {
-      const targetScrollTop = calculatePreservedScrollTop({
-        newScrollHeight: scroller.scrollHeight,
-        clientHeight: scroller.clientHeight,
-        previousDistanceToBottom: prev.distanceToBottom,
-        wasAtBottom: prev.wasAtBottom,
-      });
-      scroller.scrollTop = targetScrollTop;
-      if (prev.wasAtBottom) {
-        isAtBottomRef.current = true;
-        setShowScrollBtn(false);
-      }
-    } else if (prev.wasAtBottom && isAtBottomRef.current && !isInitialMountRef.current) {
-      // Content expanded or new message arrived while at bottom: stay pinned
-      scroller.scrollTop = scroller.scrollHeight;
-    }
+    handleLayoutUpdate({ isPrepended });
 
-    scrollSnapshotRef.current = {
-      scrollHeight: scroller.scrollHeight,
-      scrollTop: scroller.scrollTop,
-      wasAtBottom: isAtBottomRef.current,
-      distanceToBottom: Math.max(0, scroller.scrollHeight - scroller.scrollTop),
+    prevMetricsRef.current = {
       firstMessageId: currentFirstMessageId,
       messageCount: currentMessageCount,
     };
-  }, [messages, currentFirstMessageId, currentMessageCount]);
+  }, [messages, currentFirstMessageId, currentMessageCount, handleLayoutUpdate]);
 
   // ─── Flatten: date separators + unread marker ─────────────────────────
   const isActivityMessage = (msg) =>
@@ -386,22 +243,22 @@ export default function MessageList({
 
   const huddleTimeline = useMemo(() => getHuddleTimeline(messages, unreadBoundary), [messages, unreadBoundary]);
   const flattenedItems = useMemo(() => {
-    const {messages, unreadBoundary} = huddleTimeline;
+    const { messages: huddleMessages, unreadBoundary: markerBoundary } = huddleTimeline;
     const flattened = [];
     let currentDate = null;
     let insertedUnreadMarker = false;
 
-    const lastReadIndex = unreadBoundary
-      ? messages.findIndex((m) => m._id === unreadBoundary)
+    const lastReadIndex = markerBoundary
+      ? huddleMessages.findIndex((m) => m._id === markerBoundary)
       : -1;
 
-    if (unreadBoundary && messages.length > 0 && lastReadIndex === -1) {
+    if (markerBoundary && huddleMessages.length > 0 && lastReadIndex === -1) {
       flattened.push({ isUnreadSeparator: true, _id: "unread-separator" });
       insertedUnreadMarker = true;
     }
 
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
+    for (let i = 0; i < huddleMessages.length; i++) {
+      const msg = huddleMessages[i];
       const d = new Date(msg.createdAt);
       const label = formatDateLabel(d);
 
@@ -419,24 +276,24 @@ export default function MessageList({
 
       if (
         !insertedUnreadMarker &&
-        unreadBoundary &&
+        markerBoundary &&
         i > 0 &&
-        messages[i - 1]._id === unreadBoundary &&
-        msg._id !== unreadBoundary
+        huddleMessages[i - 1]._id === markerBoundary &&
+        msg._id !== markerBoundary
       ) {
         flattened.push({ isUnreadSeparator: true, _id: "unread-separator" });
         insertedUnreadMarker = true;
         separatorJustInserted = true;
       }
 
-      const prevMsg = i > 0 && !separatorJustInserted ? messages[i - 1] : null;
-      const nextMsgRaw = i < messages.length - 1 ? messages[i + 1] : null;
+      const prevMsg = i > 0 && !separatorJustInserted ? huddleMessages[i - 1] : null;
+      const nextMsgRaw = i < huddleMessages.length - 1 ? huddleMessages[i + 1] : null;
       const nextWillHaveSeparator =
         nextMsgRaw &&
         (formatDateLabel(new Date(nextMsgRaw.createdAt)) !== label ||
           (!insertedUnreadMarker &&
-            unreadBoundary &&
-            msg._id === unreadBoundary));
+            markerBoundary &&
+            msg._id === markerBoundary));
       const nextMsg = nextWillHaveSeparator ? null : nextMsgRaw;
 
       const prevAuthorId = prevMsg?.authorId?._id || prevMsg?.authorId;
@@ -496,31 +353,14 @@ export default function MessageList({
     if (index === -1) return;
     lastScrolledEditingId.current = editingMessageId;
 
-    const t1 = setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index,
-        align: "end",
-        behavior: "smooth",
-      });
-    }, 80);
-
-    const t2 = setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index,
-        align: "end",
-        behavior: "smooth",
-      });
-    }, 240);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+    virtuosoRef.current?.scrollToIndex({
+      index,
+      align: "center",
+      behavior: "smooth",
+    });
   }, [editingMessageId, flattenedItems]);
 
   // ─── Auto-scroll to message from deep-link (DownloadsModal folder navigation) ──
-  // All explicit message navigation shares one scroll path. A highlight or
-  // reaction rerender cannot replay an already consumed navigation request.
   useEffect(() => {
     const targetId = pendingMessageScroll || scrollToMessageId || highlightMessageId;
     if (!targetId) {
@@ -530,9 +370,6 @@ export default function MessageList({
     const index = flattenedItems.findIndex((item) => item._id === targetId);
     if (index === -1 || !virtuosoRef.current) return;
 
-    cancelPendingFollow();
-    isAtBottomRef.current = false;
-    setShowScrollBtn(true);
     if (lastScrolledHighlightId.current !== targetId || scrollToMessageId || pendingMessageScroll) {
       lastScrolledHighlightId.current = targetId;
       virtuosoRef.current.scrollToIndex({ index, align: "center", behavior: "smooth" });
@@ -545,7 +382,7 @@ export default function MessageList({
       setPendingMessageScroll(null);
     }
   }, [pendingMessageScroll, scrollToMessageId, highlightMessageId, flattenedItems,
-    cancelPendingFollow, setScrollToMessageId, setHighlightMessageId, location.pathname, navigate]);
+    setScrollToMessageId, setHighlightMessageId, location.pathname, navigate]);
 
   useEffect(() => {
     const targetId = scrollToMessageId || pendingMessageScroll;
@@ -563,7 +400,6 @@ export default function MessageList({
     };
     loadTarget();
     return () => { cancelled = true; };
-    // The loop reads current store data; rerenders must not start another loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollToMessageId, pendingMessageScroll, channelId, fetchMessages]);
 
@@ -596,228 +432,229 @@ export default function MessageList({
   // ─── Main render ───────────────────────────────────────────────────────
   return (
     <>
-    <div
-      className="flex-1 overflow-hidden relative"
-      role="log"
-      aria-label="Message list"
-      aria-live="polite"
-      style={{ minHeight: 0 }}
-      onWheelCapture={cancelPendingFollow}
-      onTouchMoveCapture={cancelPendingFollow}
-      onKeyDownCapture={(event) => {
-        if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
-          cancelPendingFollow();
-        }
-      }}
-    >
-      <Virtuoso
-        key={channelId}
-        ref={virtuosoRef}
-        scrollerRef={setMessageScroller}
-        data={flattenedItems}
-        computeItemKey={getVirtuosoMessageKey}
-        itemSize={measureMessageItem}
-        skipAnimationFrameInResizeObserver
-        className="w-full h-full"
-        style={{ overflowAnchor: "none", scrollBehavior: "auto" }}
-        firstItemIndex={virtuosoFirstItemIndex}
-        initialTopMostItemIndex={flattenedItems.length > 0 ? flattenedItems.length - 1 : 0}
-        startReached={handleStartReached}
-        alignToBottom={true}
-        increaseViewportBy={{ top: 300, bottom: 150 }}
-        followOutput={false}
-        scrollIntoViewOnChange={followNewMessages}
-        atBottomThreshold={AT_BOTTOM_THRESHOLD}
-        atBottomStateChange={(atBottom) => {
-          if (isInitialMountRef.current) return;
-          isAtBottomRef.current = atBottom;
-          setShowScrollBtn(!atBottom);
-        }}
-        context={{ isLoadingMessages }}
-        components={LIST_COMPONENTS}
-        itemContent={(index, item) => {
-          if (item.isDateSeparator) {
-            return (
-              <div
-                className="animate-fade-in chat-layout-grid"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  paddingTop: 12,
-                  paddingBottom: 4,
-                  gap: 12,
-                }}
-              >
+      <div
+        className="flex-1 overflow-hidden relative"
+        role="log"
+        aria-label="Message list"
+        aria-live="polite"
+        style={{ minHeight: 0 }}
+        onWheelCapture={handleUserIntent}
+        onTouchMoveCapture={handleUserIntent}
+        onKeyDownCapture={handleUserIntent}
+      >
+        <Virtuoso
+          key={channelId}
+          ref={virtuosoRef}
+          scrollerRef={setScroller}
+          data={flattenedItems}
+          computeItemKey={getVirtuosoMessageKey}
+          itemSize={measureMessageItem}
+          skipAnimationFrameInResizeObserver
+          className="w-full h-full"
+          style={{ overflowAnchor: "auto", scrollBehavior: "auto" }}
+          firstItemIndex={virtuosoFirstItemIndex}
+          initialTopMostItemIndex={flattenedItems.length > 0 ? { index: flattenedItems.length - 1, align: "end" } : undefined}
+          startReached={handleStartReached}
+          alignToBottom={true}
+          increaseViewportBy={{ top: 300, bottom: 150 }}
+          followOutput={followOutput}
+          atBottomThreshold={AT_BOTTOM_THRESHOLD}
+          atBottomStateChange={handleAtBottomStateChange}
+          context={{ isLoadingMessages }}
+          components={LIST_COMPONENTS}
+          itemContent={(index, item) => {
+            if (item.isDateSeparator) {
+              return (
                 <div
+                  data-message-id={item._id}
+                  data-separator="true"
+                  className="animate-fade-in chat-layout-grid"
                   style={{
-                    flex: 1,
-                    height: 1,
-                    background: "var(--border-secondary)",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--text-muted)",
-                    padding: "2px 10px",
-                    background: "var(--bg-secondary)",
-                    borderRadius: "var(--radius-full)",
-                    border: "1px solid var(--border-secondary)",
-                    whiteSpace: "nowrap",
+                    display: "flex",
+                    alignItems: "center",
+                    paddingTop: 12,
+                    paddingBottom: 4,
+                    gap: 12,
                   }}
                 >
-                  {item.date}
-                </span>
-                <div
-                  style={{
-                    flex: 1,
-                    height: 1,
-                    background: "var(--border-secondary)",
-                  }}
-                />
-              </div>
-            );
-          }
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "var(--border-secondary)",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "var(--text-muted)",
+                      padding: "2px 10px",
+                      background: "var(--bg-secondary)",
+                      borderRadius: "var(--radius-full)",
+                      border: "1px solid var(--border-secondary)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {item.date}
+                  </span>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "var(--border-secondary)",
+                    }}
+                  />
+                </div>
+              );
+            }
 
-          if (isActivityMessage(item)) {
-            return (
-              <div className="chat-layout-grid" style={{ paddingTop: 2, paddingBottom: 2 }}>
-                <AutoActivityMessage message={item} />
-              </div>
-            );
-          }
-
-          if (item.isUnreadSeparator) {
-            return (
-              <div
-                className="animate-fade-in chat-layout-grid"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  paddingTop: 8,
-                  paddingBottom: 4,
-                  gap: 12,
-                }}
-              >
+            if (isActivityMessage(item)) {
+              return (
                 <div
+                  data-message-id={item._id}
+                  className="chat-layout-grid"
+                  style={{ paddingTop: 2, paddingBottom: 2 }}
+                >
+                  <AutoActivityMessage message={item} />
+                </div>
+              );
+            }
+
+            if (item.isUnreadSeparator) {
+              return (
+                <div
+                  data-message-id={item._id}
+                  data-separator="true"
+                  className="animate-fade-in chat-layout-grid"
                   style={{
-                    flex: 1,
-                    height: 1,
-                    background: "var(--status-error)",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "var(--status-error)",
-                    whiteSpace: "nowrap",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
+                    display: "flex",
+                    alignItems: "center",
+                    paddingTop: 8,
+                    paddingBottom: 4,
+                    gap: 12,
                   }}
                 >
-                  New
-                </span>
-                <div
-                  style={{
-                    flex: 1,
-                    height: 1,
-                    background: "var(--status-error)",
-                  }}
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "var(--status-error)",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "var(--status-error)",
+                      whiteSpace: "nowrap",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    New
+                  </span>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "var(--status-error)",
+                    }}
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <div data-message-id={item._id}>
+                <MessageItem
+                  message={item}
+                  isHighlighted={item._id === highlightMessageId}
+                  compact={item.isCompact}
+                  isLastInGroup={item.isLastInGroup}
+                  onOpenThread={onOpenThread}
+                  onOpenProfile={onOpenProfile}
+                  onOpenFilePreview={onOpenFilePreview}
+                  isDMChannel={isDMChannel}
+                  onSaveMessage={onSaveMessage}
+                  onForwardMessage={(msg, opts) => handleForwardSelected(msg, opts)}
+                  isSelecting={isSelecting}
+                  isSelected={selectedMessageIds.has(item._id)}
+                  onSelectMessage={toggleSelectMessage}
                 />
               </div>
             );
-          }
-
-          return (
-            <MessageItem
-              message={item}
-              isHighlighted={item._id === highlightMessageId}
-              compact={item.isCompact}
-              isLastInGroup={item.isLastInGroup}
-              onOpenThread={onOpenThread}
-              onOpenProfile={onOpenProfile}
-              onOpenFilePreview={onOpenFilePreview}
-              isDMChannel={isDMChannel}
-              onSaveMessage={onSaveMessage}
-              onForwardMessage={(msg, opts) => handleForwardSelected(msg, opts)}
-              isSelecting={isSelecting}
-              isSelected={selectedMessageIds.has(item._id)}
-              onSelectMessage={toggleSelectMessage}
-            />
-          );
-        }}
-      />
-
-      {/* Multi-selection toolbar */}
-      {isSelecting && selectedMessageIds.size > 0 && (
-        <div
-          style={{
-            position: "absolute", bottom: 56, left: "50%", transform: "translateX(-50%)",
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "8px 16px", borderRadius: 12,
-            background: "var(--bg-secondary, #1e1f24)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-            zIndex: 20, whiteSpace: "nowrap",
           }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-white)" }}>
-            {selectedMessageIds.size} selected
-          </span>
-          <button
-            onClick={() => handleForwardSelected(null)}
+        />
+
+        {/* Multi-selection toolbar */}
+        {isSelecting && selectedMessageIds.size > 0 && (
+          <div
             style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "5px 12px", borderRadius: 8, border: "none",
-              background: "var(--accent-primary, #5865f2)", color: "#fff",
-              fontSize: 12, fontWeight: 600, cursor: "pointer",
+              position: "absolute", bottom: 56, left: "50%", transform: "translateX(-50%)",
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 16px", borderRadius: 12,
+              background: "var(--bg-secondary, #1e1f24)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+              zIndex: 20, whiteSpace: "nowrap",
             }}
           >
-            <Forward size={13} /> Forward
-          </button>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-white)" }}>
+              {selectedMessageIds.size} selected
+            </span>
+            <button
+              onClick={() => handleForwardSelected(null)}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "5px 12px", borderRadius: 8, border: "none",
+                background: "var(--accent-primary, #5865f2)", color: "#fff",
+                fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              <Forward size={13} /> Forward
+            </button>
+            <button
+              onClick={clearSelection}
+              style={{
+                padding: "5px 12px", borderRadius: 8, border: "none",
+                background: "rgba(255,255,255,0.08)", color: "var(--text-primary)",
+                fontSize: 12, fontWeight: 500, cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* ── Scroll-to-bottom FAB ─────────────────────────────────────── */}
+        {showScrollBtn && !editingMessageId && (
           <button
-            onClick={clearSelection}
+            aria-label="Scroll to latest message"
+            title="Jump to latest"
+            onClick={() => scrollToLatest("smooth")}
             style={{
-              padding: "5px 12px", borderRadius: 8, border: "none",
-              background: "rgba(255,255,255,0.08)", color: "var(--text-primary)",
-              fontSize: 12, fontWeight: 500, cursor: "pointer",
+              position: "absolute",
+              bottom: 16,
+              right: 20,
+              width: 34,
+              height: 34,
+              borderRadius: "50%",
+              background: "var(--bg-elevated, var(--bg-secondary))",
+              border: "1px solid var(--border-primary)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              color: "var(--text-secondary)",
+              zIndex: 10,
             }}
           >
-            Cancel
+            <ChevronDown size={18} />
           </button>
-        </div>
-      )}
-
-      {/* ── Scroll-to-bottom FAB ─────────────────────────────────────── */}
-      {showScrollBtn && !editingMessageId && (
-        <button
-          aria-label="Scroll to latest message"
-          title="Jump to latest"
-          onClick={() => scrollToLatest("smooth")}
-          style={{
-            position: "absolute",
-            bottom: 16,
-            right: 20,
-            width: 34,
-            height: 34,
-            borderRadius: "50%",
-            background: "var(--bg-elevated, var(--bg-secondary))",
-            border: "1px solid var(--border-primary)",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            color: "var(--text-secondary)",
-            zIndex: 10,
-          }}
-        >
-          <ChevronDown size={18} />
-        </button>
-      )}
-    </div>
+        )}
+      </div>
 
       {/* Forward Message Modal */}
       {forwardTarget && (
@@ -827,7 +664,6 @@ export default function MessageList({
           attachmentFileIds={forwardTarget.attachmentFileIds || null}
           onClose={() => { setForwardTarget(null); clearSelection(); }}
           onForwardComplete={(destinationId) => {
-            // Single destination: navigate to that conversation
             const channels = useChannelStore.getState().channels;
             const destChannel = channels.find(c => c._id === destinationId);
             const path = destChannel?.type === 'dm'

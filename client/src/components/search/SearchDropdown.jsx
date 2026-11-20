@@ -32,9 +32,9 @@ import SearchResultItem from './SearchResultItem'
 const GLOBAL_SECTIONS = [
   { key: 'topMatches', title: 'Top Matches' },
   { key: 'users', title: 'People' },
-  { key: 'messages', title: 'Messages' },
   { key: 'channels', title: 'Channels' },
   { key: 'dms', title: 'Projects' },
+  { key: 'messages', title: 'Messages' },
   { key: 'files', title: 'Files' },
   { key: 'links', title: 'Links' },
   { key: 'pages', title: 'Pages' },

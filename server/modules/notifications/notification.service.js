@@ -1,5 +1,5 @@
 import Notification from './Notification.model.js';
-import { emitNotificationToUser } from '../../sockets/socketManager.js';
+import { emitNotificationToUser, emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
 import userRepository from '../users/user.repository.js';

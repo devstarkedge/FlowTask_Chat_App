@@ -237,6 +237,45 @@ export const useChatStore = create((set, get) => ({
         [messageId]: pending || [],
       },
     })),
+  addMessageReadReceipt: (messageId, userId, readAt = new Date().toISOString()) => {
+    if (!messageId || !userId) return;
+    const messageKey = String(messageId);
+    const userKey = String(userId?._id || userId);
+    set((state) => {
+      const existingMessage = state.messagesById?.[messageKey]
+        || Object.values(state.messagesByChannel || {}).flat().find((message) => String(message?._id) === messageKey);
+      const existingReceipts = [
+        ...(Array.isArray(existingMessage?.readBy) ? existingMessage.readBy : []),
+        ...(Array.isArray(state.readReceipts?.[messageKey]) ? state.readReceipts[messageKey] : []),
+      ];
+      const uniqueReceipts = new Map();
+      for (const receipt of existingReceipts) {
+        const receiptUserId = receipt?.userId?._id || receipt?.userId;
+        if (receiptUserId) uniqueReceipts.set(String(receiptUserId), receipt);
+      }
+      if (uniqueReceipts.has(userKey)) return state;
+
+      const readBy = [...uniqueReceipts.values(), { userId, readAt }];
+      const updatedMessage = existingMessage ? { ...existingMessage, readBy } : null;
+      const messagesById = state.messagesById?.[messageKey]
+        ? { ...state.messagesById, [messageKey]: updatedMessage }
+        : state.messagesById;
+      const messagesByChannel = { ...state.messagesByChannel };
+      for (const [channelId, messages] of Object.entries(state.messagesByChannel || {})) {
+        const messageIndex = messages.findIndex((message) => String(message?._id) === messageKey);
+        if (messageIndex < 0) continue;
+        messagesByChannel[channelId] = [...messages];
+        messagesByChannel[channelId][messageIndex] = updatedMessage;
+        break;
+      }
+
+      return {
+        messagesById,
+        messagesByChannel,
+        readReceipts: { ...state.readReceipts, [messageKey]: readBy },
+      };
+    });
+  },
 
 
   highlightMessageId: null,
@@ -654,7 +693,7 @@ export const useChatStore = create((set, get) => ({
       // Avoid duplicates by _id
       if (existing.some((m) => m._id === normalized._id)) return state;
       // Semantic dedup for activity messages: skip if an identical activity
-      // (same eventType + taskId) already arrived within the last 60 seconds.
+      // (same eventType + taskId + values) already arrived within the last 60 seconds.
       // This guards against duplicate socket events caused by any future
       // regression in dual-dispatch on the FlowTask side.
       if (normalized.activityMeta?.eventType && normalized.activityMeta?.taskId) {
@@ -663,6 +702,8 @@ export const useChatStore = create((set, get) => ({
           (m) =>
             m.activityMeta?.eventType === normalized.activityMeta.eventType &&
             String(m.activityMeta?.taskId) === String(normalized.activityMeta.taskId) &&
+            m.activityMeta?.oldValue === normalized.activityMeta.oldValue &&
+            m.activityMeta?.newValue === normalized.activityMeta.newValue &&
             new Date(m.createdAt).getTime() >= sixtySecsAgo,
         );
         if (isDupe) return state;

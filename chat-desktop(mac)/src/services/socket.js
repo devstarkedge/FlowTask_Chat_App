@@ -21,6 +21,7 @@ import logger from '../utils/logger'
 import { handleChannelRemoved } from './channelEvents'
 import { handleUserProfileUpdated } from './userProfileEvents'
 import { useUserProfileStore } from '../stores/userProfileStore'
+import { messageTimeline } from '../../../shared/projectActivity.js'
 import { notificationService } from '../notifications'
 import { badgeService } from './badgeService'
 
@@ -68,6 +69,7 @@ const SOCKET_EVENTS = {
   MESSAGE_PINNED: 'message:pinned',
   MESSAGE_UNPINNED: 'message:unpinned',
   MESSAGE_STATUS: 'message:status',
+  MESSAGE_READ: 'message:read',
 
   // Reactions
   REACTION_ADD: 'reaction:add',
@@ -383,11 +385,17 @@ export function connectSocket() {
     }
 
     // ── Instant read status for active viewer ────────────────────────────
-    // If the recipient is currently viewing that exact channel, emit read
-    // immediately at the socket event level.
+    // FlowTask project activities are marked read by ChatPanel only while the
+    // Activity timeline is visible, so a Messages view does not clear them.
     if (channelId && authorId && String(authorId) !== String(currentUserId)) {
       const activeChannelId = useChannelStore.getState().activeChannelId
-      if (activeChannelId === channelId && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      const channel = useChannelStore.getState().channels.find((item) => String(item._id) === channelId)
+      const isProjectActivity = messageTimeline(
+        channel,
+        message,
+        message.workspaceId || useWorkspaceStore.getState().activeWorkspaceId,
+      ) === 'activity'
+      if (!isProjectActivity && activeChannelId === channelId && typeof document !== 'undefined' && document.visibilityState === 'visible') {
         socket.emit('message:read', { messageId: message._id, channelId })
         const channels = useChannelStore.getState().channels
         const channel = channels.find((c) => c._id === channelId)
@@ -443,6 +451,12 @@ export function connectSocket() {
         lastReplyAt,
         threadParticipants: participants || [],
       })
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.MESSAGE_READ, ({ messageId, userId, readAt }) => {
+    if (messageId && userId) {
+      useChatStore.getState().addMessageReadReceipt(messageId, userId, readAt)
     }
   })
 
@@ -793,6 +807,7 @@ export function connectSocket() {
   // ─── Notification Events ────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.NOTIFICATION, ({ notification }) => {
     if (!notification) return
+    if (useNotificationStore.getState().preferences?.global?.enabled === false) return
 
     // Suppress notification if user is actively viewing the channel, EXCEPT for critical system notifications
     const activeChannelId = useChannelStore.getState().activeChannelId
@@ -825,9 +840,7 @@ export function connectSocket() {
     useChatStore.getState().addNotification(notification)
 
     const activeWsId = useWorkspaceStore.getState().activeWorkspaceId
-    if (notification.desktopPushEnabled !== false) {
-      notificationService.processEvent(notification.type || 'notification', notification, { workspaceId: activeWsId })
-    }
+    notificationService.processEvent(notification.type || 'notification', notification, { workspaceId: activeWsId })
   })
 
   // ─── Multi-Device Notification Sync ──────────────────────────────────

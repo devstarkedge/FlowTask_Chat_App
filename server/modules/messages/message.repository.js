@@ -55,15 +55,21 @@ class MessageRepository {
    * @param {number} [windowMs=30000] - look-back window in milliseconds
    * @returns {Promise<boolean>} true if a duplicate exists
    */
-  async findRecentActivityDuplicate(channelId, eventType, taskId, windowMs = 30000) {
+  async findRecentActivityDuplicate(channelId, eventType, taskId, optionsOrWindow = 30000) {
+    const windowMs = typeof optionsOrWindow === 'number' ? optionsOrWindow : (optionsOrWindow?.windowMs ?? 30000);
+    const oldValue = typeof optionsOrWindow === 'object' ? optionsOrWindow?.oldValue : undefined;
+    const newValue = typeof optionsOrWindow === 'object' ? optionsOrWindow?.newValue : undefined;
     const since = new Date(Date.now() - windowMs);
-    const exists = await Message.exists({
+    const filter = {
       channelId,
       'activityMeta.eventType': eventType,
       'activityMeta.taskId': taskId,
       createdAt: { $gte: since },
       isDeleted: { $ne: true },
-    });
+    };
+    if (oldValue !== undefined) filter['activityMeta.oldValue'] = oldValue;
+    if (newValue !== undefined) filter['activityMeta.newValue'] = newValue;
+    const exists = await Message.exists(filter);
     return !!exists;
   }
 

@@ -35,7 +35,6 @@ class NotificationConfig {
    * @returns {boolean}
    */
   isEnabled(type) {
-    if (!this.config.desktopNotificationsEnabled) return false
     if (!type) return true
     return this.config.enabledEventTypes.has(type)
   }

@@ -262,12 +262,22 @@ const NORMALIZERS = {
 
   [FLOWTASK_EVENTS.TASK_STATUS_CHANGED]: (p) => ({
     ...p,
-    card: p.card || taskToCard(p.task),
-    boardId: p.boardId || p.task?.boardId || p.project?.id,
+    card: p.card || taskToCard(p.task) || ((p.taskId || p.cardId)
+      ? { _id: p.taskId || p.cardId, id: p.taskId || p.cardId, title: p.taskTitle || p.title }
+      : undefined),
+    boardId: p.boardId || p.task?.boardId || p.project?.id || p.projectId,
+    project: p.project || (p.projectId || p.projectName
+      ? { id: p.projectId, name: p.projectName }
+      : undefined),
     departmentId: p.departmentId || p.project?.departmentId || p.project?.department,
     oldStatus: p.oldStatus,
     newStatus: p.newStatus,
-    userId: p.userId || actorToUserId(p.actor),
+    fromList: p.fromList || p.oldList,
+    toList: p.toList || p.newList,
+    oldList: p.oldList || p.fromList,
+    newList: p.newList || p.toList,
+    userId: p.userId || actorToUserId(p.actor) || p.changedBy || p.actorId,
+    userName: p.userName || p.changedByName || p.actor?.name,
   }),
 
   [FLOWTASK_EVENTS.TASK_DUE_DATE_CHANGED]: (p) => ({

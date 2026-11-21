@@ -33,6 +33,7 @@ export default function ChatHeader({
   onTogglePins,
   activeTab = "messages",
   showProjectActivity = false,
+  unreadActivityCount = 0,
   onTabChange,
   // Multi-tab canvas props
   openCanvasTabs = [],
@@ -503,6 +504,7 @@ export default function ChatHeader({
           {HEADER_TABS.map(tab => <span key={tab.id} className="slim-tab" style={{ flexShrink: 0 }}>
             <tab.icon size={13} className="slim-tab__icon shrink-0" />
             <span className="slim-tab__label">{tab.isAdd ? '' : tab.label}</span>
+            {tab.id === "activity" && unreadActivityCount > 0 && <ActivityCountBadge count={unreadActivityCount} />}
           </span>)}
         </div>
       </div>
@@ -511,7 +513,7 @@ export default function ChatHeader({
           {narrowTabs ? (
             // Keep conversation navigation fixed while canvas tabs scroll.
             <>
-              {baseTabs.map(tab => <SlimTab key={tab.id} tab={tab} compact={compactTabs} isActive={activeTab === tab.id} onClick={() => onTabChange?.(tab.id)} />)}
+              {baseTabs.map(tab => <SlimTab key={tab.id} tab={tab} unreadCount={tab.id === "activity" ? unreadActivityCount : 0} compact={compactTabs} isActive={activeTab === tab.id} onClick={() => onTabChange?.(tab.id)} />)}
               <div aria-label="Canvas tabs" style={{ display: "flex", gap: 2, minWidth: 0, maxWidth: "100%", overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
                 {HEADER_TABS.filter(tab => tab.isCanvas && tab.isDynamic).map(tab => <div key={tab.id} style={{ flex: '0 0 auto', maxWidth: 220, minWidth: 0 }}>
                 <SlimTab
@@ -545,7 +547,8 @@ export default function ChatHeader({
                 return (
                   <SlimTab
                     key={tab.id}
-                    tab={tab}
+                    tab={tab}  
+                    unreadCount={tab.id === "activity" ? unreadActivityCount : 0}
                     isActive={activeTab === tab.id}
                     onClick={() => handleCanvasTabClick(tab)}
                     onContextMenu={handleCanvasTabRightClick(tabCanvasId)}
@@ -637,6 +640,7 @@ export default function ChatHeader({
                 <SlimTab
                   key={tab.id}
                   tab={tab}
+                  unreadCount={tab.id === "activity" ? unreadActivityCount : 0}
                   isActive={activeTab === tab.id}
                   onClick={() => onTabChange?.(tab.id)}
                 />
@@ -672,6 +676,7 @@ export default function ChatHeader({
 /* ── SlimTab ─────────────────────────────────────────────────────────────── */
 function SlimTab({
   tab,
+  unreadCount = 0,
   compact = false,
   isActive,
   onClick,
@@ -730,7 +735,7 @@ function SlimTab({
 
   return (
     <button
-      aria-label={tab.label}
+      aria-label={unreadCount > 0 ? `${tab.label}, ${unreadCount} unread activities` : tab.label}
       onClick={onClick}
       onContextMenu={onContextMenu}
       style={{ minWidth: 0, maxWidth: '100%', flexShrink: 1 }}
@@ -739,7 +744,31 @@ function SlimTab({
     >
       <Icon size={13} className="slim-tab__icon shrink-0" />
       {!compact && <span className="slim-tab__label" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>}
+      {unreadCount > 0 && <ActivityCountBadge count={unreadCount} />}
     </button>
+  );
+}
+
+function ActivityCountBadge({ count }) {
+  const displayCount = count > 99 ? "99+" : count;
+  return (
+    <span
+      className="shrink-0 rounded-full text-white font-bold"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minWidth: 16,
+        height: 16,
+        padding: "0 4px",
+        background: "var(--accent-red, #ef4444)",
+        fontSize: 10,
+        lineHeight: 1,
+      }}
+      aria-label={`${count} unread activities`}
+    >
+      {displayCount}
+    </span>
   );
 }
 

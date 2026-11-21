@@ -163,24 +163,6 @@ if (typeof document !== "undefined" && !document.getElementById(STYLE_ID)) {
     }
     .inline-editor-attachment-actions .inline-editor-attachment-control { width: 100%; }
     .inline-editor-attachment-control:hover { border-color: var(--accent-primary, #1264a3); background: var(--bg-tertiary, #3b414a); }
-    .inline-editor-add-image {
-      display: inline-flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      width: 170px;
-      min-height: 150px;
-      padding: 12px;
-      border: 1px dashed var(--border-secondary, rgba(255,255,255,0.2));
-      border-radius: 7px;
-      background: transparent;
-      color: var(--text-secondary, #aaa);
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .inline-editor-add-image:hover { border-color: var(--accent-primary, #1264a3); color: var(--text-primary, #eee); }
-    .inline-editor-add-image:disabled { opacity: 0.55; cursor: wait; }
     .inline-editor-uploading { flex-basis: 100%; color: var(--text-muted, #888); font-size: 12px; }
     .inline-editor-file-box {
       display: inline-flex;
@@ -576,9 +558,6 @@ function InlineEditor({ initialHtml, initialText, channelId, attachments: initia
                 </div>
               );
             })}
-            <button type="button" className="inline-editor-add-image" onClick={() => openPicker()} disabled={isUploading}>
-              <ImagePlus size={20} /> <span>Add image</span>
-            </button>
             <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={handleFileInput} />
             <span className="inline-editor-uploading">Paste with Ctrl+V · Drag thumbnails to reorder</span>
             {isUploading && <span className="inline-editor-uploading">Uploading…</span>}

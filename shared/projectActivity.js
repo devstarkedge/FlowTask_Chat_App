@@ -3,6 +3,7 @@
 const projectChannelTypes = new Set(['project', 'private', 'public']);
 const automatedTypes = new Set(['activity', 'system', 'bot', 'task_update']);
 const projectEntities = new Set(['board', 'card', 'comment', 'subtask', 'nano']);
+const assignmentEvents = new Set(['TASK_ASSIGNED', 'TASK_UNASSIGNED', 'SUBTASK_ASSIGNED', 'NANO_ASSIGNED']);
 const id = value => String(value?._id || value || '');
 const isObjectId = value => /^[a-f\d]{24}$/i.test(id(value));
 
@@ -35,6 +36,10 @@ export function messageTimeline(channel, message, workspaceId) {
   if ((activity?.projectId && id(activity.projectId) !== projectId) ||
       (ref?.entityType === 'board' && id(ref.entityId) !== projectId) ||
       (activity?.channelId && id(activity.channelId) !== id(channel))) return 'messages';
+
+  // Assignment notices belong in the conversation timeline; other FlowTask
+  // updates, including card moves between lists, remain in Activity.
+  if (assignmentEvents.has(activity?.eventType)) return 'messages';
 
   const hasProjectReference = ref && projectEntities.has(ref.entityType) && isObjectId(ref.entityId);
   const hasProjectEvent = activity?.eventType && id(activity.projectId) === projectId;

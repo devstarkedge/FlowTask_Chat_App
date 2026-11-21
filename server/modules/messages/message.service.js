@@ -532,6 +532,7 @@ class MessageService {
         channelId,
         activityMeta.eventType,
         String(activityMeta.taskId),
+        { oldValue: activityMeta.oldValue, newValue: activityMeta.newValue },
       );
       if (isDuplicate) {
         logger.warn('sendSystemMessage: duplicate activity suppressed', {

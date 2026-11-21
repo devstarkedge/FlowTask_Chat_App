@@ -20,6 +20,15 @@ import { canvasAPI } from "../../services/api";
 
 const EMPTY_LIST = [];
 
+function hasReadReceipt(message, receiptsByMessage, userId) {
+  if (!message?._id || !userId) return false;
+  const receipts = [
+    ...(Array.isArray(message.readBy) ? message.readBy : []),
+    ...(Array.isArray(receiptsByMessage?.[String(message._id)]) ? receiptsByMessage[String(message._id)] : []),
+  ];
+  return receipts.some((receipt) => String(receipt?.userId?._id || receipt?.userId) === String(userId));
+}
+
 export default function ChatPanel({
   channelId,
   workspaceId,
@@ -48,6 +57,8 @@ export default function ChatPanel({
   const messagesById = useChatStore((s) => s.messagesById);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
   const scrollToMessageId = useChatStore((s) => s.scrollToMessageId);
+  const readReceipts = useChatStore((s) => s.readReceipts);
+  const addMessageReadReceipt = useChatStore((s) => s.addMessageReadReceipt);
 
   // Canvas store: split selectors for the same reasons as above.
   const activeCanvas = useCanvasStore((s) => s.activeCanvas);
@@ -86,6 +97,13 @@ export default function ChatPanel({
     }
     return { activityMessages: tabs.activity, conversationMessages: tabs.messages };
   }, [channel, messages, showProjectActivity, workspaceId]);
+  const unreadActivityCount = useMemo(() => {
+    if (!showProjectActivity || !currentUserId) return 0;
+    return activityMessages.reduce(
+      (count, message) => count + (hasReadReceipt(message, readReceipts, currentUserId) ? 0 : 1),
+      0,
+    );
+  }, [activityMessages, currentUserId, readReceipts, showProjectActivity]);
 
   const isEditingInChannel = useMemo(() => {
     return editingMessageId && messages.some(m => m._id === editingMessageId);
@@ -158,9 +176,8 @@ export default function ChatPanel({
 
   const visibleTab = targetTimeline || (activeTab === "activity" && !showProjectActivity ? "messages" : activeTab);
 
-  // Per-message receipts are separate from channel unread state. Persist a
-  // receipt when a message is actually loaded in the active Messages view so
-  // Message Info can list the people who have read it.
+  // Per-message receipts are separate from channel unread state. Persist
+  // receipts for the timeline the user is actually viewing.
   const readReceiptTrackerRef = useRef({ channelId: null, messageIds: new Set() });
   useEffect(() => {
     if (readReceiptTrackerRef.current.channelId !== channelId) {
@@ -170,21 +187,29 @@ export default function ChatPanel({
       !channelId ||
       !currentUserId ||
       String(activeChannelId) !== String(channelId) ||
-      visibleTab !== "messages" ||
+      !["messages", "activity"].includes(visibleTab) ||
       (typeof document !== "undefined" && document.visibilityState === "hidden")
     ) return;
 
     const socket = getSocket();
     if (!socket) return;
     const markedIds = readReceiptTrackerRef.current.messageIds;
-    for (const message of conversationMessages) {
+    const visibleMessages = visibleTab === "activity" ? activityMessages : conversationMessages;
+    for (const message of visibleMessages) {
       const messageId = message?._id;
       const authorId = message?.authorId?._id || message?.authorId;
       if (!messageId || !authorId || String(authorId) === String(currentUserId) || markedIds.has(String(messageId))) continue;
+      if (visibleTab === "activity" && hasReadReceipt(message, readReceipts, currentUserId)) {
+        markedIds.add(String(messageId));
+        continue;
+      }
       socket.emit("message:read", { messageId, channelId });
       markedIds.add(String(messageId));
+      if (visibleTab === "activity") {
+        addMessageReadReceipt(messageId, currentUserId);
+      }
     }
-  }, [channelId, activeChannelId, visibleTab, conversationMessages, currentUserId]);
+  }, [channelId, activeChannelId, visibleTab, activityMessages, conversationMessages, currentUserId, readReceipts, addMessageReadReceipt]);
 
   // Note: persistence now handled by server-side channel tabs; client keeps local view in store
 
@@ -325,6 +350,7 @@ export default function ChatPanel({
         onOpenMobileSidebar={onOpenMobileSidebar}
         activeTab={visibleTab}
         showProjectActivity={showProjectActivity}
+        unreadActivityCount={unreadActivityCount}
         onTabChange={handleTabChange}
         // Canvas-specific props
         showCanvasPopup={showCanvasPopup}

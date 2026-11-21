@@ -55,7 +55,15 @@ const ChatMessageItem = memo(({
 
   if(item.huddleMeta)return <HuddleMessage message={item} colors={colors}/>;
 
-  if (item.reportingMeta) return <AttendanceReportMessage message={item} colors={colors}/>;
+  if (item.reportingMeta) {
+    const showDateSep = !prevItem || !isSameDay(item.createdAt, prevItem.createdAt);
+    return (
+      <RNView>
+        {showDateSep && renderDateSeparator(item.createdAt)}
+        <AttendanceReportMessage message={item} colors={colors}/>
+      </RNView>
+    );
+  }
 
   if (isSystem) {
     return (

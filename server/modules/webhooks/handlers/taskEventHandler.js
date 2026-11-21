@@ -715,26 +715,33 @@ export function registerTaskEventHandlers() {
     const user = userId ? await userRepository.findByFlowTaskId(userId, wsId) : null;
     const userName = resolveActorName(payload, user);
 
-    const from = oldStatus || 'unknown';
-    const to = newStatus || 'unknown';
+    const cardId = card._id || card.id;
+    const cardTitle = card.title || card.taskTitle || 'Task';
+    const fromList = payload.fromList || payload.oldList;
+    const toList = payload.toList || payload.newList;
+    const from = fromList || oldStatus || 'unknown';
+    const to = toList || newStatus || 'unknown';
 
     const activityMeta = {
       eventType: 'TASK_STATUS_CHANGED',
-      taskId: card._id || null,
+      taskId: cardId || null,
       projectId: normalizedBoardId,
       departmentId: departmentId || null,
       projectName: project?.name || null,
-      taskTitle: card.title || null,
+      taskTitle: cardTitle,
       actorName: userName,
       actorFlowTaskUserId: activityActorId(payload),
       oldValue: from,
       newValue: to,
+      ...(fromList && { fromList }),
+      ...(toList && { toList }),
     };
 
+    const statusOrListLabel = fromList && toList && (!oldStatus || oldStatus === newStatus) ? 'list' : 'status';
     await messageService.sendSystemMessage(
       channel._id,
-      `${userName} changed **${card.title}** status: ${from} → ${to}`,
-      { entityType: 'card', entityId: card._id },
+      `${userName} changed **${cardTitle}** ${statusOrListLabel}: ${from} → ${to}`,
+      { entityType: 'card', entityId: cardId },
       wsId,
       [],
       activityMeta,

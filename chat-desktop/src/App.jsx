@@ -9,6 +9,8 @@ import { useWorkspaceStore, getSavedWorkspaceId } from './stores/workspaceStore'
 import { usePresenceTracker } from './hooks/usePresenceTracker'
 import { isDesktopApp, updateWindowControlsContrast } from './services/desktopService'
 import OfflineBanner from './components/shared/OfflineBanner'
+import { useDesktopNavigation } from './hooks/useDesktopNavigation'
+import { safeDesktopRoute } from './utils/desktopNavigation'
 
 // Eager load workspace layout (most common route)
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
@@ -91,16 +93,26 @@ function AuthenticatedDefaultRedirect() {
 function SmartAuthRedirect() {
   const [searchParams] = useSearchParams()
   const redirectTo = searchParams.get('redirect')
+  const safeRedirect = window.electronAPI?.windowsNavigation ? safeDesktopRoute(redirectTo) : redirectTo
   const pendingInvite = sessionStorage.getItem('pendingInviteToken')
 
   if (pendingInvite) {
     sessionStorage.removeItem('pendingInviteToken')
     return <Navigate to={`/invite/${pendingInvite}`} replace />
   }
-  if (redirectTo) {
-    return <Navigate to={redirectTo} replace />
+  if (safeRedirect && (!window.electronAPI?.windowsNavigation || !safeRedirect.startsWith('/login'))) {
+    return <Navigate to={safeRedirect} replace />
   }
   return <AuthenticatedDefaultRedirect />
+}
+
+function DesktopLoginRoute() {
+  const { user } = useAuthStore()
+  const [params] = useSearchParams()
+  // Always verify a signed SSO handoff, even if this app already has a session.
+  // Its server response supplies the mapped Chat workspace; query IDs do not.
+  if (params.get('source') === 'flowtask' && params.get('token')) return <LoginPage key={params.get('token')} />
+  return user ? <SmartAuthRedirect /> : <LoginPage />
 }
 
 function useTitlebarContrast() {
@@ -160,6 +172,7 @@ function App() {
 
   usePresenceTracker()
   useTitlebarContrast()
+  useDesktopNavigation(isInitialized)
 
   useEffect(() => {
     const state = useAuthStore.getState()
@@ -200,7 +213,7 @@ function App() {
         <Route path="/public/canvas/:token" element={<PublicCanvas />} />
         <Route path="/" element={!user ? <LandingPage /> : <AuthenticatedDefaultRedirect />} />
         <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/login" element={!user ? <LoginPage /> : <AuthenticatedDefaultRedirect />} />
+        <Route path="/login" element={window.electronAPI?.windowsNavigation ? <DesktopLoginRoute /> : !user ? <LoginPage /> : <AuthenticatedDefaultRedirect />} />
         <Route path="/register" element={!user ? <RegisterPage /> : <AuthenticatedDefaultRedirect />} />
         <Route path="/forgot-password" element={!user ? <ForgotPasswordPage /> : <SmartAuthRedirect />} />
         <Route path="/reset-password/:token" element={!user ? <ResetPasswordPage /> : <SmartAuthRedirect />} />

@@ -7,9 +7,9 @@ import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   isDesktopApp,
-  setWindowControlsColor,
 } from "../services/desktopService";
 import "./custom-css/loginPage.css";
+import { safeDesktopRoute, ssoDesktopDestination } from '../utils/desktopNavigation';
 
 /* ─────────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -108,7 +108,9 @@ export default function LoginPage() {
     useAuthStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const redirectTo = searchParams.get("redirect");
+  const rawRedirect = searchParams.get("redirect");
+  const safeRedirect = window.electronAPI?.windowsNavigation ? safeDesktopRoute(rawRedirect) : rawRedirect;
+  const redirectTo = window.electronAPI?.windowsNavigation && safeRedirect?.startsWith('/login') ? null : safeRedirect;
   const ssoToken = searchParams.get("token");
   const ssoSource = searchParams.get("source");
   const [email, setEmail] = useState("");
@@ -133,7 +135,8 @@ export default function LoginPage() {
       .then((data) => {
         const workspaceId = data?.data?.workspaceId;
         navigate(
-          workspaceId ? `/workspace/${workspaceId}` : "/select-workspace",
+          window.electronAPI?.windowsNavigation ? ssoDesktopDestination(workspaceId, redirectTo)
+            : workspaceId ? `/workspace/${workspaceId}` : "/select-workspace",
           { replace: true },
         );
       })
@@ -142,7 +145,7 @@ export default function LoginPage() {
         // showing the native login form instead of a permanent spinner.
         setSsoLoading(false);
       });
-  }, [ssoSource, ssoToken, loginFlowTask, navigate]);
+  }, [ssoSource, ssoToken, loginFlowTask, navigate, redirectTo]);
 
   /* ── Post-login redirect (handles ALL login paths: native email/password, already-authenticated) ── */
   useEffect(() => {

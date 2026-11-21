@@ -23,7 +23,12 @@ function installWindowSecurity(window, options) {
     (sender === contents ? trusted(details.requestingUrl) : children.has(sender) && !sender.isDestroyed() && sender.getURL()==='about:blank' && (details.requestingUrl==='about:blank' || trusted(details.requestingUrl)));
   contents.session.setPermissionCheckHandler((sender, permission, _origin, details) => permitted(sender, permission, details));
   contents.session.setPermissionRequestHandler((sender, permission, callback, details) => callback(permitted(sender, permission, details)));
-  contents.on('will-navigate', (event, url) => { if (!trusted(url)) event.preventDefault(); });
+  contents.on('will-navigate', (event, url) => {
+    if (!trusted(url)) {
+      event.preventDefault();
+      if (/^https?:\/\//i.test(url)) options.onExternal?.(url);
+    }
+  });
   // Embedded web pages must not inherit this app's capture privileges.
   contents.on('will-attach-webview', event => event.preventDefault());
   return {allowWindow(child){const renderer=child.webContents;children.add(renderer);child.once('closed',()=>children.delete(renderer));}};

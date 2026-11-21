@@ -1,7 +1,8 @@
 const { installHuddleInvitations } = require('./huddleInvitations.cjs');
 const { createIncomingCallWindow } = require('./incomingCallWindow.cjs');
 const { installDisplayCapture } = require('./sourcePicker.cjs');
-const { installWindowSecurity } = require('./security.cjs');
+const { installWindowSecurity, createTrustedAppUrl } = require('./security.cjs');
+const { openPeer, installNavigation } = require('./app-navigation.cjs');
 const { installHuddlePopout } = require('./huddlePopout.cjs');
 const { initUpdater } = require('./updater.cjs');
 const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen, clipboard, nativeImage, safeStorage } = require('electron');
@@ -73,7 +74,25 @@ if (!gotTheLock) {
   // Do not initialize windows, sessions or the tray in the duplicate process.
   return;
 } else {
-  app.on('second-instance', showMainWindow);
+  if (process.platform !== 'win32') app.on('second-instance', showMainWindow);
+}
+let peerOrigin = '';
+if (process.platform === 'win32') {
+  if (isDev) peerOrigin = process.env.TASKCHAT_FLOWTASK_URL || '';
+  else {
+    try { peerOrigin = JSON.parse(fs.readFileSync(path.join(__dirname, '../dist/desktop-navigation.json'), 'utf8')).peerOrigin || ''; }
+    catch { console.warn('[TaskChat] Desktop navigation configuration is unavailable; using web links.'); }
+  }
+}
+installNavigation({ app, ipcMain, getWindow: () => mainWindow, ownScheme: 'taskchat-desktop',
+  register: app.isPackaged && !isUnpackedPreview && !callingTestProfile,
+  trusted: createTrustedAppUrl({ isDev, indexPath: path.join(__dirname, '../dist/index.html') }),
+});
+async function openExternal(url) {
+  try {
+    if (await openPeer(url, { app, shell, peerOrigin, peerScheme: 'flowtask-desktop' })) return;
+    await shell.openExternal(url);
+  } catch { console.warn('[TaskChat] Could not open external navigation.'); }
 }
 function createWindow() {
   const initialSymbolColor = (nativeTheme && nativeTheme.shouldUseDarkColors) ? '#ffffff' : '#0f172a';
@@ -126,8 +145,9 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  const security=installWindowSecurity(mainWindow, {isDev, indexPath:path.join(__dirname, '../dist/index.html')});
-  installHuddlePopout(mainWindow,{BrowserWindow,ipcMain,capture,security,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),openExternal:url=>shell.openExternal(url)});
+  const security=installWindowSecurity(mainWindow, {isDev, indexPath:path.join(__dirname, '../dist/index.html'),
+    onExternal: process.platform === 'win32' ? openExternal : undefined });
+  installHuddlePopout(mainWindow,{BrowserWindow,ipcMain,capture,security,icon:path.join(__dirname,isDev?'../public/logo.png':'../dist/logo.png'),openExternal});
   initUpdater(mainWindow);
 
   // Notify renderer when window maximize state changes

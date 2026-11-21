@@ -13,6 +13,7 @@
     "build:linux": "vite build && electron-builder --linux",
     "build": "vite build",
     "test": "vitest run",
+    "test:desktop": "node --test electron/tests/*.test.cjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -118,6 +119,7 @@
       "target": "nsis"
     },
     "nsis": {
+      "include": "electron/navigation.nsh",
       "artifactName": "${productName}-Setup-${version}.${ext}",
       "runAfterFinish": true
     },

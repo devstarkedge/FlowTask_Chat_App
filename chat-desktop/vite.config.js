@@ -62,6 +62,13 @@ export default ({ mode }) => {
       react(),
       tailwindcss(),
       {
+        name: 'desktop-navigation-config',
+        generateBundle() {
+          this.emitFile({ type: 'asset', fileName: 'desktop-navigation.json',
+            source: JSON.stringify({ peerOrigin: env.VITE_FLOWTASK_URL || '' }) });
+        },
+      },
+      {
         name: 'html-csp-transform',
         transformIndexHtml(html) {
           // NOTE: Electron apps load via file:// protocol.

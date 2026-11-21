@@ -5,6 +5,8 @@ import HuddleSummary from '../huddles/HuddleSummary'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { buildRedirectFromMeta } from '../../utils/flowTaskUrl'
 import { useLiveProfileData } from '../../hooks/useLiveProfileData'
+import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { withFlowTaskWorkspace } from '../../utils/desktopNavigation'
 
 /**
  * EVENT_CONFIG — maps event types to display labels and accent colors.
@@ -111,6 +113,8 @@ export default function AutoActivityMessage({ message }) {
   const navigate = useNavigate()
   const location = useLocation()
   message = useLiveProfileData(message)
+  const sourceWorkspace = useWorkspaceStore(state => state.workspaces.find(workspace =>
+    String(workspace._id) === String(message.workspaceId?._id || message.workspaceId || state.activeWorkspaceId)))
   // The chat list routes system messages here before MessageItem.
   if (message.huddleMeta) return <HuddleSummary message={message} />
   if (message.reportingMeta && !['attendance.checked_in', 'attendance.checked_out', 'leave.daily_report'].includes(message.reportingMeta.eventType)) return null
@@ -123,7 +127,9 @@ export default function AutoActivityMessage({ message }) {
   if (meta.targetUserId?.name) meta.newValue = meta.targetUserId.name
   const eventType = meta.eventType || ''
   const config = EVENT_CONFIG[eventType] || { label: 'activity', accent: 'var(--accent-primary)' }
-  const redirect = buildRedirectFromMeta(meta)
+  const originalRedirect = buildRedirectFromMeta(meta)
+  const redirect = window.electronAPI?.windowsNavigation
+    ? withFlowTaskWorkspace(originalRedirect, sourceWorkspace?.flowTaskWorkspaceId) : originalRedirect
 
   const handleOpenCanvas = (canvasId) => {
     if (!canvasId) return

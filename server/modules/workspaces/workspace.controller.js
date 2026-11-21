@@ -2,6 +2,7 @@ import workspaceService from './workspace.service.js';
 import workspaceRepository from './workspace.repository.js';
 import asyncHandler from '../../middleware/asyncHandler.js';
 import { ForbiddenError } from '../../middleware/errorHandler.js';
+import WorkspaceMapping from '../flowtask/WorkspaceMapping.model.js';
 
 /**
  * Workspace Controller — HTTP handlers for workspace management.
@@ -93,6 +94,15 @@ export const getMyWorkspaces = asyncHandler(async (req, res) => {
         joinedAt: m.joinedAt,
       };
     });
+  if (req.query.includeFlowTaskMapping === 'true' && workspaces.length) {
+    // Windows navigation needs the external workspace ID, not ChatApp's ID.
+    // One indexed batch limited to this caller's active memberships; no N+1.
+    const mappings = await WorkspaceMapping.find({
+      chatWorkspaceId: { $in: workspaces.map(workspace => workspace._id) }, status: 'active',
+    }).select('chatWorkspaceId flowTaskWorkspaceId').lean();
+    const byWorkspace = new Map(mappings.map(mapping => [String(mapping.chatWorkspaceId), mapping.flowTaskWorkspaceId]));
+    for (const workspace of workspaces) workspace.flowTaskWorkspaceId = byWorkspace.get(String(workspace._id)) || null;
+  }
   res.json({ success: true, data: { workspaces } });
 });
 

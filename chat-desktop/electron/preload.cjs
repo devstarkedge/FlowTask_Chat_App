@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  windowsNavigation: process.platform === 'win32' ? {
+    takePending: () => ipcRenderer.invoke('app-navigation:take'),
+    onPending: callback => {
+      const listener = () => callback();
+      ipcRenderer.on('app-navigation:pending', listener);
+      return () => ipcRenderer.removeListener('app-navigation:pending', listener);
+    },
+  } : undefined,
   readAuthSession: () => ipcRenderer.invoke('auth-session:read'),
   writeAuthSession: value => ipcRenderer.invoke('auth-session:write', value),
   clearAuthSession: () => ipcRenderer.invoke('auth-session:clear'),

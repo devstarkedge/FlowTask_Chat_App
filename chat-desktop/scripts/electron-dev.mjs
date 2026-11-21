@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'vite';
+import { createServer, loadEnv } from 'vite';
 import { DEV_URL, isWorkspaceServer } from './dev-server.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -40,6 +40,7 @@ try {
   if (!(await isWorkspaceServer(root))) throw new Error('TaskChat dev server is not ready.');
   if (!stopping) {
     const env = { ...process.env };
+    env.TASKCHAT_FLOWTASK_URL = loadEnv('development', root, 'VITE_FLOWTASK_URL').VITE_FLOWTASK_URL || '';
     delete env.ELECTRON_RUN_AS_NODE;
     console.info(`[TaskChat] Dev server ready at ${DEV_URL}. Starting Electron.`);
     electron = spawn(require('electron'), ['.'], { cwd: root, env, stdio: 'inherit' });

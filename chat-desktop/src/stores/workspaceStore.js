@@ -80,7 +80,8 @@ export const useWorkspaceStore = create(
       fetchWorkspaces: async (skipAutoSelect = false) => {
         set({ isLoading: true, error: null })
         try {
-          const { data } = await api.get('/workspaces/mine')
+          const { data } = await api.get('/workspaces/mine', window.electronAPI?.windowsNavigation
+            ? { params: { includeFlowTaskMapping: true } } : undefined)
           const workspaces = data.data?.workspaces || []
 
           let userId = null

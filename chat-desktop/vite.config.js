@@ -3,12 +3,20 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createRequire } from 'node:module';
 import { taskChatDevServer } from "./scripts/dev-server.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const { navigationOrigin } = createRequire(import.meta.url)('./electron/app-navigation.cjs');
 
 export default ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const flowTaskUrl = env.VITE_FLOWTASK_URL || '';
+  if (mode === 'production' && !flowTaskUrl) throw new Error('Set VITE_FLOWTASK_URL in chat-desktop/.env or the build environment before building.');
+  const peerOrigin = navigationOrigin(flowTaskUrl || 'http://localhost:5173', mode === 'production');
+  const flowTaskAliases = (env.VITE_FLOWTASK_URL_ALIASES || '').split(',').map(value => value.trim()).filter(Boolean)
+    .map(value => navigationOrigin(value, mode === 'production'));
+  const peerOrigins = [...new Set([peerOrigin, ...flowTaskAliases])];
 
   // ─── Production Build-Time Env Validation ─────────────────────────────────
   // These variables are baked into the JS bundle at build time by Vite.
@@ -55,6 +63,7 @@ export default ({ mode }) => {
   }
 
   return defineConfig({
+    define: { 'import.meta.env.VITE_FLOWTASK_URL': JSON.stringify(peerOrigin) },
     base: mode === "production" ? "./" : "/",
 
     plugins: [
@@ -65,7 +74,7 @@ export default ({ mode }) => {
         name: 'desktop-navigation-config',
         generateBundle() {
           this.emitFile({ type: 'asset', fileName: 'desktop-navigation.json',
-            source: JSON.stringify({ peerOrigin: env.VITE_FLOWTASK_URL || '' }) });
+            source: JSON.stringify({ peerOrigin, peerOrigins }) });
         },
       },
       {

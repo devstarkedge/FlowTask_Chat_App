@@ -80,7 +80,10 @@ let peerOrigin = '';
 if (process.platform === 'win32') {
   if (isDev) peerOrigin = process.env.TASKCHAT_FLOWTASK_URL || '';
   else {
-    try { peerOrigin = JSON.parse(fs.readFileSync(path.join(__dirname, '../dist/desktop-navigation.json'), 'utf8')).peerOrigin || ''; }
+    try {
+      const navigationConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../dist/desktop-navigation.json'), 'utf8'));
+      peerOrigin = navigationConfig.peerOrigins || navigationConfig.peerOrigin || '';
+    }
     catch { console.warn('[TaskChat] Desktop navigation configuration is unavailable; using web links.'); }
   }
 }

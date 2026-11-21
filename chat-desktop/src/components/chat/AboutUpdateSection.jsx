@@ -38,7 +38,7 @@ function formatUpdateError(error) {
     .slice(0, 240);
 }
 
-export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
+export default function AboutUpdateSection({ onNavigateAway }) {
   const isDesktop = isDesktopApp();
   const {
     status,
@@ -46,12 +46,10 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
     progress,
     error,
     currentVersion,
-    remindedLater,
     initUpdater,
     checkForUpdate,
     downloadUpdate,
     restartApp,
-    remindLater,
   } = useUpdateStore();
 
   const [lastChecked, setLastChecked] = useState(null);
@@ -71,11 +69,6 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
 
   const handleRestart = () => {
     restartApp();
-  };
-
-  const handleRemindLater = () => {
-    remindLater();
-    if (onRemindLater) onRemindLater();
   };
 
   return (
@@ -316,22 +309,6 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                     <Download size={15} />
                     Download Update
                   </button>
-                  {/* <button
-                    type="button"
-                    onClick={handleRemindLater}
-                    style={{
-                      padding: '8px 14px',
-                      borderRadius: '8px',
-                      background: 'transparent',
-                      color: 'var(--text-muted)',
-                      border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.12))',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Remind Me Later
-                  </button> */}
                 </div>
               </div>
             )}
@@ -412,7 +389,7 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                       Update v{info?.version} Ready to Install
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      Restart now to complete the update, or choose Remind Me Later to finish automatically on your next launch.
+                      Restart now to complete the update.
                     </div>
                   </div>
                 </div>
@@ -438,22 +415,6 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                     <RotateCcw size={15} />
                     Restart Now
                   </button>
-                  {/* <button
-                    type="button"
-                    onClick={handleRemindLater}
-                    style={{
-                      padding: '8px 14px',
-                      borderRadius: '8px',
-                      background: 'transparent',
-                      color: 'var(--text-muted)',
-                      border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.12))',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Remind Me Later
-                  </button> */}
                 </div>
               </div>
             )}

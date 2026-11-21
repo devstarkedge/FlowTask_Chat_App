@@ -15,8 +15,6 @@ export const useUpdateStore = create((set, get) => ({
   progress: null, // { percent, bytesPerSecond, transferred, total }
   error: null,
   currentVersion: getAppVersion(),
-  remindedLater: false,
-  dismissedVersion: null,
   isInitialized: false,
 
   initUpdater: () => {
@@ -64,7 +62,7 @@ export const useUpdateStore = create((set, get) => ({
   },
 
   downloadUpdate: async () => {
-    set({ status: 'downloading', error: null, remindedLater: false });
+    set({ status: 'downloading', error: null });
     try {
       const res = await startDownloadUpdate();
       if (res && res.error) {
@@ -78,13 +76,5 @@ export const useUpdateStore = create((set, get) => ({
 
   restartApp: () => {
     quitAndInstallUpdate();
-  },
-
-  remindLater: () => {
-    const { info } = get();
-    set({
-      remindedLater: true,
-      dismissedVersion: info?.version || null,
-    });
   },
 }));

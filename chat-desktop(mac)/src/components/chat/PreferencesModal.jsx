@@ -342,7 +342,7 @@ export default function PreferencesModal({ onClose, defaultTab = 'appearance' })
         <div className="appearance-modal__body">
           {activeTab === 'about' ? (
             <div style={{ padding: '24px', width: '100%', overflowY: 'auto' }}>
-              <AboutUpdateSection onRemindLater={onClose} />
+              <AboutUpdateSection />
             </div>
           ) : (
             <>

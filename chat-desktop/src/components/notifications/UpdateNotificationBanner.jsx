@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Sparkles, Download, RotateCcw, X, Info } from 'lucide-react';
+import { Sparkles, Download, RotateCcw } from 'lucide-react';
 import { useUpdateStore } from '../../stores/updateStore';
 import { isDesktopApp } from '../../services/desktopService';
 
@@ -9,11 +9,9 @@ export default function UpdateNotificationBanner({ onOpenAbout }) {
     status,
     info,
     progress,
-    remindedLater,
     initUpdater,
     downloadUpdate,
     restartApp,
-    remindLater,
   } = useUpdateStore();
 
   useEffect(() => {
@@ -24,7 +22,6 @@ export default function UpdateNotificationBanner({ onOpenAbout }) {
   // Fulfills requirement: "Do not display update notifications when no newer published release exists."
   if (!isDesktop) return null;
   if (status !== 'available' && status !== 'downloading' && status !== 'downloaded') return null;
-  if (remindedLater && status !== 'downloaded') return null;
 
   return (
     <div
@@ -80,22 +77,6 @@ export default function UpdateNotificationBanner({ onOpenAbout }) {
             </div>
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={remindLater}
-          title="Remind Me Later"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-muted, #94a3b8)',
-            cursor: 'pointer',
-            padding: '4px',
-            borderRadius: '4px',
-          }}
-        >
-          <X size={16} />
-        </button>
       </div>
 
       {/* Progress Bar if downloading */}
@@ -191,22 +172,6 @@ export default function UpdateNotificationBanner({ onOpenAbout }) {
             Details
           </button>
         )}
-
-        {/* <button
-          type="button"
-          onClick={remindLater}
-          style={{
-            padding: '7px 12px',
-            borderRadius: '7px',
-            background: 'transparent',
-            color: 'var(--text-muted, #94a3b8)',
-            border: 'none',
-            fontSize: '12px',
-            cursor: 'pointer',
-          }}
-        >
-          Remind Later
-        </button> */}
       </div>
     </div>
   );

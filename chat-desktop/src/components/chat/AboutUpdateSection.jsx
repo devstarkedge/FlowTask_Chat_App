@@ -316,7 +316,7 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                     <Download size={15} />
                     Download Update
                   </button>
-                  <button
+                  {/* <button
                     type="button"
                     onClick={handleRemindLater}
                     style={{
@@ -331,7 +331,7 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                     }}
                   >
                     Remind Me Later
-                  </button>
+                  </button> */}
                 </div>
               </div>
             )}

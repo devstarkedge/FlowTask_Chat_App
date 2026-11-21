@@ -192,7 +192,7 @@ export default function UpdateNotificationBanner({ onOpenAbout }) {
           </button>
         )}
 
-        <button
+        {/* <button
           type="button"
           onClick={remindLater}
           style={{
@@ -206,7 +206,7 @@ export default function UpdateNotificationBanner({ onOpenAbout }) {
           }}
         >
           Remind Later
-        </button>
+        </button> */}
       </div>
     </div>
   );

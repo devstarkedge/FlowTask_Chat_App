@@ -438,7 +438,7 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                     <RotateCcw size={15} />
                     Restart Now
                   </button>
-                  <button
+                  {/* <button
                     type="button"
                     onClick={handleRemindLater}
                     style={{
@@ -453,7 +453,7 @@ export default function AboutUpdateSection({ onRemindLater, onNavigateAway }) {
                     }}
                   >
                     Remind Me Later
-                  </button>
+                  </button> */}
                 </div>
               </div>
             )}

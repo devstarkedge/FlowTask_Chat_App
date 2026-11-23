@@ -44,8 +44,10 @@ export const useThreadDetails = ({ rootMessageId, channelId, highlightedMessageI
   const [replyingTo, setReplyingTo] = useState(null);
 
   useEffect(() => {
-    // React query fetches automatically via enabled: !!rootMessageId
-  }, [rootMessageId]);
+    setEditingMessage(null);
+    setReplyingTo(null);
+    setReplyText('');
+  }, [rootMessageId, channelId]);
 
   useEffect(() => {
     if (highlightedMessageId && replies.length > 0) {

@@ -27,7 +27,7 @@ import { Plus, Clock, X, FileText, CaseSensitive, Loader2, AtSign, Send, Play, F
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import logger from "../utils/logger";
 import { buildReplyToSnapshot, resolveMessageSenderName, getMessagePlainText } from "../utils/replyUtils";
-import { useKeyboardState } from "react-native-keyboard-controller";
+import useKeyboardBottomInset from "../hooks/useKeyboardBottomInset";
 import { pickMediaAndFiles } from '../utils/mediaUtils';
 import { consumeComposerAttachments, appendComposerAttachments, hasFileMarkers } from "../utils/composerAttachments";
 import FileClipboardService from '../services/FileClipboardService';
@@ -196,9 +196,7 @@ const MessageComposer = React.memo(function MessageComposer({
   const typingTimeoutRef = useRef(null);
   const latestContentRef = useRef({ html: '', text: '' });
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardState((state) => state.height);
-  // Subtract keyboard height on both platforms so the composer doesn't grow taller than available space.
-  const imeInset = keyboardHeight || 0;
+  const { keyboardHeight, keyboardVisible } = useKeyboardBottomInset();
   const audioRecorder = useAudioRecorder(channelId);
   const videoRecorder = useVideoRecorder(channelId);
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -208,12 +206,44 @@ const MessageComposer = React.memo(function MessageComposer({
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const isTablet = screenWidth >= 600;
 
-  // Auto-expand only — grow with content up to a large share of visible screen
+  // Controlled, production-level editor sizing system
+  const minEditorHeight = verticalScale(40);
+  const baseMaxEditorHeight = isTablet ? verticalScale(180) : verticalScale(130);
+
+  // Measure or estimate all non-editor composer chrome to avoid pushing layout off screen
+  const hasBanner = Boolean(replyingTo || editingMessage);
+  const bannerEstimatedHeight = hasBanner ? moderateScale(48) : 0;
+  const toolbarEstimatedHeight = showToolbar ? moderateScale(44) : 0;
+  const filesEstimatedHeight = pendingFiles.length > 0 ? moderateScale(76) : 0;
+  const composerBottomRowHeight = moderateScale(48);
+  const containerPaddings = moderateScale(24);
+  const nonEditorOverhead =
+    bannerEstimatedHeight +
+    toolbarEstimatedHeight +
+    filesEstimatedHeight +
+    composerBottomRowHeight +
+    containerPaddings;
+
+  // Calculate available screen space above keyboard
+  const headerHeight = Platform.OS === 'ios' ? 44 : 56;
+  const effectiveImeInset =
+    keyboardHeight > 0
+      ? keyboardHeight
+      : (keyboardVisible ? verticalScale(280) : 0);
   const visibleHeight =
-    screenHeight - insets.top - (Platform.OS === 'ios' ? 44 : 56) - imeInset;
+    screenHeight - (insets.top || 0) - headerHeight - effectiveImeInset;
+
+  // Reserve a guaranteed minimum space for the chat message list so chat history isn't crushed
+  const minChatSpace = Math.max(verticalScale(90), Math.floor(screenHeight * 0.15));
+  const maxAllowedEditorHeight = Math.max(
+    minEditorHeight,
+    visibleHeight - nonEditorOverhead - minChatSpace,
+  );
+
+  // Final capped maximum editor height: never exceeds base ergonomic max, and never overflows screen
   const maxComposerHeight = Math.max(
-    verticalScale(120),
-    Math.floor(visibleHeight * (isTablet ? 0.55 : 0.5)),
+    minEditorHeight,
+    Math.min(baseMaxEditorHeight, maxAllowedEditorHeight),
   );
 
   const activeWorkspaceId =
@@ -1042,7 +1072,7 @@ const MessageComposer = React.memo(function MessageComposer({
             </ScrollView>
           )}
 
-          <View key="editor-wrapper" style={{ minHeight: verticalScale(40), width: '100%', paddingHorizontal: moderateScale(12), paddingTop: moderateScale(12) }}>
+          <View key="editor-wrapper" style={{ minHeight: minEditorHeight, maxHeight: maxComposerHeight, width: '100%', paddingHorizontal: moderateScale(12), paddingTop: moderateScale(12) }}>
             <ChatRichTextEditor
               ref={editorRef}
               placeholder="Jot something down"
@@ -1056,7 +1086,7 @@ const MessageComposer = React.memo(function MessageComposer({
                 setMentionVisible(true);
               }}
               onMentionClose={() => setMentionVisible(false)}
-              minHeight={verticalScale(40)}
+              minHeight={minEditorHeight}
               maxHeight={maxComposerHeight}
             />
           </View>

@@ -14,24 +14,39 @@ const CHAT_CSS = `
     background-color: transparent !important;
     background: transparent !important;
   }
-  html, body {
-    height: auto !important;
+  html {
+    height: 100% !important;
     min-height: 0 !important;
-    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
   }
   body {
+    min-height: 100% !important;
+    margin: 0 !important;
     padding: 2px 4px !important;
-    padding-bottom: 4px !important;
+    padding-bottom: 6px !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
   }
   #editor {
     min-height: 0 !important;
+    height: auto !important;
   }
   .ProseMirror {
     min-height: 22px !important;
     font-size: 16px !important;
     line-height: 1.4 !important;
     padding: 6px 4px !important;
-    padding-bottom: 4px !important;
+    padding-bottom: 6px !important;
+    box-sizing: border-box !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    outline: none !important;
   }
   .ProseMirror p {
     margin-top: 0 !important;
@@ -54,6 +69,17 @@ const CHAT_CSS = `
     border-radius: 4px;
     padding: 0 3px;
     font-weight: 600;
+  }
+  /* Slim, elegant scrollbar for internal scrolling */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(140, 140, 140, 0.35);
+    border-radius: 4px;
   }
 `;
 
@@ -114,9 +140,42 @@ export function buildChatEditorHtml({
         .catch(function(error) { sendToRN('pasteError', { message: error.message }); });
     }, true);
   </script>`;
+  // Helper to ensure the active cursor / typing position stays visible inside the scrollable editor
+  const scrollHelper = `<script>
+    (function() {
+      function scrollActiveCursorIntoView() {
+        if (!window.CHAT_COMPOSER) return;
+        try {
+          var sel = window.getSelection();
+          if (!sel || !sel.rangeCount) return;
+          var range = sel.getRangeAt(0);
+          var rect = range.getBoundingClientRect();
+          if (rect && (rect.height > 0 || rect.width > 0)) {
+            var vh = window.innerHeight || document.documentElement.clientHeight;
+            if (rect.bottom > vh - 6) {
+              window.scrollBy({ top: rect.bottom - vh + 12, behavior: 'smooth' });
+            } else if (rect.top < 6) {
+              window.scrollBy({ top: rect.top - 8, behavior: 'smooth' });
+            }
+          }
+        } catch(e) {}
+      }
+
+      document.addEventListener('selectionchange', function() {
+        requestAnimationFrame(scrollActiveCursorIntoView);
+      });
+      document.addEventListener('keyup', function() {
+        requestAnimationFrame(scrollActiveCursorIntoView);
+      });
+      document.addEventListener('input', function() {
+        requestAnimationFrame(scrollActiveCursorIntoView);
+      });
+    })();
+  </script>`;
+
   // The bundled editor also contains literal </body> strings inside JavaScript.
   // Insert only at the document's closing body, never inside the bundle.
-  html = html.replace(/<\/body>(\s*<\/html>\s*)$/i, (_, tail) => `${pasteBridge}</body>${tail}`);
+  html = html.replace(/<\/body>(\s*<\/html>\s*)$/i, (_, tail) => `${pasteBridge}${scrollHelper}</body>${tail}`);
 
   return html;
 }

@@ -633,6 +633,11 @@ const ChatScreen = ({ route, navigation }) => {
   useEffect(() => {
     if (!channelId) return;
 
+    // Reset any in-progress edit or reply when switching conversations
+    setEditingMessage(null);
+    setReplyingTo(null);
+    setText("");
+
     const { conversationPresence } = require('../../services/conversationPresence');
     const setActiveChannel = useChannelStore.getState().setActiveChannel;
     const currentChannels = queryClient.getQueryData(queryKeys.channels(useWorkspaceStore.getState().activeWorkspaceId)) || [];

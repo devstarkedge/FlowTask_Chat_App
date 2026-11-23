@@ -41,9 +41,17 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
   const webRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(minHeight);
+  const contentHeightRef = useRef(minHeight);
   const pendingContentRef = useRef(null);
   const lastHtmlRef = useRef('');
   const lastTextRef = useRef('');
+
+  // Dynamically re-clamp height when minHeight or maxHeight changes (e.g. keyboard open/close, orientation/screen resize)
+  useEffect(() => {
+    const raw = contentHeightRef.current || minHeight;
+    const clamped = Math.min(maxHeight, Math.max(minHeight, Math.round(raw)));
+    setHeight((prev) => (Math.abs(prev - clamped) < 1 ? prev : clamped));
+  }, [minHeight, maxHeight]);
 
   const isDark =
     colors?.background === '#000000' ||
@@ -163,9 +171,10 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
           onSelectionChange?.(data);
           break;
         case 'height': {
-          const h = Math.round(data.height || minHeight);
-          const clamped = Math.min(maxHeight, Math.max(minHeight, h));
-          setHeight((prev) => (Math.abs(prev - clamped) < 2 ? prev : clamped));
+          const raw = Math.round(data.height || minHeight);
+          contentHeightRef.current = raw;
+          const clamped = Math.min(maxHeight, Math.max(minHeight, raw));
+          setHeight((prev) => (Math.abs(prev - clamped) < 1 ? prev : clamped));
           break;
         }
         case 'mentionQuery':
@@ -200,8 +209,11 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
     ],
   );
 
+  const isScrollable =
+    (contentHeightRef.current > height + 2) || (height >= maxHeight - 1);
+
   return (
-    <View style={[styles.wrap, { height }, style]}>
+    <View style={[styles.wrap, { height, minHeight, maxHeight }, style]}>
       <WebView
         ref={webRef}
         source={htmlSource}
@@ -212,8 +224,8 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
         javaScriptEnabled
         domStorageEnabled
         allowFileAccess
-        scrollEnabled={height >= maxHeight - 2}
-        showsVerticalScrollIndicator={false}
+        scrollEnabled={isScrollable}
+        showsVerticalScrollIndicator={isScrollable}
         showsHorizontalScrollIndicator={false}
         bounces={false}
         hideKeyboardAccessoryView
@@ -222,8 +234,8 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
         setSupportMultipleWindows={false}
         opaque={false}
         androidLayerType={Platform.OS === 'android' ? 'hardware' : undefined}
-        // Allow tapping into contenteditable on Android
-        nestedScrollEnabled
+        nestedScrollEnabled={true}
+        overScrollMode="never"
       />
     </View>
   );

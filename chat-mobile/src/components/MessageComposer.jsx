@@ -285,8 +285,7 @@ const MessageComposer = React.memo(function MessageComposer({
         text: editingMessage.content || stripHtml(html),
       };
       onChangeText(html);
-      editorRef.current?.setContent(html, latestContentRef.current.text);
-      setTimeout(() => { editorRef.current?.focus?.(); }, 60);
+      editorRef.current?.setContent(html, latestContentRef.current.text, { focus: 'start' });
       let existingFiles = [];
       const fileReferences = editingMessage.fileReferences?.filter((r) => r.fileId) || [];
       const rawFiles = editingMessage.files || editingMessage.attachments || [];

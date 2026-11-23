@@ -43,6 +43,7 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
   const [height, setHeight] = useState(minHeight);
   const contentHeightRef = useRef(minHeight);
   const pendingContentRef = useRef(null);
+  const pendingFocusRef = useRef(null);
   const lastHtmlRef = useRef('');
   const lastTextRef = useRef('');
 
@@ -85,19 +86,28 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
   useImperativeHandle(
     ref,
     () => ({
-      focus: () => sendCommand('focus'),
+      focus: (position = 'start') => {
+        if (ready) sendCommand('focus', position);
+        else pendingFocusRef.current = position;
+      },
       blur: () => sendCommand('blur'),
       clear: () => {
         lastHtmlRef.current = '';
         lastTextRef.current = '';
         sendCommand('clear');
       },
-      setContent: (html, plainText) => {
+      setContent: (html, plainText, options = {}) => {
         const next = html || '';
         lastHtmlRef.current = next;
         lastTextRef.current = plainText ?? next.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ');
-        if (ready) sendCommand('setContent', next);
-        else pendingContentRef.current = next;
+        const payload = options && typeof options === 'object' && options.focus
+          ? { html: next, focus: options.focus }
+          : next;
+        if (ready) sendCommand('setContent', payload);
+        else {
+          pendingContentRef.current = payload;
+          if (options?.focus) pendingFocusRef.current = options.focus;
+        }
       },
       getContent: () => ({
         html: lastHtmlRef.current,
@@ -134,6 +144,10 @@ const ChatRichTextEditor = forwardRef(function ChatRichTextEditor(
       pendingContentRef.current = null;
     } else if (initialHtml) {
       sendCommand('setContent', initialHtml);
+    }
+    if (pendingFocusRef.current != null) {
+      sendCommand('focus', pendingFocusRef.current);
+      pendingFocusRef.current = null;
     }
   }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
 

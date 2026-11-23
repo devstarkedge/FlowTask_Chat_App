@@ -418,7 +418,25 @@ ${escapedBundle}
       switch(command) {
         case 'setContent':
           try {
-            editor.commands.setContent(value || '');
+            var contentVal = (typeof value === 'object' && value !== null) ? value.html : value;
+            var initialFocus = (typeof value === 'object' && value !== null) ? value.focus : null;
+            editor.commands.setContent(contentVal || '');
+            if (window.CHAT_COMPOSER) {
+              window.IS_INITIALIZING_CONTENT = true;
+              window.scrollTo(0, 0);
+              if (document.body) document.body.scrollTop = 0;
+              if (document.documentElement) document.documentElement.scrollTop = 0;
+            }
+            if (initialFocus === 'start') {
+              editor.commands.focus('start', { scrollIntoView: false });
+              if (window.CHAT_COMPOSER) {
+                window.scrollTo(0, 0);
+                if (document.body) document.body.scrollTop = 0;
+                if (document.documentElement) document.documentElement.scrollTop = 0;
+              }
+            } else if (initialFocus === 'end') {
+              editor.commands.focus('end');
+            }
             sendToRN('setContentAck', { success: true, docLength: editor.getText().length });
           } catch(err) {
             sendToRN('error', { message: 'setContent failed: ' + err.message, stack: err.stack });
@@ -447,11 +465,21 @@ ${escapedBundle}
         case 'undo':                editor.chain().focus().undo().run(); break;
         case 'redo':                editor.chain().focus().redo().run(); break;
         case 'insertImage':         editor.chain().focus().setImage({ src: value }).run(); break;
-        case 'insertMention':
-          if (insertMentionCommand && value) {
-            insertMentionCommand(value);
-            insertMentionCommand = null;
+        case 'focus':
+          var pos = value || 'end';
+          if (pos === 'start') {
+            editor.commands.focus('start', { scrollIntoView: false });
+            if (window.CHAT_COMPOSER) {
+              window.scrollTo(0, 0);
+              if (document.body) document.body.scrollTop = 0;
+              if (document.documentElement) document.documentElement.scrollTop = 0;
+            }
+          } else {
+            editor.commands.focus(pos);
           }
+          break;
+        case 'blur':
+          editor.commands.blur();
           break;
       }
     }

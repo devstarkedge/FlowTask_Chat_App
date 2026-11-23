@@ -144,7 +144,7 @@ export function buildChatEditorHtml({
   const scrollHelper = `<script>
     (function() {
       function scrollActiveCursorIntoView() {
-        if (!window.CHAT_COMPOSER) return;
+        if (!window.CHAT_COMPOSER || window.IS_INITIALIZING_CONTENT) return;
         try {
           var sel = window.getSelection();
           if (!sel || !sel.rangeCount) return;
@@ -161,15 +161,24 @@ export function buildChatEditorHtml({
         } catch(e) {}
       }
 
+      function onUserInteract() {
+        window.IS_INITIALIZING_CONTENT = false;
+      }
+
       document.addEventListener('selectionchange', function() {
         requestAnimationFrame(scrollActiveCursorIntoView);
       });
       document.addEventListener('keyup', function() {
+        onUserInteract();
         requestAnimationFrame(scrollActiveCursorIntoView);
       });
       document.addEventListener('input', function() {
+        onUserInteract();
         requestAnimationFrame(scrollActiveCursorIntoView);
       });
+      document.addEventListener('touchstart', onUserInteract, { passive: true });
+      document.addEventListener('pointerdown', onUserInteract, { passive: true });
+      document.addEventListener('mousedown', onUserInteract, { passive: true });
     })();
   </script>`;
 

@@ -22,7 +22,7 @@ function nativeStorage() {
 }
 
 const OPTIONS = {
-  keychainAccessible: SecureStore?.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  keychainAccessible: SecureStore?.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY ?? SecureStore?.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
 
 export const secureSet = async (key, value) => {
@@ -38,8 +38,13 @@ export const secureSet = async (key, value) => {
 export const secureGet = async (key) => {
   if (isNative) {
     const storage = nativeStorage();
-    await AsyncStorage.removeItem(key);
-    return storage.getItemAsync(key);
+    try {
+      const val = await storage.getItemAsync(key, OPTIONS);
+      if (val !== null && val !== undefined) return val;
+      return await storage.getItemAsync(key);
+    } catch (e) {
+      return await storage.getItemAsync(key).catch(() => null);
+    }
   }
   return AsyncStorage.getItem(key);
 };

@@ -176,7 +176,16 @@ export default function App() {
     });
     refresh();
     const subscription = AppState.addEventListener('change', state => {
-      if (state === 'active') refresh();
+      if (state === 'active') {
+        try {
+          const { isTokenExpiringSoon, refreshAccessTokenSilently } = require('./src/services/tokenRefreshScheduler');
+          const currentToken = useAuthStore.getState().accessToken;
+          if (isTokenExpiringSoon(currentToken, 90)) {
+            refreshAccessTokenSilently().catch(() => {});
+          }
+        } catch (_) {}
+        refresh();
+      }
     });
     return () => subscription.remove();
   }, [accessToken, activeWorkspaceId]);

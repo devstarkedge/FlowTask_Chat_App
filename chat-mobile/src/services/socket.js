@@ -65,6 +65,16 @@ const SOCKET_URL = ENV.SOCKET_URL;
 
 logger.info('[Socket] Active SOCKET_URL:', SOCKET_URL);
 
+export const updateSocketToken = (newToken) => {
+  if (!newToken) return;
+  if (socket) {
+    socket.auth = { ...socket.auth, token: newToken };
+    if (socket.connected) {
+      socket.emit('auth:refresh', { token: newToken });
+    }
+  }
+};
+
 export const connectSocket = async () => {
   const token = useAuthStore.getState().accessToken;
   const workspaceId = await storage.getItem('active_workspace_id');
@@ -140,16 +150,40 @@ export const connectSocket = async () => {
     }
   });
 
-  socket.on('connect_error', (error) => {
-    logger.error('[Socket] Connection error:', error.message);
+  socket.on('connect_error', async (error) => {
+    logger.error('[Socket] Connection error:', error?.message);
     isConnecting = false;
-    if (error.message && (error.message.toLowerCase().includes('token') || error.message.toLowerCase().includes('auth') || error.message.toLowerCase().includes('unauthorized'))) {
+    useChatStore.getState().setConnectionStatus('disconnected');
+
+    const msg = error?.message ? error.message.toLowerCase() : '';
+    // A socket disconnection or handshake rejection must NEVER trigger application logout!
+    // Instead, if the access token expired, attempt silent token refresh and re-authenticate.
+    if (msg.includes('token') || msg.includes('auth') || msg.includes('unauthorized')) {
+      logger.warn('[Socket] Auth error encountered on socket connection. Attempting silent token refresh without logout...');
       try {
-        const { useAuthStore } = require('../stores/authStore');
-        useAuthStore.getState().logout();
-      } catch (storeError) {
-        logger.error('[Socket] Failed to trigger store logout:', storeError);
+        const { refreshAccessTokenSilently } = require('./tokenRefreshScheduler');
+        const newToken = await refreshAccessTokenSilently();
+        if (newToken && socket) {
+          socket.auth = { ...socket.auth, token: newToken };
+          socket.connect();
+        }
+      } catch (refreshErr) {
+        logger.warn('[Socket] Silent refresh from socket connect_error deferred (preserving session):', refreshErr?.message);
       }
+    }
+  });
+
+  socket.on('auth:expired', async (data) => {
+    logger.warn('[Socket] Received auth:expired from server:', data?.message);
+    try {
+      const { refreshAccessTokenSilently } = require('./tokenRefreshScheduler');
+      const newToken = await refreshAccessTokenSilently();
+      if (newToken && socket) {
+        socket.auth = { ...socket.auth, token: newToken };
+        socket.connect();
+      }
+    } catch (err) {
+      logger.warn('[Socket] Silent refresh on auth:expired failed (preserving session):', err?.message);
     }
   });
 

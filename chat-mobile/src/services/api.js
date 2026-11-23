@@ -157,22 +157,41 @@ api.interceptors.request.use((config) => {
 // Refresh lock — prevent concurrent refresh requests (server rotates tokens)
 let refreshPromise = null;
 
-const performRefresh = async () => {
+export const performRefresh = async () => {
   const refreshToken = await secureGet('chat_refresh_token');
   if (!refreshToken) throw new Error('No refresh token');
 
-  const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
+  const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken }, { timeout: 15000 });
   const newAccessToken = data.data?.accessToken;
   const newRefreshToken = data.data?.refreshToken;
 
   if (!newAccessToken) throw new Error('No access token in refresh response');
 
-  // Update cache and storage
+  // Update memory cache immediately
   cachedToken = newAccessToken;
-  await secureSet('chat_access_token', newAccessToken);
-  if (newRefreshToken) {
-    await secureSet('chat_refresh_token', newRefreshToken);
+
+  // Update Zustand AuthStore (synchronizes memory, sets tokens, and writes to SecureStore)
+  try {
+    const { useAuthStore } = require('../stores/authStore');
+    await useAuthStore.getState().setTokens(newAccessToken, newRefreshToken);
+  } catch (_) {
+    await secureSet('chat_access_token', newAccessToken);
+    if (newRefreshToken) {
+      await secureSet('chat_refresh_token', newRefreshToken);
+    }
   }
+
+  // Update live socket authentication token
+  try {
+    const { updateSocketToken } = require('./socket');
+    updateSocketToken(newAccessToken);
+  } catch (_) {}
+
+  // Schedule next proactive refresh
+  try {
+    const { scheduleNextRefresh } = require('./tokenRefreshScheduler');
+    scheduleNextRefresh(newAccessToken);
+  } catch (_) {}
 
   return newAccessToken;
 };
@@ -242,11 +261,22 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
-    const isLoginRoute = originalRequest.url?.includes('/auth/login');
+    if (!originalRequest) return Promise.reject(error);
 
-    // If 401 and we haven't already retried, attempt token refresh (skip for login routes)
+    const isLoginRoute = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh');
+
+    // If 401 and we haven't already retried, attempt token refresh (skip for login & refresh routes)
     if (error.response?.status === 401 && !originalRequest._retry && !isLoginRoute) {
       originalRequest._retry = true;
+
+      // Check if token was ALREADY refreshed while this request was in-flight
+      const requestAuthHeader = originalRequest.headers?.Authorization || originalRequest.headers?.authorization;
+      const requestToken = typeof requestAuthHeader === 'string' ? requestAuthHeader.replace(/^Bearer\s+/, '') : null;
+      if (cachedToken && requestToken && cachedToken !== requestToken) {
+        // Token was already refreshed by another concurrent request! Simply retry with the newest token
+        originalRequest.headers.Authorization = `Bearer ${cachedToken}`;
+        return api(originalRequest);
+      }
 
       // Use shared promise so concurrent 401s share a single refresh
       if (!refreshPromise) {

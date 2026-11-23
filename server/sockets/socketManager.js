@@ -277,6 +277,13 @@ export async function initializeSocket(httpServer, corsOptions) {
     registerCanvasSocket(io, socket);
     registerHuddleSocket(io, socket);
 
+    // Support live token refresh from client
+    socket.on('auth:refresh', ({ token: refreshedToken }) => {
+      if (refreshedToken && typeof refreshedToken === 'string') {
+        socket.handshake.auth.token = refreshedToken;
+      }
+    });
+
     // Enforce max connections per user (cap at 5 tabs/devices)
     const currentUser = await userRepository.addSocketId(userId, socket.id);
     if (currentUser && currentUser.socketIds && currentUser.socketIds.length > MAX_SOCKETS_PER_USER) {
@@ -876,15 +883,16 @@ export async function initializeSocket(httpServer, corsOptions) {
         if (!token) continue;
 
         let valid = false;
+        const socketUserId = socket.data?.userId || socket.userId;
 
         // Try as Chat-issued access token first
         try {
           tokenService.verifyAccessToken(token);
           valid = true;
         } catch (err) {
-          if (err.name === 'TokenExpiredError' && socket.userId) {
-            const user = await userRepository.findById(socket.userId);
-            if (user && !user.isDeleted && !user.isBanned) {
+          if (err.name === 'TokenExpiredError' && socketUserId) {
+            const user = await userRepository.findById(socketUserId);
+            if (user && user.isActive && !user.isDeleted && !user.isBanned) {
               valid = true;
             }
           }
@@ -896,9 +904,9 @@ export async function initializeSocket(httpServer, corsOptions) {
             tokenService.verifyFlowTaskToken(token);
             valid = true;
           } catch (err) {
-            if (err.name === 'TokenExpiredError' && socket.userId) {
-              const user = await userRepository.findById(socket.userId);
-              if (user && !user.isDeleted && !user.isBanned) {
+            if (err.name === 'TokenExpiredError' && socketUserId) {
+              const user = await userRepository.findById(socketUserId);
+              if (user && user.isActive && !user.isDeleted && !user.isBanned) {
                 valid = true;
               }
             }
@@ -907,7 +915,15 @@ export async function initializeSocket(httpServer, corsOptions) {
 
         if (!valid) {
           socket.emit('auth:expired', { message: 'Token expired. Please reconnect with a fresh token.' });
-          socket.disconnect(true);
+          setTimeout(() => {
+            try {
+              const currentToken = socket.handshake?.auth?.token;
+              try {
+                if (currentToken && tokenService.verifyAccessToken(currentToken)) return;
+              } catch (_) {}
+              socket.disconnect(true);
+            } catch (_) {}
+          }, 15000);
         }
       }
     } catch (err) {

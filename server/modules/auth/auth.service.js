@@ -15,6 +15,21 @@ import { mapFlowTaskPlanToChatPlan } from '../../config/constants.js';
  * Also manages refresh token rotation, email verification, and password resets.
  */
 
+// Grace period cache for recently rotated refresh tokens to prevent race conditions
+// when concurrent mobile/desktop requests arrive at almost the exact same instant.
+const rotatedTokenGraceCache = new Map();
+const ROTATION_GRACE_WINDOW_MS = 60 * 1000; // 60 seconds grace window
+
+// Periodic cleanup of expired grace entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [hash, entry] of rotatedTokenGraceCache.entries()) {
+    if (now - entry.rotatedAt > ROTATION_GRACE_WINDOW_MS) {
+      rotatedTokenGraceCache.delete(hash);
+    }
+  }
+}, 30 * 1000).unref();
+
 class AuthService {
   // ═══════════════════════════════════════════════════════════════════════
   // NATIVE AUTH
@@ -326,9 +341,20 @@ class AuthService {
     const tokenHash = tokenService.hashToken(refreshToken);
     const storedToken = user.refreshTokens.find((t) => t.tokenHash === tokenHash);
     if (!storedToken) {
-      // Possible token reuse attack — clear all refresh tokens for safety
-      logger.warn('Refresh token reuse detected, clearing all tokens', { userId: user._id });
-      await userRepository.clearAllRefreshTokens(user._id);
+      // Check if this token was recently rotated within the grace period window
+      const graceEntry = rotatedTokenGraceCache.get(tokenHash);
+      if (graceEntry && (Date.now() - graceEntry.rotatedAt < ROTATION_GRACE_WINDOW_MS)) {
+        logger.info('Refresh token matched recent rotation grace window, returning rotated token pair', {
+          userId: user._id,
+        });
+        return {
+          accessToken: graceEntry.accessToken,
+          refreshToken: graceEntry.refreshToken,
+        };
+      }
+
+      // Token is not found in active tokens or grace cache
+      logger.warn('Refresh token is invalid or already revoked', { userId: user._id });
       throw new UnauthorizedError('Refresh token has been revoked');
     }
 
@@ -344,6 +370,13 @@ class AuthService {
       tokenHash: tokenService.hashToken(newRefreshToken),
       expiresAt: tokenService.refreshTokenExpiryDate(),
       userAgent,
+    });
+
+    // Cache the old token hash in grace cache for 60 seconds so parallel/delayed requests get the new pair
+    rotatedTokenGraceCache.set(tokenHash, {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      rotatedAt: Date.now(),
     });
 
     return { accessToken: newAccessToken, refreshToken: newRefreshToken };

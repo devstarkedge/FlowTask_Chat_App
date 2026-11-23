@@ -19,10 +19,26 @@ export const useAuthStore = create((set, get) => ({
   // Initialize store from storage
   init: async () => {
     try {
-      const accessToken = await secureGet('chat_access_token');
+      let accessToken = await secureGet('chat_access_token');
       const refreshToken = await secureGet('chat_refresh_token');
       const userJson = await storage.getItem('chat_user');
       const user = userJson ? JSON.parse(userJson) : null;
+
+      // Check if access token is expired or expiring soon on app launch
+      if (accessToken && refreshToken) {
+        try {
+          const { isTokenExpiringSoon, refreshAccessTokenSilently, scheduleNextRefresh } = require('../services/tokenRefreshScheduler');
+          if (isTokenExpiringSoon(accessToken, 60)) {
+            // Token is expired or expiring within 60s: refresh silently before initializing
+            const renewedToken = await refreshAccessTokenSilently().catch(() => null);
+            if (renewedToken) {
+              accessToken = renewedToken;
+            }
+          } else {
+            scheduleNextRefresh(accessToken);
+          }
+        } catch (_) {}
+      }
       
       // Prime the synchronous API interceptor cache
       await primeApiCache();
@@ -43,6 +59,10 @@ export const useAuthStore = create((set, get) => ({
     if (refreshToken) await secureSet('chat_refresh_token', refreshToken);
     setCachedToken(accessToken);
     set({ accessToken, refreshToken: refreshToken || get().refreshToken });
+    try {
+      const { scheduleNextRefresh } = require('../services/tokenRefreshScheduler');
+      scheduleNextRefresh(accessToken);
+    } catch (_) {}
   },
 
   loginNative: async ({ email, password }) => {
@@ -58,6 +78,10 @@ export const useAuthStore = create((set, get) => ({
       
       setCachedToken(accessToken);
       set({ accessToken, refreshToken, user, isLoading: false });
+      try {
+        const { scheduleNextRefresh } = require('../services/tokenRefreshScheduler');
+        scheduleNextRefresh(accessToken);
+      } catch (_) {}
       return data;
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'Login failed';
@@ -79,6 +103,10 @@ export const useAuthStore = create((set, get) => ({
       
       setCachedToken(accessToken);
       set({ accessToken, refreshToken, user, isLoading: false });
+      try {
+        const { scheduleNextRefresh } = require('../services/tokenRefreshScheduler');
+        scheduleNextRefresh(accessToken);
+      } catch (_) {}
       return data;
     } catch (error) {
       const msg = error.response?.data?.error?.message || 'FlowTask login failed';
@@ -102,6 +130,10 @@ export const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     console.log('[Logout] Starting complete logout cleanup...');
+    try {
+      const { stopProactiveRefresh } = require('../services/tokenRefreshScheduler');
+      stopProactiveRefresh();
+    } catch (_) {}
     // Remove the installation while its token and authenticated session still exist.
     const { unregisterPushNotifications } = await import('../services/pushNotificationService');
     await unregisterPushNotifications();

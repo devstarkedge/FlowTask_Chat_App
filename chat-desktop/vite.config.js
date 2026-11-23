@@ -109,6 +109,8 @@ export default ({ mode }) => {
     },
 
     optimizeDeps: {
+      // Keep standalone Electron test fixtures out of Vite's app entry scan.
+      entries: ["index.html"],
       include: [
         "yjs",
         "y-prosemirror",

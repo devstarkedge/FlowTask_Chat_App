@@ -52,6 +52,16 @@ const ChatMessageItem = memo(({
 }) => {
   const isMe = item.authorId?._id === user?._id || item.authorId === user?._id;
   const isSystem = item.contentType === "system" && !item.activityMeta;
+  const messageSender = item.senderSnapshot?.name ? item.senderSnapshot : item.authorId;
+  const senderName = messageSender?.name || messageSender?.displayName || '';
+  const senderAvatar = messageSender?.avatar || '';
+  const isFlowTaskBot = Boolean(
+    messageSender?.isBot || messageSender?.role === 'bot' ||
+    messageSender?.flowTaskUserId === 'SYSTEM_BOT' ||
+    /^flowtask(?:\s+bot)?$/i.test(senderName) ||
+    /(?:^|\/)bot_6819665\.png(?:[?#].*)?$/i.test(senderAvatar) ||
+    item.authorId === 'SYSTEM_BOT' || item.authorId?._id === 'SYSTEM_BOT'
+  );
 
   if(item.huddleMeta)return <HuddleMessage message={item} colors={colors}/>;
 
@@ -66,6 +76,16 @@ const ChatMessageItem = memo(({
   }
 
   if (isSystem) {
+    if (isFlowTaskBot) {
+      return (
+        <RNView style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(16), paddingVertical: verticalScale(6) }}>
+          <AppAvatar user={messageSender} size={28} showStatus={false} style={{ marginRight: scale(8) }} />
+          <RNText style={[styles.systemMessageText, { color: colors.textSecondary, flexShrink: 1 }]}>
+            {item.content}
+          </RNText>
+        </RNView>
+      );
+    }
     return (
       <RNView style={styles.systemMessageContainer} key={item._id}>
         <RNView style={[styles.systemMessageLine, { backgroundColor: colors.border }]} />
@@ -95,8 +115,6 @@ const ChatMessageItem = memo(({
   const isReplyTarget =
     highlightedMessageId != null &&
     String(highlightedMessageId) === String(item._id);
-
-  const messageSender = item.senderSnapshot?.name ? item.senderSnapshot : item.authorId;
 
   const isCompact =
     prevItem &&

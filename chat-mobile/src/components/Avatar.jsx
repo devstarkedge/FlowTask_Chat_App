@@ -6,6 +6,7 @@ import { Moon } from 'lucide-react-native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isCustomStatusValid } from '../utils/statusUtils';
 
+const FLOWTASK_BOT_AVATAR = require('../../assets/bot_6819665.png');
 
 const AVATAR_COLORS = [
   "#e91e63",
@@ -55,7 +56,21 @@ const Avatar = React.memo(
       () => data.avatar || data.avatarUrl || data.profileImage || data.profilePicture || data.image || null,
       [data.avatar, data.avatarUrl, data.profileImage, data.profilePicture, data.image]
     );
-    const handleError = useCallback(() => setFailedUrl(avatarUrl), [avatarUrl]);
+    const isFlowTaskBot = Boolean(
+      data.isBot || data.role === 'bot' || data.flowTaskUserId === 'SYSTEM_BOT' ||
+      /^flowtask(?:\s+bot)?$/i.test(data.name || data.displayName || '') ||
+      /(?:^|\/)bot_6819665\.png(?:[?#].*)?$/i.test(avatarUrl || '')
+    );
+    // The backend's bot avatar is a web-root path, which React Native cannot
+    // resolve as an image URI. Bundle that avatar with the app for native clients.
+    const useBundledBotAvatar = isFlowTaskBot && (!avatarUrl || avatarUrl.startsWith('/'));
+    const avatarSource = useBundledBotAvatar
+      ? FLOWTASK_BOT_AVATAR
+      : avatarUrl
+        ? { uri: avatarUrl }
+        : null;
+    const avatarKey = useBundledBotAvatar ? 'bundled-flowtask-bot' : avatarUrl;
+    const handleError = useCallback(() => setFailedUrl(avatarKey), [avatarKey]);
     const displayName =
       data?.name ||
       data?.displayName ||
@@ -74,9 +89,9 @@ const Avatar = React.memo(
 
     return (
       <View style={[styles.container, style]}>
-        {avatarUrl && failedUrl !== avatarUrl ? (
+        {avatarSource && failedUrl !== avatarKey ? (
           <Image
-            source={{ uri: avatarUrl }}
+            source={avatarSource}
             resizeMode="cover"
             style={[{ width: size, height: size, borderRadius: size / 2 }]}
             onError={handleError}

@@ -23,10 +23,16 @@ export default function AboutUpdateSection() {
   const colors = useThemeStore((state) => state.colors);
   const status = useUpdateStore((state) => state.status);
   const nativeAppVersion = useUpdateStore((state) => state.nativeAppVersion);
+  const runtimeVersion = useUpdateStore((state) => state.runtimeVersion);
+  const isExpoGo = useUpdateStore((state) => state.isExpoGo);
+  const updatesEnabled = useUpdateStore((state) => state.isEnabled);
+  const isEmbeddedLaunch = useUpdateStore((state) => state.isEmbeddedLaunch);
+  const channel = useUpdateStore((state) => state.channel);
   const availableUpdate = useUpdateStore((state) => state.availableUpdate);
   const downloadedUpdate = useUpdateStore((state) => state.downloadedUpdate);
   const downloadProgress = useUpdateStore((state) => state.downloadProgress);
   const error = useUpdateStore((state) => state.error);
+  const errorType = useUpdateStore((state) => state.errorType);
   const lastCheckedAt = useUpdateStore((state) => state.lastCheckedAt);
   const lastSuccessfulUpdate = useUpdateStore((state) => state.lastSuccessfulUpdate);
   const checkForUpdate = useUpdateStore((state) => state.checkForUpdate);
@@ -112,6 +118,48 @@ export default function AboutUpdateSection() {
           </TouchableOpacity>
         </View>
 
+        {/* ── Version & Update Metadata Breakdown ── */}
+        <View
+          style={[
+            styles.metaCard,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.metaRow}>
+            <Text style={[styles.metaLabel, { color: colors.textSecondary }]}>
+              App Version:
+            </Text>
+            <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
+              v{nativeAppVersion}
+            </Text>
+          </View>
+
+          <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.metaRow}>
+            <Text style={[styles.metaLabel, { color: colors.textSecondary }]}>
+              Runtime Version:
+            </Text>
+            <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
+              {isExpoGo ? 'Unavailable in Expo Go' : runtimeVersion || '1.0.0'}
+            </Text>
+          </View>
+
+          <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.metaRow}>
+            <Text style={[styles.metaLabel, { color: colors.textSecondary }]}>
+              Update Channel:
+            </Text>
+            <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
+              {channel || (isExpoGo ? 'Unavailable in Expo Go' : 'production')}
+            </Text>
+          </View>
+        </View>
+
         {/* ── Status Indicator Banners ── */}
 
         {/* Up To Date Banner */}
@@ -146,7 +194,7 @@ export default function AboutUpdateSection() {
             <AlertTriangle size={16} color={colors.error || '#ef4444'} style={styles.bannerIcon} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.bannerTextBold, { color: colors.error || '#ef4444' }]}>
-                Update check failed:
+                {errorType === 'unsupported' ? 'OTA updates unavailable:' : 'Update check failed:'}
               </Text>
               <Text style={[styles.bannerSubText, { color: colors.error || '#ef4444' }]}>
                 {error}
@@ -378,6 +426,31 @@ const styles = StyleSheet.create({
   checkBtnText: {
     fontSize: moderateScale(12),
     fontWeight: '600',
+  },
+  metaCard: {
+    borderRadius: moderateScale(10),
+    borderWidth: 1,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: verticalScale(6),
+  },
+  metaLabel: {
+    fontSize: moderateScale(11.5),
+    fontWeight: '500',
+  },
+  metaValue: {
+    fontSize: moderateScale(12),
+    fontWeight: '600',
+    maxWidth: scale(180),
+  },
+  metaDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
   },
   btnIcon: {
     marginRight: scale(5),

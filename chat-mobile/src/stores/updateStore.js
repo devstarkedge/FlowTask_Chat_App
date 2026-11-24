@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import * as Application from 'expo-application';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import storage from '../services/storage';
 
 const PENDING_UPDATE_STORAGE_KEY = '@taskchat_pending_update_verification';
@@ -20,12 +20,30 @@ export const isExpoGo =
 export const isUpdatesSupported = Boolean(Updates.isEnabled) && !isExpoGo && !isDev;
 
 export function getNativeAppVersion() {
-  return (
+  const configuredVersion =
     Constants.expoConfig?.version ||
-    Application.nativeApplicationVersion ||
     Constants.manifest2?.extra?.expoClient?.version ||
-    Constants.manifest?.version ||
-    ''
+    Constants.manifest?.version;
+  const configuredAppId = Platform.OS === 'android'
+    ? Constants.expoConfig?.android?.package
+    : Constants.expoConfig?.ios?.bundleIdentifier;
+  const isHostContainer =
+    isExpoGo ||
+    Boolean(
+      Application.applicationId &&
+      configuredAppId &&
+      Application.applicationId !== configuredAppId
+    );
+
+  // Expo Go can report its host version (for example 58.0.5) instead of
+  // TaskChat's version. Use the configured version only when running in a
+  // host container; installed TaskChat builds use native version metadata.
+  if (isHostContainer && configuredVersion) return configuredVersion;
+
+  return (
+    Application.nativeApplicationVersion ||
+    configuredVersion ||
+    '1.0.0'
   );
 }
 
@@ -90,7 +108,7 @@ export const useUpdateStore = create((set, get) => ({
   runningUpdateId: getRunningUpdateId(),
   runningCreatedAt: Updates.createdAt ? Updates.createdAt.toISOString() : null,
   runtimeVersion: getRuntimeVersion(),
-  channel: Updates.channel || 'production',
+  channel: Updates.channel || (isExpoGo ? 'Unavailable in Expo Go' : 'production'),
   isEmbeddedLaunch: Updates.isEmbeddedLaunch ?? true,
   isEmergencyLaunch: Updates.isEmergencyLaunch ?? false,
 
@@ -122,7 +140,7 @@ export const useUpdateStore = create((set, get) => ({
         nativeAppVersion: getNativeAppVersion(),
         nativeBuildVersion: getNativeBuildVersion(),
         runningUpdateId: getRunningUpdateId(),
-        channel: Updates.channel || 'production',
+        channel: Updates.channel || (isExpoGo ? 'Unavailable in Expo Go' : 'production'),
       });
 
       try {
@@ -218,29 +236,16 @@ export const useUpdateStore = create((set, get) => ({
 
     // In dev / debug mode (Android / iOS), Expo Go, or environments where updates are not supported
     if (!isUpdatesSupported) {
-      await new Promise((r) => setTimeout(r, 600));
-
-      const now = new Date().toISOString();
-      await storage.setItem(LAST_CHECK_TIME_STORAGE_KEY, now);
-
+      const reason = isExpoGo
+        ? 'OTA updates are unavailable in Expo Go. Install a TaskChat preview or store build to check for updates.'
+        : 'OTA updates are disabled in this development build. Install a preview or store build to check for updates.';
       set({
-        status: 'up-to-date',
+        status: 'error',
         availableUpdate: null,
-        lastCheckedAt: now,
-        error: null,
-        errorType: null,
+        error: reason,
+        errorType: 'unsupported',
+        activeModal: 'none',
       });
-
-      if (isManual) {
-        try {
-          const { default: Toast } = await import('react-native-toast-message');
-          Toast.show({
-            type: 'success',
-            text1: 'TaskChat is up to date',
-            text2: `Version ${getNativeAppVersion()}`,
-          });
-        } catch (_) {}
-      }
       return;
     }
 

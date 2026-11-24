@@ -8,6 +8,7 @@ chat-desktop/dist-electron*/
 *.zip
 *.md
 *.test.js
+!chat-mobile/src/__tests__/updateStore.test.js
 *.example
 *.test.mjs
 # Mobile generated builds

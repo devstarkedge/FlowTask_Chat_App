@@ -5,6 +5,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useAuthStore } from '../stores/authStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useUpdateStore } from '../stores/updateStore';
 import { useTranslation } from '../utils/i18n';
 import TermsModal from '../components/TermsModal';
 import PrivacyModal from '../components/PrivacyModal';
@@ -29,7 +30,8 @@ import {
   Shield,
   FileText,
   Mail,
-  HardDrive
+  HardDrive,
+  Sparkles
 } from 'lucide-react-native';
 
 const SectionTitle = ({ title, colors }) => (
@@ -63,6 +65,10 @@ const PreferencesScreen = ({ navigation }) => {
   const prefs = usePreferencesStore();
   const user = useAuthStore(state => state.user);
   const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
+  const nativeAppVersion = useUpdateStore((state) => state.nativeAppVersion);
+  const status = useUpdateStore((state) => state.status);
+  const lastCheckedAt = useUpdateStore((state) => state.lastCheckedAt);
+  const checkForUpdate = useUpdateStore((state) => state.checkForUpdate);
   
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -262,9 +268,25 @@ const PreferencesScreen = ({ navigation }) => {
           <PreferenceItem
             icon={Info}
             title={t("Version")}
-            subtitle="1.0.0 (Latest)"
+            subtitle={`v${nativeAppVersion} (${status === 'available' ? t('Update available') : status === 'downloaded' ? t('Update ready') : t('Latest')})`}
+            rightIcon="chevron"
+            rightText={status === 'available' ? 'Update' : status === 'downloaded' ? 'Ready' : ''}
             colors={colors}
-            onPress={() => Alert.alert('Version', 'You are on the latest version.')}
+            onPress={() => navigation.navigate('AppUpdates')}
+          />
+          <PreferenceItem
+            icon={Sparkles}
+            title={t("Check for Updates")}
+            subtitle={
+              status === 'checking'
+                ? t("Checking for updates…")
+                : lastCheckedAt
+                  ? `Last checked ${new Date(lastCheckedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : t("Check if an update is available")
+            }
+            rightText={status === 'checking' ? 'Checking…' : ''}
+            colors={colors}
+            onPress={() => checkForUpdate({ isManual: true })}
           />
         </View>
 

@@ -1,121 +1,157 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Updates from 'expo-updates';
-import { Check, RefreshCw, X } from 'lucide-react-native';
+import { RefreshCw, X, RotateCcw } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../stores/themeStore';
-
-const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+import { useUpdateStore } from '../../stores/updateStore';
+import UpdateModals from '../updates/UpdateModals';
 
 export default function ExpoUpdateBanner() {
   const insets = useSafeAreaInsets();
   const colors = useThemeStore((state) => state.colors);
-  const {
-    isStartupProcedureRunning,
-    isDownloading,
-    isUpdatePending,
-    downloadProgress,
-  } = Updates.useUpdates();
-  const lastCheckAt = useRef(0);
-  const checkInFlight = useRef(false);
-  const [dismissed, setDismissed] = useState(false);
-  const [restarting, setRestarting] = useState(false);
 
-  const checkAndDownload = useCallback(async () => {
-    if (!Updates.isEnabled || checkInFlight.current) return;
-    if (Date.now() - lastCheckAt.current < MIN_CHECK_INTERVAL_MS) return;
+  // Hook into native Expo Updates reactive state safely
+  const expoUpdates = Updates.useUpdates ? Updates.useUpdates() : null;
+  const isDownloading = Boolean(expoUpdates?.isDownloading);
+  const isUpdatePending = Boolean(expoUpdates?.isUpdatePending);
+  const isChecking = Boolean(expoUpdates?.isChecking);
+  const rawProgress = expoUpdates?.downloadProgress;
+  const downloadErrMsg = expoUpdates?.downloadError?.message;
+  const checkErrMsg = expoUpdates?.checkError?.message;
 
-    checkInFlight.current = true;
-    lastCheckAt.current = Date.now();
-    try {
-      const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) await Updates.fetchUpdateAsync();
-    } catch (error) {
-      console.warn('[Updates] Check or download failed:', error?.message);
-    } finally {
-      checkInFlight.current = false;
-    }
+  // Selective subscriptions to prevent unnecessary renders
+  const status = useUpdateStore((state) => state.status);
+  const downloadProgress = useUpdateStore((state) => state.downloadProgress);
+  const activeModal = useUpdateStore((state) => state.activeModal);
+  const restartApp = useUpdateStore((state) => state.restartApp);
+  const openModal = useUpdateStore((state) => state.openModal);
+
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Initialize updater and post-restart verification once on mount
+  useEffect(() => {
+    useUpdateStore.getState().initUpdater();
   }, []);
 
+  // Sync native Expo Updates state to store safely using primitive dependencies
   useEffect(() => {
-    if (!Updates.isEnabled || isStartupProcedureRunning) return undefined;
-
-    if (AppState.currentState === 'active') checkAndDownload();
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkAndDownload();
+    if (!expoUpdates) return;
+    useUpdateStore.getState().syncWithExpoUpdates({
+      isDownloading,
+      isUpdatePending,
+      downloadProgress: rawProgress,
+      isChecking,
+      downloadError: expoUpdates.downloadError,
+      checkError: expoUpdates.checkError,
     });
-    return () => subscription.remove();
-  }, [checkAndDownload, isStartupProcedureRunning]);
+  }, [isDownloading, isUpdatePending, rawProgress, isChecking, downloadErrMsg, checkErrMsg]);
 
+  const ready = status === 'downloaded' || isUpdatePending;
+  const downloading = status === 'downloading' || isDownloading;
+  const restarting = status === 'restarting';
+
+  // Re-show banner if a new update becomes ready
   useEffect(() => {
-    if (isUpdatePending) setDismissed(false);
-  }, [isUpdatePending]);
-
-  const restartToUpdate = async () => {
-    setRestarting(true);
-    try {
-      await Updates.reloadAsync();
-    } catch (error) {
-      console.warn('[Updates] Restart failed:', error?.message);
-      setRestarting(false);
+    if (ready) {
+      setBannerDismissed(false);
     }
-  };
+  }, [ready]);
 
-  if (!Updates.isEnabled || dismissed || (!isUpdatePending && !isDownloading)) return null;
+  const progress =
+    downloadProgress !== null
+      ? downloadProgress
+      : Number.isFinite(rawProgress)
+        ? Math.min(100, Math.max(0, Math.round(rawProgress * 100)))
+        : null;
 
-  const ready = isUpdatePending;
-  const progress = Number.isFinite(downloadProgress)
-    ? Math.min(100, Math.max(0, Math.round(downloadProgress * 100)))
-    : null;
+  // Don't show top banner if a full modal is already active or banner is dismissed or idle
+  const showBanner =
+    !bannerDismissed &&
+    activeModal === 'none' &&
+    (ready || downloading);
 
   return (
-    <View pointerEvents="box-none" style={styles.overlay}>
-      <View
-        accessibilityLiveRegion="polite"
-        style={[
-          styles.card,
-          {
-            top: Math.max(insets.top, 8) + 8,
-            backgroundColor: colors.backgroundSecondary || colors.background,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <View style={[styles.iconWrap, { backgroundColor: colors.primaryLight || colors.primary }]}>
-          {ready ? <Check size={18} color={colors.primary} /> : <RefreshCw size={18} color={colors.primary} />}
-        </View>
-        <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>
-            {ready ? 'Update ready' : 'Downloading update'}
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {ready
-              ? 'Restart TaskChat to use the latest version.'
-              : progress === null ? 'Your app will be ready shortly.' : `${progress}% downloaded`}
-          </Text>
-        </View>
-        {ready ? (
+    <>
+      {/* Desktop-like full modals for Available, Downloading, Ready, and Verified Success */}
+      <UpdateModals />
+
+      {/* Floating status banner when modals are dismissed but update is downloading or ready */}
+      {showBanner && (
+        <View pointerEvents="box-none" style={styles.overlay}>
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Restart to update TaskChat"
-            disabled={restarting}
-            onPress={restartToUpdate}
-            style={[styles.action, { backgroundColor: colors.primary }]}
+            accessibilityLiveRegion="polite"
+            onPress={() => openModal(ready ? 'ready' : 'downloading')}
+            style={[
+              styles.card,
+              {
+                top: Math.max(insets.top, 8) + 8,
+                backgroundColor: colors.backgroundSecondary || colors.background,
+                borderColor: colors.border,
+              },
+            ]}
           >
-            <Text style={styles.actionText}>{restarting ? 'Restarting…' : 'Restart'}</Text>
+            <View
+              style={[
+                styles.iconWrap,
+                {
+                  backgroundColor: ready
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : colors.primaryLight || 'rgba(59, 130, 246, 0.15)',
+                },
+              ]}
+            >
+              {ready ? (
+                <RotateCcw size={18} color={colors.success || '#10b981'} />
+              ) : (
+                <RefreshCw size={18} color={colors.primary} />
+              )}
+            </View>
+
+            <View style={styles.copy}>
+              <Text style={[styles.title, { color: colors.textPrimary }]}>
+                {ready ? 'Update ready to install' : 'Downloading update…'}
+              </Text>
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+                {ready
+                  ? 'Tap to restart TaskChat and apply changes.'
+                  : progress === null
+                    ? 'Downloading in background…'
+                    : `${progress}% downloaded`}
+              </Text>
+            </View>
+
+            {ready ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Restart to update TaskChat"
+                disabled={restarting}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  restartApp();
+                }}
+                style={[styles.action, { backgroundColor: colors.success || '#10b981' }]}
+              >
+                <Text style={styles.actionText}>{restarting ? 'Restarting…' : 'Restart'}</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss update notice"
+              hitSlop={10}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                setBannerDismissed(true);
+              }}
+              style={styles.dismiss}
+            >
+              <X size={18} color={colors.textSecondary} />
+            </Pressable>
           </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss update notice"
-          hitSlop={10}
-          onPress={() => setDismissed(true)}
-          style={styles.dismiss}
-        >
-          <X size={18} color={colors.textSecondary} />
-        </Pressable>
-      </View>
-    </View>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -129,7 +165,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     right: 12,
-    minHeight: 68,
+    minHeight: 64,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 14,
     paddingVertical: 10,
@@ -156,26 +192,26 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   title: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '700',
   },
   subtitle: {
     fontSize: 12,
-    marginTop: 3,
+    marginTop: 2,
   },
   action: {
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 9,
+    paddingVertical: 8,
+    borderRadius: 8,
     marginLeft: 8,
   },
   actionText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
   },
   dismiss: {
-    padding: 5,
-    marginLeft: 5,
+    padding: 6,
+    marginLeft: 4,
   },
 });

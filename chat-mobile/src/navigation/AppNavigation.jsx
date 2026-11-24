@@ -45,6 +45,7 @@ import HuddlesScreen from "../screens/Preferences/HuddlesScreen";
 import LanguageScreen from "../screens/Preferences/LanguageScreen";
 import TimeScreen from "../screens/Preferences/TimeScreen";
 import AccentColorScreen from "../screens/Preferences/AccentColorScreen";
+import AppUpdatesScreen from "../screens/Preferences/AppUpdatesScreen";
 import FilesScreen from "../screens/FilesScreen";
 import SearchScreen from "../screens/SearchScreen";
 import PinnedMessagesScreen from "../screens/PinnedMessagesScreen";
@@ -377,6 +378,11 @@ export default function AppNavigation() {
           <Stack.Screen
             name="AccentColor"
             component={AccentColorScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AppUpdates"
+            component={AppUpdatesScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen

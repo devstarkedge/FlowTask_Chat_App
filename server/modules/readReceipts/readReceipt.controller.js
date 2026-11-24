@@ -58,6 +58,15 @@ export const markChannelRead = asyncHandler(async (req, res) => {
     unreadCount: 0
   }, workspaceId?.toString());
 
+  if (lastReadMessageId) {
+    try {
+      const { default: notificationService } = await import('../notifications/notification.service.js');
+      await notificationService.markChannelMessagesNotificationsAsRead(channelId, userId, workspaceId, lastReadMessageId);
+    } catch (err) {
+      // Non-blocking notification sync failure
+    }
+  }
+
   res.json({ success: true, data: receipt });
 });
 

@@ -797,13 +797,17 @@ export async function initializeSocket(httpServer, corsOptions) {
       }
     });
 
-    socket.on(SOCKET_EVENTS.MESSAGE_READ, async ({ messageId, channelId }) => {
+    socket.on(SOCKET_EVENTS.MESSAGE_READ, async ({ messageId, messageIds, channelId }) => {
       if (await isSocketRateLimited(socket.id)) return;
-      if (!messageId) return;
+      if (!messageId && (!Array.isArray(messageIds) || messageIds.length === 0)) return;
       try {
         const effectiveWsId = wsId || socket.workspaceId || socket.data?.workspaceId;
-        const { markAsRead } = await import('../modules/readReceipts/readReceipt.service.js');
-        await markAsRead(messageId, channelId, userId, effectiveWsId);
+        const { markAsRead, markMultipleAsRead } = await import('../modules/readReceipts/readReceipt.service.js');
+        if (Array.isArray(messageIds) && messageIds.length > 0) {
+          await markMultipleAsRead(messageIds, channelId, userId, effectiveWsId);
+        } else if (messageId) {
+          await markAsRead(messageId, channelId, userId, effectiveWsId);
+        }
       } catch (err) {
         logger.debug('message:read handling failed', { userId, messageId, error: err?.message });
       }

@@ -6,6 +6,7 @@ import { useChannelStore } from "../../stores/channelStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useCanvasStore } from "../../stores/canvasStore";
+import { useNotificationStore } from "../../stores/notificationStore";
 import { shallow } from "zustand/shallow";
 import { getSocket, joinChannel, leaveChannel } from "../../services/socket";
 import MessageList from "./MessageList";
@@ -205,6 +206,7 @@ export default function ChatPanel({
       }
       socket.emit("message:read", { messageId, channelId });
       markedIds.add(String(messageId));
+      useNotificationStore.getState().syncReadState({ messageId });
       if (visibleTab === "activity") {
         addMessageReadReceipt(messageId, currentUserId);
       }

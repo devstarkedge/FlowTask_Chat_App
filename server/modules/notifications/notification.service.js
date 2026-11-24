@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Notification from './Notification.model.js';
 import { emitNotificationToUser, emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
@@ -79,6 +80,13 @@ class NotificationService {
       conversationId: conversationId || channelId || null,
       conversationType: conversationType || 'channel',
       messagePreview: messagePreview || body || '',
+      deepLink: {
+        workspaceId,
+        channelId: channelId || conversationId || null,
+        messageId: sourceType === 'message' ? sourceId : null,
+        threadId: threadId || null,
+        type: conversationType || (type === 'dm' ? 'dm' : 'channel'),
+      },
     });
 
     // Emit real-time notification to the recipient's personal room
@@ -335,30 +343,268 @@ class NotificationService {
    * Mark a single notification as read.
    * Emits socket events for cross-device sync and unread count update.
    */
-  async markAsRead(notificationId, recipientId, workspaceId) {
+  async markAsRead(notificationId, recipientId, workspaceId, options = {}) {
     const notification = await Notification.markRead(notificationId, recipientId, workspaceId);
     if (!notification) {
       logger.warn('Notification not found or not owned by user', { notificationId, recipientId, workspaceId });
       return null;
     }
 
+    // If this notification is tied to a message and shouldSyncMessage is not disabled, mark the message as read too
+    if (!options.skipMessageSync && (notification.sourceType === 'message' || notification.deepLink?.messageId)) {
+      const messageId = notification.sourceId || notification.deepLink?.messageId;
+      if (messageId) {
+        try {
+          const { markAsRead: markMessageAsRead } = await import('../readReceipts/readReceipt.service.js');
+          await markMessageAsRead(messageId, notification.channelId, recipientId, workspaceId, { skipNotificationSync: true });
+        } catch (err) {
+          logger.warn('Failed to sync message read status from notification', { notificationId, messageId, error: err.message });
+        }
+      }
+    }
+
     // Get updated unread count for this user in this workspace
-    const unreadCount = await Notification.getUnreadCount(recipientId, workspaceId);
+    const effectiveWorkspaceId = workspaceId || notification.workspaceId;
+    const unreadCount = await Notification.getUnreadCount(recipientId, effectiveWorkspaceId);
+
+    const messageIdStr = (notification.sourceId || notification.deepLink?.messageId)?.toString() || null;
 
     // Emit NOTIFICATION_READ_SYNC to sync read state across all connected devices
     emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {
       notificationId: notification._id,
+      notificationIds: [notification._id.toString()],
+      messageId: messageIdStr,
       channelId: notification.channelId,
-      workspaceId: workspaceId?.toString(),
-    }, workspaceId?.toString());
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
 
     // Emit updated unread count so notification badges update in real-time
     emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_UNREAD_UPDATED, {
       unreadCount,
-      workspaceId: workspaceId?.toString(),
-    }, workspaceId?.toString());
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
 
     return notification;
+  }
+
+  /**
+   * Mark any notifications associated with a message as read for a recipient.
+   * Emits socket events for real-time synchronization across all sessions.
+   *
+   * @param {string|ObjectId} messageId
+   * @param {string|ObjectId} recipientId
+   * @param {string|ObjectId} [workspaceId]
+   * @returns {Promise<Array<object>>} Updated notifications
+   */
+  async markMessageNotificationsAsRead(messageId, recipientId, workspaceId) {
+    if (!messageId || !recipientId) return [];
+
+    const messageIdStr = messageId.toString();
+    const recipientIdStr = recipientId.toString();
+
+    if (!mongoose.Types.ObjectId.isValid(recipientIdStr) || !mongoose.Types.ObjectId.isValid(messageIdStr)) {
+      return [];
+    }
+
+    const messageObjectId = new mongoose.Types.ObjectId(messageIdStr);
+    const recipientObjectId = new mongoose.Types.ObjectId(recipientIdStr);
+
+    const query = {
+      recipientId: recipientObjectId,
+      isRead: false,
+      $or: [
+        { sourceId: messageObjectId },
+        { 'deepLink.messageId': messageObjectId },
+      ],
+    };
+
+    if (workspaceId && mongoose.Types.ObjectId.isValid(workspaceId)) {
+      query.workspaceId = new mongoose.Types.ObjectId(workspaceId);
+    }
+
+    const unreadNotifs = await Notification.find(query).lean();
+    if (!unreadNotifs || unreadNotifs.length === 0) {
+      return [];
+    }
+
+    const notifIds = unreadNotifs.map((n) => n._id);
+    const now = new Date();
+
+    await Notification.updateMany(
+      { _id: { $in: notifIds } },
+      { $set: { isRead: true, readAt: now } }
+    );
+
+    const effectiveWorkspaceId = workspaceId || unreadNotifs[0]?.workspaceId;
+    const unreadCount = await Notification.getUnreadCount(
+      recipientObjectId || recipientIdStr,
+      effectiveWorkspaceId
+    );
+
+    emitToUser(recipientIdStr, SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {
+      notificationIds: notifIds.map((id) => id.toString()),
+      notificationId: notifIds[0].toString(),
+      messageId: messageIdStr,
+      channelId: unreadNotifs[0]?.channelId?.toString() || null,
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
+
+    emitToUser(recipientIdStr, SOCKET_EVENTS.NOTIFICATION_UNREAD_UPDATED, {
+      unreadCount,
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
+
+    return unreadNotifs;
+  }
+
+  /**
+   * Mark any notifications associated with multiple messages as read for a recipient.
+   */
+  async markMessagesNotificationsAsRead(messageIds, recipientId, workspaceId) {
+    if (!Array.isArray(messageIds) || messageIds.length === 0 || !recipientId) return [];
+
+    const recipientIdStr = recipientId.toString();
+    if (!mongoose.Types.ObjectId.isValid(recipientIdStr)) return [];
+    const recipientObjectId = new mongoose.Types.ObjectId(recipientIdStr);
+
+    const validObjectIds = messageIds
+      .filter((id) => id && mongoose.Types.ObjectId.isValid(id.toString()))
+      .map((id) => new mongoose.Types.ObjectId(id.toString()));
+
+    if (validObjectIds.length === 0) return [];
+
+    const query = {
+      recipientId: recipientObjectId,
+      isRead: false,
+      $or: [
+        { sourceId: { $in: validObjectIds } },
+        { 'deepLink.messageId': { $in: validObjectIds } },
+      ],
+    };
+
+    if (workspaceId && mongoose.Types.ObjectId.isValid(workspaceId)) {
+      query.workspaceId = new mongoose.Types.ObjectId(workspaceId);
+    }
+
+    const unreadNotifs = await Notification.find(query).lean();
+    if (!unreadNotifs || unreadNotifs.length === 0) {
+      return [];
+    }
+
+    const notifIds = unreadNotifs.map((n) => n._id);
+    const now = new Date();
+
+    await Notification.updateMany(
+      { _id: { $in: notifIds } },
+      { $set: { isRead: true, readAt: now } }
+    );
+
+    const effectiveWorkspaceId = workspaceId || unreadNotifs[0]?.workspaceId;
+    const unreadCount = await Notification.getUnreadCount(
+      recipientObjectId || recipientIdStr,
+      effectiveWorkspaceId
+    );
+
+    emitToUser(recipientIdStr, SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {
+      notificationIds: notifIds.map((id) => id.toString()),
+      notificationId: notifIds[0].toString(),
+      messageIds: validObjectIds.map((id) => id.toString()),
+      channelId: unreadNotifs[0]?.channelId?.toString() || null,
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
+
+    emitToUser(recipientIdStr, SOCKET_EVENTS.NOTIFICATION_UNREAD_UPDATED, {
+      unreadCount,
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
+
+    return unreadNotifs;
+  }
+
+  /**
+   * Mark message notifications in a channel as read up to a message (or all if not specified).
+   * Does NOT mark unrelated notifications (e.g. other channels, non-message notifications).
+   */
+  async markChannelMessagesNotificationsAsRead(channelId, recipientId, workspaceId, lastReadMessageId = null) {
+    if (!channelId || !recipientId) return [];
+
+    const channelIdStr = channelId.toString();
+    const recipientIdStr = recipientId.toString();
+
+    if (!mongoose.Types.ObjectId.isValid(recipientIdStr) || !mongoose.Types.ObjectId.isValid(channelIdStr)) {
+      return [];
+    }
+
+    const channelObjectId = new mongoose.Types.ObjectId(channelIdStr);
+    const recipientObjectId = new mongoose.Types.ObjectId(recipientIdStr);
+
+    const query = {
+      recipientId: recipientObjectId,
+      channelId: channelObjectId,
+      sourceType: 'message',
+      isRead: false,
+    };
+
+    if (workspaceId && mongoose.Types.ObjectId.isValid(workspaceId)) {
+      query.workspaceId = new mongoose.Types.ObjectId(workspaceId);
+    }
+
+    if (lastReadMessageId) {
+      try {
+        const { default: Message } = await import('../messages/Message.model.js');
+        const lastMsg = await Message.findById(lastReadMessageId).select('createdAt').lean();
+        if (lastMsg?.createdAt) {
+          query.createdAt = { $lte: lastMsg.createdAt };
+        } else {
+          const lastMsgIdStr = lastReadMessageId.toString();
+          const lastMsgObjId = mongoose.Types.ObjectId.isValid(lastMsgIdStr)
+            ? new mongoose.Types.ObjectId(lastMsgIdStr)
+            : null;
+          const orList = [
+            { sourceId: lastMsgIdStr },
+            { 'deepLink.messageId': lastMsgIdStr },
+          ];
+          if (lastMsgObjId) {
+            orList.push({ sourceId: lastMsgObjId });
+            orList.push({ 'deepLink.messageId': lastMsgObjId });
+          }
+          query.$or = orList;
+        }
+      } catch (err) {
+        logger.debug('Failed to look up lastReadMessage for notification filter', { error: err.message });
+      }
+    }
+
+    const unreadNotifs = await Notification.find(query).lean();
+    if (!unreadNotifs || unreadNotifs.length === 0) return [];
+
+    const notifIds = unreadNotifs.map((n) => n._id);
+    const now = new Date();
+
+    await Notification.updateMany(
+      { _id: { $in: notifIds } },
+      { $set: { isRead: true, readAt: now } }
+    );
+
+    const effectiveWorkspaceId = workspaceId || unreadNotifs[0]?.workspaceId;
+    const unreadCount = await Notification.getUnreadCount(
+      recipientObjectId || recipientIdStr,
+      effectiveWorkspaceId
+    );
+
+    emitToUser(recipientIdStr, SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {
+      notificationIds: notifIds.map((id) => id.toString()),
+      notificationId: notifIds[0].toString(),
+      channelId: channelIdStr,
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
+
+    emitToUser(recipientIdStr, SOCKET_EVENTS.NOTIFICATION_UNREAD_UPDATED, {
+      unreadCount,
+      workspaceId: effectiveWorkspaceId?.toString(),
+    }, effectiveWorkspaceId?.toString());
+
+    return unreadNotifs;
   }
 
   /**

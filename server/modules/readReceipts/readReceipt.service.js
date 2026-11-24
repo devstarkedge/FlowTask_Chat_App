@@ -309,7 +309,7 @@ export const getMessageInfo = async (messageId, channelId, requesterId, workspac
 /**
  * Mark a message as read by a user
  */
-export const markAsRead = async (messageId, channelId, userId, workspaceId) => {
+export const markAsRead = async (messageId, channelId, userId, workspaceId, options = {}) => {
   const message = await Message.findById(messageId);
   if (!message) return null;
 
@@ -407,7 +407,53 @@ export const markAsRead = async (messageId, channelId, userId, workspaceId) => {
     );
   }
 
+  // 5. Synchronize notification read status for this read message
+  if (!options.skipNotificationSync) {
+    try {
+      const { default: notificationService } = await import('../notifications/notification.service.js');
+      await notificationService.markMessageNotificationsAsRead(messageId, userId, resolvedWorkspaceId);
+    } catch (err) {
+      logger.warn('Failed to sync notification read status on message read', {
+        messageId: messageId?.toString(),
+        userId: userIdStr,
+        error: err?.message,
+      });
+    }
+  }
+
   return receipt;
+};
+
+/**
+ * Mark multiple messages as read by a user.
+ */
+export const markMultipleAsRead = async (messageIds, channelId, userId, workspaceId, options = {}) => {
+  if (!Array.isArray(messageIds) || messageIds.length === 0) return [];
+  const results = [];
+  for (const messageId of messageIds) {
+    if (messageId) {
+      const receipt = await markAsRead(messageId, channelId, userId, workspaceId, {
+        ...options,
+        skipNotificationSync: true, // Batch notification sync below
+      });
+      if (receipt) results.push(receipt);
+    }
+  }
+
+  if (!options.skipNotificationSync) {
+    try {
+      const { default: notificationService } = await import('../notifications/notification.service.js');
+      await notificationService.markMessagesNotificationsAsRead(messageIds, userId, workspaceId);
+    } catch (err) {
+      logger.warn('Failed to sync notifications on batch message read', {
+        count: messageIds.length,
+        userId: userId?.toString(),
+        error: err?.message,
+      });
+    }
+  }
+
+  return results;
 };
 
 /**

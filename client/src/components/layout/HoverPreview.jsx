@@ -11,6 +11,7 @@ import { usePresenceStore } from '../../stores/presenceStore'
 import { Avatar } from '../chat/MemberAvatarGroup'
 import { Bell, FileText, FolderOpen, MessageSquare, Video, Image as ImageIcon } from 'lucide-react'
 import { fileAPI } from '../../services/api'
+import { getSocket } from '../../services/socket'
 import { getActivityPath, getDMPath, getFilesPath } from '../../utils/chatRoutes'
 import { getNotificationText, normalizeNotification } from '../../utils/notificationFormat'
 
@@ -319,6 +320,13 @@ export default function HoverPreview({
       await markAsRead(notification._id)
     }
     const channelId = notification?.channelId?._id || notification?.channelId
+    const messageId = notification?.sourceId || notification?.messageId || notification?.deepLink?.messageId
+    if (messageId && channelId) {
+      const socket = getSocket()
+      if (socket) {
+        socket.emit('message:read', { messageId, channelId })
+      }
+    }
     if (channelId) setActiveChannel(channelId)
     navigate(getActivityPath(workspaceId, notification._id))
     onClose?.()

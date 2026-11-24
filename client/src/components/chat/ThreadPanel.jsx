@@ -8,6 +8,8 @@ import { useChatStore } from "../../stores/chatStore";
 import { useChannelStore } from "../../stores/channelStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useLaterStore } from "../../stores/laterStore";
+import { useNotificationStore } from "../../stores/notificationStore";
+import { getSocket } from "../../services/socket";
 import MessageInput from "./MessageInput";
 import RichTextEditor from "./RichTextEditor";
 import FormattingToolbar from "./FormattingToolbar";
@@ -1217,6 +1219,12 @@ export default function ThreadPanel({ thread, onClose }) {
   const threadParentMessages = useChatStore((s) => s.threadParentMessages || EMPTY_MAP);
   const setScrollAndHighlightMessage = useChatStore((s) => s.setScrollAndHighlightMessage);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
+  const currentUserId = useAuthStore((s) => s.user?._id);
+
+  const readReceiptTrackerRef = useRef(new Set());
+  useEffect(() => {
+    readReceiptTrackerRef.current = new Set();
+  }, [thread?.rootMessageId]);
 
   const replies = useMemo(() => {
     if (!CHAT_FEATURE_FLAGS.normalizedMessageStore) return legacyReplies;
@@ -1243,6 +1251,37 @@ export default function ThreadPanel({ thread, onClose }) {
   useEffect(() => {
     fetchThreadReplies(thread.rootMessageId);
   }, [thread.rootMessageId, fetchThreadReplies]);
+
+  useEffect(() => {
+    if (
+      !thread?.rootMessageId ||
+      !currentUserId ||
+      (typeof document !== "undefined" && document.visibilityState === "hidden")
+    ) return;
+
+    const socket = getSocket();
+    if (!socket) return;
+    const markedIds = readReceiptTrackerRef.current;
+
+    if (rootMessage) {
+      const rootMsgId = rootMessage._id;
+      const rootAuthorId = rootMessage.authorId?._id || rootMessage.authorId;
+      if (rootMsgId && rootAuthorId && String(rootAuthorId) !== String(currentUserId) && !markedIds.has(String(rootMsgId))) {
+        socket.emit("message:read", { messageId: rootMsgId, channelId: thread.channelId });
+        markedIds.add(String(rootMsgId));
+        useNotificationStore.getState().syncReadState({ messageId: rootMsgId });
+      }
+    }
+
+    for (const reply of replies) {
+      const messageId = reply?._id;
+      const authorId = reply?.authorId?._id || reply?.authorId;
+      if (!messageId || !authorId || String(authorId) === String(currentUserId) || markedIds.has(String(messageId))) continue;
+      socket.emit("message:read", { messageId, channelId: thread.channelId });
+      markedIds.add(String(messageId));
+      useNotificationStore.getState().syncReadState({ messageId });
+    }
+  }, [thread?.rootMessageId, thread?.channelId, rootMessage, replies, currentUserId]);
 
   const isThreadAtBottomRef = useRef(true);
   const handleThreadScroll = useCallback(() => {

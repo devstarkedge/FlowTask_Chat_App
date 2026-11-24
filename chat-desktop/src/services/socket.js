@@ -866,8 +866,10 @@ export function connectSocket() {
     }
   })
 
-  socket.on('notification:read:sync', ({ notificationId, channelId }) => {
-    useNotificationStore.getState().syncReadState({ notificationId, channelId })
+  socket.on('notification:read:sync', (payload) => {
+    if (payload) {
+      useNotificationStore.getState().syncReadState(payload)
+    }
   })
 
   socket.on('notification:unread:updated', ({ unreadCount }) => {

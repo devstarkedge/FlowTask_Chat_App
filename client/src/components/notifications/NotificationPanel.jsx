@@ -7,6 +7,7 @@ import NotificationItem from './NotificationItem'
 import NotificationSettingsModal from './NotificationSettingsModal'
 import PauseNotificationsDropdown from './PauseNotificationsDropdown'
 import { normalizeNotification } from '../../utils/notificationFormat'
+import { getSocket } from '../../services/socket'
 
 const FILTER_TABS = [
   { id: 'all', label: 'All', icon: Bell },
@@ -57,7 +58,15 @@ export default function NotificationPanel({ onClose, onSelectNotification }) {
     }
 
     if (data.channelId) {
-      setActiveChannel(data.channelId._id || data.channelId)
+      const channelId = data.channelId._id || data.channelId
+      const messageId = data.messageId || data.sourceId || data.deepLink?.messageId
+      if (messageId && channelId) {
+        const socket = getSocket()
+        if (socket) {
+          socket.emit('message:read', { messageId, channelId })
+        }
+      }
+      setActiveChannel(channelId)
     }
     onClose?.()
   }

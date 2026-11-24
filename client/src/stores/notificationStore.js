@@ -123,24 +123,53 @@ export const useNotificationStore = create((set, get) => ({
     set({ unreadCount: Math.max(0, count) })
   },
 
-  // ─── Sync read state from another device ─────────────────────────────
-  syncReadState: ({ notificationId, channelId }) => {
+  // ─── Sync read state (from message read, socket sync, or another device) ──
+  syncReadState: ({ notificationId, notificationIds, messageId, messageIds, channelId, allRead, allChannelRead } = {}) => {
+    const notifIdSet = new Set(
+      [notificationId, ...(Array.isArray(notificationIds) ? notificationIds : [])]
+        .filter(Boolean)
+        .map(String)
+    );
+    const msgIdSet = new Set(
+      [messageId, ...(Array.isArray(messageIds) ? messageIds : [])]
+        .filter(Boolean)
+        .map(String)
+    );
+    const hasSpecificTarget = notifIdSet.size > 0 || msgIdSet.size > 0;
+
     set((state) => {
-      let unreadDelta = 0
+      let unreadDelta = 0;
       const updated = state.notifications.map((n) => {
-        const shouldMark = (notificationId && n._id === notificationId)
-          || (channelId && n.channelId === channelId && !n.isRead)
-        if (shouldMark && !n.isRead) {
-          unreadDelta++
-          return { ...n, isRead: true, readAt: new Date().toISOString() }
+        if (n.isRead) return n;
+
+        let shouldMark = false;
+        if (allRead) {
+          shouldMark = true;
+        } else if (hasSpecificTarget) {
+          const nIdStr = String(n._id || '');
+          const nMsgId = String(n.messageId || n.sourceId || n.deepLink?.messageId || '');
+          if (notifIdSet.has(nIdStr) || (nMsgId && msgIdSet.has(nMsgId))) {
+            shouldMark = true;
+          }
+        } else if (allChannelRead && channelId) {
+          const nChanId = String(n.channelId?._id || n.channelId || '');
+          if (nChanId === String(channelId)) {
+            shouldMark = true;
+          }
         }
-        return n
-      })
+
+        if (shouldMark) {
+          unreadDelta++;
+          return { ...n, isRead: true, readAt: new Date().toISOString() };
+        }
+        return n;
+      });
+
       return {
         notifications: updated,
         unreadCount: Math.max(0, state.unreadCount - unreadDelta),
-      }
-    })
+      };
+    });
   },
 
   // ─── Set active filter ───────────────────────────────────────────────

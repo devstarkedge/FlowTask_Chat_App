@@ -408,6 +408,7 @@ export function connectSocket() {
       ) === 'activity'
       if (!isProjectActivity && activeChannelId === channelId && typeof document !== 'undefined' && document.visibilityState === 'visible') {
         socket.emit('message:read', { messageId: message._id, channelId })
+        useNotificationStore.getState().syncReadState({ messageId: message._id })
         const channels = useChannelStore.getState().channels
         const channel = channels.find((c) => c._id === channelId)
         if (channel?.type === 'dm') {
@@ -441,6 +442,21 @@ export function connectSocket() {
       // Increment reply count on root message in main channel
       if (message.channelId) {
         useChatStore.getState().incrementReplyCount(resolvedRootId, message.channelId)
+      }
+
+      // If active thread is currently viewing this reply, mark as read immediately
+      const authorId = message?.authorId?._id || message?.authorId
+      const activeThread = useChatStore.getState().activeThread
+      if (
+        authorId &&
+        String(authorId) !== String(currentUserId) &&
+        activeThread &&
+        String(activeThread.rootMessageId) === String(resolvedRootId) &&
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible'
+      ) {
+        socket.emit('message:read', { messageId: message._id, channelId })
+        useNotificationStore.getState().syncReadState({ messageId: message._id })
       }
     }
   })
@@ -871,8 +887,10 @@ export function connectSocket() {
     }
   })
 
-  socket.on('notification:read:sync', ({ notificationId, channelId }) => {
-    useNotificationStore.getState().syncReadState({ notificationId, channelId })
+  socket.on('notification:read:sync', (payload) => {
+    if (payload) {
+      useNotificationStore.getState().syncReadState(payload)
+    }
   })
 
   socket.on('notification:unread:updated', ({ unreadCount }) => {

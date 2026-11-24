@@ -6,7 +6,7 @@ export function normalizeNotification(notification) {
   const conversationId = notification.conversationId || notification.channelId?._id || notification.channelId || null
   const conversationType = notification.conversationType
     || (notification.type === 'dm' ? 'dm' : 'channel')
-  const messageId = notification.messageId || notification.sourceId || null
+  const messageId = notification.messageId || notification.sourceId || notification.deepLink?.messageId || null
   const messagePreview = notification.messagePreview || notification.body || ''
 
   return {

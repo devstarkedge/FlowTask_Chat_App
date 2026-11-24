@@ -1493,6 +1493,11 @@ export default function ChatLayout() {
       if (data.sourceType === "message" && (data.messageId || data.sourceId)) {
         const messageId = asId(data.messageId || data.sourceId);
         if (messageId) {
+          const socket = getSocket();
+          if (socket && channelId) {
+            socket.emit("message:read", { messageId, channelId });
+          }
+          useNotificationStore.getState().syncReadState({ notificationId: data._id, messageId });
           useChatStore.getState().setHighlightMessageId(messageId);
           setTimeout(
             () => useChatStore.getState().setHighlightMessageId(null),

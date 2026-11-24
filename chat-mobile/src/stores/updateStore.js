@@ -20,7 +20,13 @@ export const isExpoGo =
 export const isUpdatesSupported = Boolean(Updates.isEnabled) && !isExpoGo && !isDev;
 
 export function getNativeAppVersion() {
-  return Constants.expoConfig?.version || '1.0.0';
+  return (
+    Constants.expoConfig?.version ||
+    Application.nativeApplicationVersion ||
+    Constants.manifest2?.extra?.expoClient?.version ||
+    Constants.manifest?.version ||
+    ''
+  );
 }
 
 export function getNativeBuildVersion() {
@@ -29,8 +35,23 @@ export function getNativeBuildVersion() {
       ? String(Constants.expoConfig.android.versionCode)
       : null) ||
     Constants.expoConfig?.ios?.buildNumber ||
-    '1'
+    Application.nativeBuildVersion ||
+    ''
   );
+}
+
+export function getRuntimeVersion() {
+  if (Updates.runtimeVersion) return Updates.runtimeVersion;
+  const rv = Constants.expoConfig?.runtimeVersion;
+  if (typeof rv === 'string') return rv;
+  if (rv?.policy === 'appVersion') return getNativeAppVersion();
+  if (rv?.policy === 'nativeVersion') {
+    const v = getNativeAppVersion();
+    const b = getNativeBuildVersion();
+    return b ? `${v} (${b})` : v;
+  }
+  if (rv?.policy) return rv.policy;
+  return getNativeAppVersion();
 }
 
 export function getRunningUpdateId() {
@@ -68,7 +89,7 @@ export const useUpdateStore = create((set, get) => ({
   nativeBuildVersion: getNativeBuildVersion(),
   runningUpdateId: getRunningUpdateId(),
   runningCreatedAt: Updates.createdAt ? Updates.createdAt.toISOString() : null,
-  runtimeVersion: Updates.runtimeVersion || Constants.expoConfig?.runtimeVersion?.policy || 'appVersion',
+  runtimeVersion: getRuntimeVersion(),
   channel: Updates.channel || 'production',
   isEmbeddedLaunch: Updates.isEmbeddedLaunch ?? true,
   isEmergencyLaunch: Updates.isEmergencyLaunch ?? false,
@@ -132,7 +153,7 @@ export const useUpdateStore = create((set, get) => ({
             const successData = {
               updateId: currentId,
               verifiedAt: new Date().toISOString(),
-              runtimeVersion: Updates.runtimeVersion || pendingVerification.runtimeVersion || 'appVersion',
+              runtimeVersion: Updates.runtimeVersion || pendingVerification.runtimeVersion || getRuntimeVersion(),
               nativeVersion: getNativeAppVersion(),
             };
 
@@ -239,7 +260,7 @@ export const useUpdateStore = create((set, get) => ({
           updateId,
           createdAt: manifest.createdAt ? new Date(manifest.createdAt) : new Date(),
           manifest,
-          runtimeVersion: manifest.runtimeVersion || Updates.runtimeVersion || 'appVersion',
+          runtimeVersion: manifest.runtimeVersion || Updates.runtimeVersion || getRuntimeVersion(),
         };
 
         const dismissedId = get().dismissedUpdateId;
@@ -328,7 +349,7 @@ export const useUpdateStore = create((set, get) => ({
         updateId: state.availableUpdate?.updateId || `ota-${Date.now().toString(36)}`,
         createdAt: new Date(),
         manifest: {},
-        runtimeVersion: state.runtimeVersion || 'appVersion',
+        runtimeVersion: state.runtimeVersion || getRuntimeVersion(),
       };
 
       set({
@@ -354,7 +375,7 @@ export const useUpdateStore = create((set, get) => ({
           updateId,
           createdAt: manifest.createdAt ? new Date(manifest.createdAt) : new Date(),
           manifest,
-          runtimeVersion: manifest.runtimeVersion || Updates.runtimeVersion || 'appVersion',
+          runtimeVersion: manifest.runtimeVersion || Updates.runtimeVersion || getRuntimeVersion(),
         };
 
         set({
@@ -396,8 +417,8 @@ export const useUpdateStore = create((set, get) => ({
         await storage.setJson(PENDING_UPDATE_STORAGE_KEY, {
           expectedUpdateId: targetUpdateId,
           requestedAt: new Date().toISOString(),
-          previousUpdateId: Updates.updateId || 'embedded',
-          runtimeVersion: Updates.runtimeVersion || 'appVersion',
+          previousUpdateId: Updates.updateId || null,
+          runtimeVersion: Updates.runtimeVersion || getRuntimeVersion(),
           nativeVersion: getNativeAppVersion(),
         });
       }
@@ -408,16 +429,16 @@ export const useUpdateStore = create((set, get) => ({
         // In dev / test mode: reload or complete simulated verification
         await new Promise((r) => setTimeout(r, 600));
         const successData = {
-          updateId: targetUpdateId || 'ota-simulated',
+          updateId: targetUpdateId || Updates.updateId || null,
           verifiedAt: new Date().toISOString(),
-          runtimeVersion: state.runtimeVersion || 'appVersion',
+          runtimeVersion: state.runtimeVersion || getRuntimeVersion(),
           nativeVersion: getNativeAppVersion(),
         };
         await storage.setJson(LAST_SUCCESSFUL_UPDATE_STORAGE_KEY, successData);
         await storage.removeItem(PENDING_UPDATE_STORAGE_KEY);
         set({
           status: 'update-success',
-          runningUpdateId: targetUpdateId || 'ota-simulated',
+          runningUpdateId: targetUpdateId || Updates.updateId || null,
           lastSuccessfulUpdate: successData,
           activeModal: 'success',
         });

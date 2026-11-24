@@ -207,7 +207,7 @@ export default function AboutUpdateSection() {
                 Downloading update…
               </Text>
               <Text style={styles.downloadingPercent}>
-                {downloadProgress !== null ? `${downloadProgress}%` : '45%'}
+                {downloadProgress !== null ? `${downloadProgress}%` : ''}
               </Text>
             </View>
 
@@ -217,7 +217,7 @@ export default function AboutUpdateSection() {
                   styles.progressBarFill,
                   {
                     backgroundColor: colors.primary,
-                    width: `${downloadProgress !== null ? downloadProgress : 45}%`,
+                    width: `${downloadProgress !== null ? Math.min(100, Math.max(0, downloadProgress)) : 0}%`,
                   },
                 ]}
               />

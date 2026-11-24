@@ -174,7 +174,7 @@ export default function UpdateModals() {
                           styles.progressBarFill,
                           {
                             backgroundColor: colors.primary,
-                            width: `${downloadProgress !== null ? downloadProgress : 45}%`,
+                            width: `${downloadProgress !== null ? Math.min(100, Math.max(0, downloadProgress)) : 0}%`,
                           },
                         ]}
                       />

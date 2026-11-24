@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import {
   Sparkles,
@@ -24,6 +25,7 @@ export default function AboutUpdateSection() {
   const status = useUpdateStore((state) => state.status);
   const nativeAppVersion = useUpdateStore((state) => state.nativeAppVersion);
   const runtimeVersion = useUpdateStore((state) => state.runtimeVersion);
+  const runningUpdateId = useUpdateStore((state) => state.runningUpdateId);
   const isExpoGo = useUpdateStore((state) => state.isExpoGo);
   const updatesEnabled = useUpdateStore((state) => state.isEnabled);
   const isEmbeddedLaunch = useUpdateStore((state) => state.isEmbeddedLaunch);
@@ -145,6 +147,27 @@ export default function AboutUpdateSection() {
             </Text>
             <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
               {isExpoGo ? 'Unavailable in Expo Go' : runtimeVersion || '1.0.0'}
+            </Text>
+          </View>
+
+          <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.metaRow}>
+            <Text style={[styles.metaLabel, { color: colors.textSecondary }]}>
+              Active Update ID:
+            </Text>
+            <Text
+              style={[
+                styles.metaValue,
+                {
+                  color: runningUpdateId ? (colors.primary || '#3b82f6') : colors.textTertiary,
+                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                  fontSize: moderateScale(11),
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {runningUpdateId || 'None (Embedded binary)'}
             </Text>
           </View>
 

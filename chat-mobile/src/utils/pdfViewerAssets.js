@@ -1,10 +1,22 @@
-import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
 import logger from './logger';
 
 const PDF_JS_MODULE = require('../../assets/pdfjs/pdf.min.txt');
 const PDF_WORKER_MODULE = require('../../assets/pdfjs/pdf.worker.min.txt');
 const VIEWER_DIR = `${FileSystem.cacheDirectory}pdf_preview/`;
+
+let _Asset = null;
+function getAssetClass() {
+  if (!_Asset) {
+    try {
+      const mod = require('expo-asset');
+      _Asset = mod.Asset || mod;
+    } catch (e) {
+      logger.warn('[pdfViewerAssets] expo-asset is not available:', e?.message);
+    }
+  }
+  return _Asset;
+}
 
 export const PDF_VIEWER_HTML = `<!DOCTYPE html>
 <html>
@@ -142,6 +154,10 @@ function toFileUri(path) {
 }
 
 async function copyAssetToCache(assetModule, destPath) {
+  const Asset = getAssetClass();
+  if (!Asset) {
+    throw new Error('ExpoAsset native module is not available on this device');
+  }
   const asset = Asset.fromModule(assetModule);
   await asset.downloadAsync();
   await FileSystem.copyAsync({ from: asset.localUri, to: destPath });

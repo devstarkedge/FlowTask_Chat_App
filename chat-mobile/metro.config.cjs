@@ -1,3 +1,8 @@
+const fs = require('fs');
+try {
+  require('graceful-fs').gracefulify(fs);
+} catch (e) {}
+
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
@@ -20,9 +25,18 @@ config.watchFolders = [path.resolve(projectRoot)];
 // exported bundles are not app sources; match their absolute paths as Metro does.
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const rootPattern = projectRoot.split(/[\\/]/).map(escape).join('[\\\\/]');
-const generatedFolders = new RegExp(`^${rootPattern}[\\\\/](?:dist(?:_[^\\\\/]+)?|coverage|\\.verification-[^\\\\/]+|android[\\\\/](?:\\.gradle|build|app[\\\\/]build)|ios[\\\\/](?:Pods|build))(?:[\\\\/]|$)`);
+const generatedFolders = new RegExp(`^${rootPattern}[\\\\/](?:dist(?:_[^\\\\/]+)?|coverage|\\.expo|\\.verification-[^\\\\/]+|android[\\\\/](?:\\.gradle|build|app[\\\\/]build)|ios[\\\\/](?:Pods|build))(?:[\\\\/]|$)`);
+
+const parentDir = path.resolve(projectRoot, '..');
+const parentPattern = parentDir.split(/[\\/]/).map(escape).join('[\\\\/]');
+const siblingFolders = new RegExp(`^${parentPattern}[\\\\/](?:chat-desktop|chat-desktop\\(mac\\)|client|server|admin|docs|shared|huddle-media|node_modules)(?:[\\\\/]|$)`);
+
 const existingBlockList = config.resolver.blockList || [];
-config.resolver.blockList = [...(Array.isArray(existingBlockList) ? existingBlockList : [existingBlockList]), generatedFolders];
+config.resolver.blockList = [
+  ...(Array.isArray(existingBlockList) ? existingBlockList : [existingBlockList]),
+  generatedFolders,
+  siblingFolders,
+];
 if (process.platform === 'win32') config.maxWorkers = 2;
 
 // Ensure .jsx is recognized

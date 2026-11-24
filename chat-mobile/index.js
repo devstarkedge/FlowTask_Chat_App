@@ -6,6 +6,7 @@ LogBox.ignoreLogs([
   'expo-notifications: Android Push notifications',
   '`expo-notifications` functionality is not fully supported in Expo Go',
   'Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go',
+  'No native ExponentConstants module found',
 ]);
 
 import App from './App';

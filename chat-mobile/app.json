@@ -2,7 +2,7 @@
   "expo": {
     "name": "TaskChat",
     "slug": "chat-mobile-js",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "scheme": "flowtaskchat",
     "icon": "./assets/icon.png",

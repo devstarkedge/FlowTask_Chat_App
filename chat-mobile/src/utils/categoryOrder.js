@@ -104,3 +104,13 @@ export function buildCategoryOrdersFromList(reorderedCategories = []) {
     order: index,
   }));
 }
+
+export const CUSTOM_CATEGORY_ICON = '📁';
+
+export function getCategoryIcon(category) {
+  if (category?.type === 'department') {
+    return category?.icon || '📁';
+  }
+  return CUSTOM_CATEGORY_ICON;
+}
+

@@ -17,7 +17,7 @@ import { useUIStore } from "../stores/uiStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
-import { sortCategoriesByOrder } from "../utils/categoryOrder";
+import { sortCategoriesByOrder, getCategoryIcon } from "../utils/categoryOrder";
 import { useChannelStore } from "../stores/channelStore";
 import { disconnectSocket } from "../services/socket";
 import ManageCategoryChannelsModal from "./ManageCategoryChannelsModal";
@@ -491,7 +491,7 @@ const DrawerNavigation = ({ navigation }) => {
               <React.Fragment key={cat._id}>
                 <View style={[styles.sep, { backgroundColor: colors.primaryOverlayLight }]} />
                 <SectionHeader
-                  title={`${cat.icon || '📁'} ${cat.name}`}
+                  title={`${getCategoryIcon(cat)} ${cat.name}`}
                   isExpanded={isExpanded}
                   onToggle={() => setExpandedCategories(p => ({ ...p, [cat._id]: !isExpanded }))}
                   onMenu={!isDepartment ? () => handleCategoryAction(cat) : undefined}

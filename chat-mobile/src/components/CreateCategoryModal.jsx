@@ -38,6 +38,7 @@ import DraggableOrderList from './DraggableOrderList';
 import {
   buildCategoryOrdersFromDepts,
   sortDepartmentsByCategoryOrder,
+  CUSTOM_CATEGORY_ICON,
 } from '../utils/categoryOrder';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { isChatAppChannel } from '../utils/channelOrigin';
@@ -75,9 +76,6 @@ const Chip = ({ channel, onRemove, colors }) => (
   </View>
 );
 
-// ─── EMOJI cycle list ─────────────────────────────────────────────────────────
-const EMOJI_LIST = ['✨', '📁', '🎯', '🚀', '💡', '📌', '🔖', '🗂️', '📊', '🎨', '🏆', '💼'];
-
 export default function CreateCategoryModal({ visible, onClose }) {
   const { colors } = useThemeStore();
   const { width: screenWidth } = useWindowDimensions();
@@ -97,7 +95,6 @@ export default function CreateCategoryModal({ visible, onClose }) {
   const [isDraggingDept, setIsDraggingDept] = useState(false);
   const deptSeq = useRef(0);
   const [customName, setCustomName] = useState('');
-  const [customIcon, setCustomIcon] = useState('✨');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannels, setSelectedChannels] = useState([]);
@@ -250,7 +247,6 @@ export default function CreateCategoryModal({ visible, onClose }) {
       else setCategoryType('department');
 
       setCustomName('');
-      setCustomIcon('✨');
       setSearchQuery('');
       setSelectedChannels([]);
       setStep(1);
@@ -321,7 +317,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
           name: customName.trim(),
           type: 'custom',
           departmentId: null,
-          icon: customIcon,
+          icon: CUSTOM_CATEGORY_ICON,
         });
         const newCat = res.data?.data;
         if (selectedChannels.length > 0 && newCat?._id) {
@@ -427,7 +423,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
                   onPress={() => setCategoryType('custom')}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.typeCardEmoji}>✨</Text>
+                  <Text style={styles.typeCardEmoji}>{CUSTOM_CATEGORY_ICON}</Text>
                   <Text style={[styles.typeCardLabel, { color: categoryType === 'custom' ? colors.primary : colors.textPrimary }]}>
                     Custom
                   </Text>
@@ -627,29 +623,7 @@ export default function CreateCategoryModal({ visible, onClose }) {
                     autoCapitalize="words"
                     returnKeyType="done"
                   />
-                  <Text style={styles.emojiText}>{customIcon}</Text>
-                </View>
-
-                {/* Emoji Select List */}
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CHOOSE EMOJI ICON</Text>
-                <View style={styles.emojiScrollRow}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.emojiListContent}>
-                    {EMOJI_LIST.map((emoji) => (
-                      <TouchableOpacity
-                        key={emoji}
-                        style={[
-                          styles.emojiSelectBtn,
-                          {
-                            backgroundColor: colors.backgroundSecondary,
-                            borderColor: customIcon === emoji ? colors.primary : colors.border,
-                          },
-                        ]}
-                        onPress={() => setCustomIcon(emoji)}
-                      >
-                        <Text style={styles.emojiSelectText}>{emoji}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                  <Text style={styles.emojiText}>{CUSTOM_CATEGORY_ICON}</Text>
                 </View>
               </View>
             )}
@@ -1027,31 +1001,7 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(15),
     padding: 0,
   },
-  emojiBtn: {
-    padding: scale(2),
-  },
   emojiText: {
-    fontSize: moderateScale(22),
-  },
-  emojiScrollRow: {
-    flexDirection: 'row',
-    height: verticalScale(54),
-    marginTop: verticalScale(4),
-  },
-  emojiListContent: {
-    alignItems: 'center',
-    gap: scale(12),
-    paddingRight: scale(10),
-  },
-  emojiSelectBtn: {
-    width: scale(42),
-    height: scale(42),
-    borderRadius: scale(21),
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emojiSelectText: {
     fontSize: moderateScale(22),
   },
 

@@ -20,7 +20,7 @@ import AccountDrawer from "../components/AccountDrawer";
 import CreateNewBottomSheet from "../components/CreateNewBottomSheet";
 import CreateCategoryModal from "../components/CreateCategoryModal";
 import ReorderCategoriesModal from "../components/ReorderCategoriesModal";
-import { getChannelsForDepartmentCategory, getHomeVisibleCategories } from "../utils/categoryOrder";
+import { getChannelsForDepartmentCategory, getHomeVisibleCategories, getCategoryIcon } from "../utils/categoryOrder";
 import CreateChannelModal from "../components/CreateChannelModal";
 import ManageCategoryChannelsModal from "../components/ManageCategoryChannelsModal";
 import CategoryActionSheet from "../components/CategoryActionSheet";
@@ -151,7 +151,7 @@ const HomeScreen = ({ navigation }) => {
       result.push({
         key: `cat_${cat._id}`,
         title: cat.name,
-        emojiIcon: cat.icon || '📁',
+        emojiIcon: getCategoryIcon(cat),
         icon: null,
         data: sectionsExpanded[`cat_${cat._id}`] !== false ? [cat] : [],
         type: "category_parent",

@@ -17,6 +17,7 @@ import { useChannelStore } from '../stores/channelStore';
 import {
   buildCategoryOrdersFromList,
   sortCategoriesByOrder,
+  getCategoryIcon,
 } from '../utils/categoryOrder';
 import DraggableOrderList from './DraggableOrderList';
 import { moderateScale, scale, verticalScale } from '../utils/responsive';
@@ -141,7 +142,7 @@ export default function ReorderCategoriesModal({ visible, onClose, visibleCatego
                             color={rowDragging ? colors.primary : colors.textTertiary}
                           />
                         </View>
-                        <Text style={styles.emoji}>{item.icon || '📁'}</Text>
+                        <Text style={styles.emoji}>{getCategoryIcon(item)}</Text>
                         <Text
                           style={[styles.name, { color: colors.textPrimary }]}
                           numberOfLines={1}

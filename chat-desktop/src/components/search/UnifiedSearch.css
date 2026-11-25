@@ -313,12 +313,18 @@
   line-height: 1.4;
   caret-color: var(--text-primary) !important;
   -webkit-text-fill-color: var(--text-primary) !important;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .global-search__control input::placeholder {
   color: var(--text-secondary) !important;
   opacity: 1 !important;
   -webkit-text-fill-color: var(--text-secondary) !important;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .global-search__control input:focus {
@@ -366,6 +372,8 @@
   font-weight: 600;
   letter-spacing: 0.01em;
   pointer-events: none;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .global-search__actions {
@@ -941,18 +949,30 @@
 
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 
-@media (max-width: 1024px) {
+@media (max-width: 1199px) {
   .global-search {
-    max-width: 560px;
+    max-width: 290px;
+  }
+}
+
+@media (max-width: 879px) {
+  .global-search {
+    max-width: 220px;
+  }
+}
+
+@media (max-width: 680px) {
+  .global-search {
+    max-width: 180px;
   }
 }
 
 @media (max-width: 768px) {
-  .global-search {
+  body:not(.is-electron) .global-search {
     max-width: none;
   }
 
-  .global-search__panel {
+  body:not(.is-electron) .global-search__panel {
     position: fixed;
     inset: 0;
     width: 100vw;
@@ -962,6 +982,12 @@
     margin: 0;
     padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     animation: none;
+  }
+
+  .is-electron .global-search__panel {
+    inset: auto;
+    right: auto;
+    bottom: auto;
   }
 
   .global-search__mobile-header {
@@ -1054,7 +1080,7 @@
   }
 
   .global-search-row__reason,
-  .global-search__kbd {
+  body:not(.is-electron) .global-search__kbd {
     display: none;
   }
 
@@ -1103,6 +1129,17 @@
   --search-kbd-surface: color-mix(in srgb, var(--sidebar-text, #fff) 12%, transparent);
   --search-kbd-text: var(--sidebar-text-dim, rgba(255,255,255,0.6));
   --search-icon-surface: color-mix(in srgb, var(--sidebar-text, #fff) 14%, transparent);
+
+  /* Responsive dynamic sizing & centering */
+  width: clamp(320px, 30vw, 460px);
+  max-width: 460px;
+  min-width: 160px;
+  margin: 0 auto;
+  transition: width 160ms ease, max-width 160ms ease;
+}
+
+.cl-topbar .global-search__kbd {
+  display: inline-flex !important;
 }
 
 .cl-topbar .global-search__control {

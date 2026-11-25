@@ -132,9 +132,12 @@ const LAYOUT_STYLES = `
   -webkit-app-region: drag;
 }
 
+.cl-topbar__search-wrap {
+  -webkit-app-region: drag;
+}
+
 .cl-topbar__nav-btn,
 .cl-topbar__workspace,
-.cl-topbar__search-wrap,
 .cl-topbar__actions,
 .cl-topbar__action-btn,
 .cl-topbar__win-btn,

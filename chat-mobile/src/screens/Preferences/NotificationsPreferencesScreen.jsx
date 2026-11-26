@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, HelpCircle, ChevronRight, Bell, Smartphone, MessageCircle, Headphones, Grid, Key } from "lucide-react-native";
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
+import { useNotificationPrefStore } from '../../stores/notificationPrefStore';
 import { OptionsSelectionModal } from '../../components/common';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { useTranslation } from '../../utils/i18n';
@@ -44,11 +45,16 @@ const NOTIF_OPTIONS = {
 const NotificationsPreferencesScreen = ({ navigation }) => {
   const { colors } = useThemeStore();
   const prefs = usePreferencesStore();
+  const notificationPrefs = useNotificationPrefStore();
   const { t } = useTranslation();
 
   const [activePicker, setActivePicker] = useState(null);
 
-  const renderSwitchRow = (icon, label, valueKey) => (
+  useEffect(() => {
+    useNotificationPrefStore.getState().fetchPreferences();
+  }, []);
+
+  const renderSwitchRow = (icon, label, valueKey, override = {}) => (
     <View style={[styles.row, { borderBottomColor: colors.border }]}>
       <View style={styles.rowLeft}>
         {icon}
@@ -57,8 +63,8 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
         </View>
       </View>
       <Switch 
-        value={prefs[valueKey]} 
-        onValueChange={() => prefs.togglePreference(valueKey)} 
+        value={typeof override.value === 'boolean' ? override.value : prefs[valueKey]}
+        onValueChange={override.onValueChange || (() => prefs.togglePreference(valueKey))}
         trackColor={{ false: colors.border, true: colors.primary }}
         thumbColor="#FFFFFF"
       />
@@ -105,7 +111,15 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.content}>
         
         {renderSectionTitle('How to notify you')}
-        {renderSwitchRow(<Smartphone size={22} color={colors.textSecondary} />, 'Mobile notifications', 'notifMobileNotifications')}
+        {renderSwitchRow(
+          <Smartphone size={22} color={colors.textSecondary} />,
+          'Mobile notifications',
+          'notifMobileNotifications',
+          {
+            value: notificationPrefs.preferences?.global?.mobilePush !== false,
+            onValueChange: value => notificationPrefs.updateGlobal('mobilePush', value).catch(() => {}),
+          },
+        )}
         
         <View style={styles.divider} />
 

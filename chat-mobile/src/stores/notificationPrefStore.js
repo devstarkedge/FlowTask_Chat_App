@@ -124,6 +124,27 @@ export const useNotificationPrefStore = create((set, get) => ({
     }
   },
 
+  updateGlobal: async (key, value) => {
+    const previous = get().preferences;
+    set((state) => ({
+      preferences: {
+        ...state.preferences,
+        global: { ...state.preferences?.global, [key]: value },
+      },
+      isLoading: true,
+      error: null,
+    }));
+    try {
+      const response = await notificationPrefAPI.update({ global: { [key]: value } });
+      const prefs = response.data?.data || response.data || {};
+      set({ preferences: prefs, isLoading: false });
+    } catch (error) {
+      set({ preferences: previous, isLoading: false, error: error.message });
+      logger.error('Failed to update global notification preference:', error);
+      throw error;
+    }
+  },
+
   pauseNotifications: async (duration) => {
     set({ isLoading: true });
     try {

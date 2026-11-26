@@ -16,7 +16,7 @@ import {
   AlertTriangle,
   RotateCcw,
 } from 'lucide-react-native';
-import { useUpdateStore } from '../../stores/updateStore';
+import { formatShortId, useUpdateStore } from '../../stores/updateStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { scale, moderateScale, verticalScale } from '../../utils/responsive';
 
@@ -41,8 +41,19 @@ export default function AboutUpdateSection() {
   const downloadUpdate = useUpdateStore((state) => state.downloadUpdate);
   const restartApp = useUpdateStore((state) => state.restartApp);
 
-  const handleCheck = () => {
-    checkForUpdate({ isManual: true });
+  const handleCheck = async () => {
+    try {
+      await checkForUpdate({ isManual: true });
+    } catch (checkError) {
+      // Keep unexpected updater rejections inside the screen instead of
+      // allowing an unhandled promise rejection to take down the app.
+      useUpdateStore.setState({
+        status: 'error',
+        errorType: 'check',
+        error: checkError?.message || 'Unable to check for updates. Please try again.',
+        activeModal: 'none',
+      });
+    }
   };
 
   return (
@@ -154,20 +165,14 @@ export default function AboutUpdateSection() {
 
           <View style={styles.metaRow}>
             <Text style={[styles.metaLabel, { color: colors.textSecondary }]}>
-              Active Update ID:
+              Installed Update:
             </Text>
-            <Text
-              style={[
-                styles.metaValue,
-                {
-                  color: runningUpdateId ? (colors.primary || '#3b82f6') : colors.textTertiary,
-                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                  fontSize: moderateScale(11),
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {runningUpdateId || 'None (Embedded binary)'}
+            <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
+              {runningUpdateId
+                ? formatShortId(runningUpdateId)
+                : isEmbeddedLaunch
+                  ? 'Embedded build'
+                  : 'Unknown'}
             </Text>
           </View>
 

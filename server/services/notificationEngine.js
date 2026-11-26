@@ -434,6 +434,22 @@ class NotificationEngine {
 
     // 14. Send push to configured devices. For attendance each client handles its own focus.
     const shouldSendPush = isAttendanceReport || (!isViewingSameChat && (isAway || isOffline || isWindowBlurred));
+    const mobilePushEnabled = shouldSendMobilePush({ mobilePushEnabled: prefs.global?.mobilePush });
+    logger.info('NotificationEngine: delivery decision', {
+      notificationId: notification._id?.toString(),
+      eventKey,
+      recipientId: recipientIdStr,
+      workspaceId,
+      channelId: channelIdStr,
+      isOnline,
+      isViewingSameChat,
+      isAway,
+      isOffline,
+      isWindowBlurred,
+      desktopPushEnabled: Boolean(prefs.global?.desktopPush),
+      mobilePushEnabled,
+      route: shouldSendPush ? 'all-enabled-push' : mobilePushEnabled ? 'mobile-independent' : 'socket-only',
+    });
     if (shouldSendPush) {
       const push = this._sendPush(recipientIdStr, notification, prefs, attendanceDelivery).catch((err) => {
         logger.warn('NotificationEngine: push send failed', {
@@ -442,9 +458,7 @@ class NotificationEngine {
         });
       });
       if (isAttendanceReport) await push;
-    } else if (shouldSendMobilePush({
-      mobilePushEnabled: prefs.global?.mobilePush,
-    })) {
+    } else if (mobilePushEnabled) {
       // Keep existing web/FCM presence behavior. Expo push is independent so a
       // connected desktop/web session or an open chat cannot silence the phone.
       this._sendPush(recipientIdStr, notification, prefs, attendanceDelivery, {

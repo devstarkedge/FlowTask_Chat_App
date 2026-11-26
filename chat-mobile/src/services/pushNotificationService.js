@@ -159,6 +159,19 @@ export function registerForPushNotifications() {
   const owner = session();
   if (!owner.userId || !owner.accessToken) return Promise.resolve(null);
   if (_registration?.userId === owner.userId) return _registration.promise;
+  // A physical installation has one active account binding on the server.
+  // Serialize account switches so a slow registration for the previous account
+  // cannot finish after (and steal the token back from) the new account.
+  if (_registration) {
+    _registration.refreshPending = true;
+    trace('registration_deferred', { userId: owner.userId });
+    return _registration.promise.then(() => {
+      const latest = session();
+      return latest.userId && latest.accessToken
+        ? registerForPushNotifications()
+        : null;
+    });
+  }
   const generation = _generation;
   const current = () => generation === _generation && session().userId === owner.userId
     && Boolean(session().accessToken);
@@ -166,7 +179,9 @@ export function registerForPushNotifications() {
     if (_registration?.promise === promise) {
       const refreshPending = _registration.refreshPending;
       _registration = null;
-      if (refreshPending && current()) void registerForPushNotifications();
+      // Read the live auth state: the original owner may have logged out while
+      // this request was running, and the current account still needs binding.
+      if (refreshPending) void registerForPushNotifications();
     }
   });
   _registration = { userId: owner.userId, promise };
@@ -273,7 +288,9 @@ async function _register(owner, current) {
  * Unregister the push token from the server and remove listeners.
  * Call this on logout.
  */
-export async function unregisterPushNotifications() {
+export async function unregisterPushNotifications({ expectedUserId } = {}) {
+  const owner = session();
+  const revokingUserId = expectedUserId || owner.userId;
   _generation++;
   _lastNativeToken = null;
   _pendingResponse = null;
@@ -287,7 +304,9 @@ export async function unregisterPushNotifications() {
     if (registration?.requestStarted) await registration.promise;
     else _registration = null;
     const token = await storage.getItem(PUSH_TOKEN_KEY);
-    if (token) {
+    // A delayed logout from A must not use the currently active B session to
+    // revoke this installation after it has already been rebound to B.
+    if (token && revokingUserId && session().userId === revokingUserId) {
       const response = await pushAPI.removeToken(token);
       if (response?.data?.success !== true) throw new Error('Push removal was not confirmed');
     }

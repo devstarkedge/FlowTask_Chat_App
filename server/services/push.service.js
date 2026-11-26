@@ -302,14 +302,23 @@ export async function sendViaExpo(userId, payload) {
     // Filter for Expo push tokens (platform === 'expo')
     const expoTokens = allTokens
       .filter((t) => t.platform === 'expo' && t.token)
-      .map((t) => t.token);
+      .map((t) => ({ token: t.token, deviceId: t.deviceId || null }));
 
-    logger.debug('Expo token lookup', { userId, notificationId: payload.data?.notificationId, devices: expoTokens.length });
+    logger.info('Expo push registration lookup', {
+      userId,
+      notificationId: payload.data?.notificationId,
+      devices: expoTokens.length,
+      installations: expoTokens.map(({ token, deviceId }) => ({
+        deviceId,
+        tokenFingerprint: tokenFingerprint(token).slice(0, 16),
+      })),
+    });
     if (expoTokens.length === 0) return { sent: 0, reason: 'no_expo_tokens' };
 
     // Build Expo push messages
     const messages = [];
-    for (const token of expoTokens) {
+    const traceByToken = new Map();
+    for (const { token, deviceId } of expoTokens) {
       if (!Expo.isExpoPushToken(token)) {
         logger.warn('Invalid Expo push token', { userId, provider: 'expo' });
         continue;
@@ -326,6 +335,11 @@ export async function sendViaExpo(userId, payload) {
         ...(Number.isFinite(payload.ttl) ? {ttl:payload.ttl} : {}),
         priority: payload.data?.priority === 'high' ? 'high' : 'default',
       });
+      // Keep provider metadata outside the Expo payload.
+      traceByToken.set(token, {
+        deviceId,
+        tokenFingerprint: tokenFingerprint(token).slice(0, 16),
+      });
     }
 
     if (messages.length === 0) return { sent: 0 };
@@ -341,9 +355,22 @@ export async function sendViaExpo(userId, payload) {
         const pendingReceipts = [];
         for (let i = 0; i < tickets.length; i++) {
           const receipt = tickets[i];
+          const traceInfo = traceByToken.get(chunk[i]?.to) || {};
+          logger.info('Expo push provider ticket', {
+            userId,
+            notificationId: payload.data?.notificationId,
+            deviceId: traceInfo.deviceId,
+            tokenFingerprint: traceInfo.tokenFingerprint,
+            status: receipt?.status || 'missing',
+            code: receipt?.details?.error || undefined,
+          });
           if (receipt.status === 'ok') {
             sent++;
-            if (receipt.id) pendingReceipts.push({ id: receipt.id, tokenHash: tokenFingerprint(chunk[i].to) });
+            if (receipt.id) pendingReceipts.push({
+              id: receipt.id,
+              tokenHash: tokenFingerprint(chunk[i].to),
+              deviceId: traceInfo.deviceId,
+            });
           } else if (receipt.status === 'error') {
             if (receipt.details?.error === 'DeviceNotRegistered') {
               expiredTokens.push(chunk[i].to);
@@ -382,7 +409,13 @@ export async function checkExpoReceipts(userId, pending, notificationId) {
       const receipt = receipts[id];
       const code = receipt?.details?.error;
       logger[receipt?.status === 'ok' ? 'debug' : 'warn']('Expo delivery receipt', {
-        userId, notificationId, receiptId: id, status: receipt?.status || 'missing', code,
+        userId,
+        notificationId,
+        receiptId: id,
+        deviceId: entriesById.get(id)?.deviceId,
+        tokenFingerprint: entriesById.get(id)?.tokenHash?.slice(0, 16),
+        status: receipt?.status || 'missing',
+        code,
       });
       if (code === 'DeviceNotRegistered') {
         const entry = entriesById.get(id);

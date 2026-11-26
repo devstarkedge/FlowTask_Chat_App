@@ -129,6 +129,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   logout: async () => {
+    const logoutUserId = get().user?._id || get().user?.id || null;
     console.log('[Logout] Starting complete logout cleanup...');
     try {
       const { stopProactiveRefresh } = require('../services/tokenRefreshScheduler');
@@ -136,7 +137,7 @@ export const useAuthStore = create((set, get) => ({
     } catch (_) {}
     // Remove the installation while its token and authenticated session still exist.
     const { unregisterPushNotifications } = await import('../services/pushNotificationService');
-    await unregisterPushNotifications();
+    await unregisterPushNotifications({ expectedUserId: logoutUserId });
     try {
       const refreshToken = get().refreshToken;
       if (refreshToken) {

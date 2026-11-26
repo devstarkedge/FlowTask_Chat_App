@@ -153,7 +153,20 @@ notificationPreferenceSchema.statics.getOrCreate = async function (userId, works
     pref = await this.create({ userId, workspaceId });
     pref = pref.toObject();
   }
-  return pref;
+  // `lean()` skips Mongoose defaults. Older preference documents predate
+  // some push fields, so merge the defaults explicitly or `undefined` would
+  // be treated as a disabled push setting by notification delivery.
+  return {
+    ...pref,
+    global: {
+      enabled: true,
+      sound: true,
+      desktopPush: true,
+      mobilePush: true,
+      emailDigest: false,
+      ...(pref.global || {}),
+    },
+  };
 };
 
 /**

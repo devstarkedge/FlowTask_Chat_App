@@ -1,4 +1,4 @@
-/** Mobile push delivery follows the user's mobile preference, independent of presence. */
+/** Missing legacy preference fields use the enabled schema default. */
 export function shouldSendMobilePush({ mobilePushEnabled }) {
-  return Boolean(mobilePushEnabled);
+  return mobilePushEnabled !== false;
 }

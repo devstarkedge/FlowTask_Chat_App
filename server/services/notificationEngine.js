@@ -18,6 +18,7 @@ import {
 } from '../config/constants.js';
 import { stripHtml, truncate } from '../utils/sanitize.js';
 import { getAttachmentPreview } from '../utils/getNotificationPreview.js';
+import { shouldSendMobilePush } from '../utils/mobilePushDelivery.js';
 
 /**
  * Notification Engine — the central brain for all notification decisions.
@@ -441,6 +442,21 @@ class NotificationEngine {
         });
       });
       if (isAttendanceReport) await push;
+    } else if (shouldSendMobilePush({
+      mobilePushEnabled: prefs.global?.mobilePush,
+    })) {
+      // Keep existing web/FCM presence behavior. Expo push is independent so a
+      // connected desktop/web session or an open chat cannot silence the phone.
+      this._sendPush(recipientIdStr, notification, prefs, attendanceDelivery, {
+        web: false,
+        fcm: false,
+        expo: true,
+      }).catch((err) => {
+        logger.warn('NotificationEngine: mobile push send failed', {
+          recipientId: recipientIdStr,
+          error: err?.message || err,
+        });
+      });
     }
 
     return { sent: true, notificationId: notification._id };
@@ -736,10 +752,15 @@ class NotificationEngine {
    * Send push notification (Web Push + FCM + Expo).
    * @private
    */
-  async _sendPush(recipientId, notification, prefs, attendanceDelivery = null) {
+  async _sendPush(recipientId, notification, prefs, attendanceDelivery = null, channels = {}) {
     let accepted = 0;
+    const sendWeb = channels.web !== false;
+    const sendFCM = channels.fcm !== false;
+    const sendExpo = channels.expo !== false;
     // Skip if no push channel is enabled
-    if (!prefs.global?.desktopPush && !prefs.global?.mobilePush) return;
+    if (!(sendWeb && prefs.global?.desktopPush)
+      && !(sendFCM && prefs.global?.mobilePush)
+      && !(sendExpo && prefs.global?.mobilePush)) return;
 
     const payload = {
       title: notification.title,
@@ -761,7 +782,7 @@ class NotificationEngine {
     };
 
     // Send via Web Push (VAPID) — desktop browsers
-    if (prefs.global?.desktopPush) {
+    if (sendWeb && prefs.global?.desktopPush) {
       try {
         const result = await pushService.sendToUser(recipientId, payload);
         accepted += result.sent || 0;
@@ -773,7 +794,7 @@ class NotificationEngine {
     }
 
     // Send via FCM — Android/iOS when Firebase is configured
-    if (prefs.global?.mobilePush) {
+    if (sendFCM && prefs.global?.mobilePush) {
       try {
         const result = await pushService.sendViaFCM(recipientId, payload);
         accepted += result.sent || 0;
@@ -785,7 +806,7 @@ class NotificationEngine {
     }
 
     // Send via Expo Push — mobile app (expo-server-sdk)
-    if (prefs.global?.mobilePush) {
+    if (sendExpo && prefs.global?.mobilePush) {
       try {
         const result = await pushService.sendViaExpo(recipientId, payload);
         accepted += result.sent || 0;

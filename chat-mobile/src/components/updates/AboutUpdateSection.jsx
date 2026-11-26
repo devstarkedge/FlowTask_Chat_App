@@ -203,7 +203,8 @@ export default function AboutUpdateSection() {
           >
             <CheckCircle2 size={16} color={colors.success || '#10b981'} style={styles.bannerIcon} />
             <Text style={[styles.bannerText, { color: colors.success || '#10b981' }]}>
-              TaskChat is up to date (version {nativeAppVersion}).
+              No new OTA update is available for {channel || 'this channel'}
+              {runtimeVersion ? ` (runtime ${runtimeVersion})` : ''}.
             </Text>
           </View>
         )}

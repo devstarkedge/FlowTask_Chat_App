@@ -38,7 +38,7 @@ function fixture(os = 'android') {
     'expo-constants': { default: { expoConfig: { extra: { eas: { projectId: 'fixture-project' } } } } },
     'expo-notifications': notifications,
     './storage': { __esModule: true, default: { getItem: async key => saved.get(key), setItem: async (key, value) => saved.set(key, value), removeItem: async key => saved.delete(key) } },
-    './api': { pushAPI: { registerToken: async (...args) => { calls.push(['register', ...args]); return { status: 200, data: { success: registrationSuccess } }; },
+    './api': { pushAPI: { registerToken: async (...args) => { calls.push(['register', ...args, auth.accessToken]); return { status: 200, data: { success: registrationSuccess } }; },
       removeToken: async value => { calls.push(['remove', value, auth.accessToken]); return { data: { success: true } }; } } },
     '../utils/logger': { __esModule: true, default: Object.fromEntries(['info', 'warn', 'error'].map(key => [key, (...args) => logs.push(args)])) },
     '../constants/notificationSounds': { ANDROID_NOTIFICATION_SOUND: 'default', IOS_NOTIFICATION_SOUND: 'test.wav', getNotificationSound: () => 'default' },
@@ -79,6 +79,19 @@ function fixture(os = 'android') {
     assert.ok(!JSON.stringify(f.logs).includes('ExpoPushToken['));
     console.log(`PASS ${os}: permission/channel order, unchanged-token confirmation, unique installation, refresh uses Expo token, authenticated removal`);
   }
+  const switched = fixture();
+  const firstToken = await switched.service.registerForPushNotifications();
+  const firstRegistration = switched.calls.find(call => call[0] === 'register');
+  switched.auth.user = { _id: 'second-recipient' };
+  switched.auth.accessToken = 'second-session';
+  assert.equal(await switched.service.registerForPushNotifications(), firstToken);
+  const registrations = switched.calls.filter(call => call[0] === 'register');
+  assert.equal(registrations.length, 2);
+  assert.equal(registrations[0][2], registrations[1][2], 'account switch must retain the physical installation ID');
+  assert.equal(registrations[0][4], 'test-session');
+  assert.equal(registrations[1][4], 'second-session');
+  console.log('PASS account switch re-registers the installation under the newly authenticated user');
+
   const denied = fixture(); denied.setPermission({ status: 'denied', canAskAgain: false });
   assert.equal(await denied.service.registerForPushNotifications(), null);
   assert.ok(!denied.calls.some(x => ['request', 'expo-token', 'register'].includes(x[0])));

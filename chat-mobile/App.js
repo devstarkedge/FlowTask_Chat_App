@@ -190,9 +190,9 @@ export default function App() {
     return () => subscription.remove();
   }, [accessToken, activeWorkspaceId]);
 
-  // Register for push notifications once auth + workspace are ready
+  // Push tokens belong to the signed-in account/device, not to a workspace.
   useEffect(() => {
-    if (accessToken && activeWorkspaceId) {
+    if (accessToken && userId) {
       registerForPushNotifications();
       handlePushNavigationReady();
       const appState = AppState.addEventListener('change', state => {
@@ -206,7 +206,7 @@ export default function App() {
       });
       return () => { appState.remove(); unsubscribeNetwork(); };
     }
-  }, [accessToken, activeWorkspaceId]);
+  }, [accessToken, userId]);
 
   // Wire navigation ref to push service
   useEffect(() => {

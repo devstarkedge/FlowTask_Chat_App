@@ -74,12 +74,18 @@ export const useNotificationStore = create(
   markAsRead: async (notificationId) => {
     try {
       await api.post(`/notifications/${notificationId}/read`);
-      set((state) => ({
-        notifications: state.notifications.map(n =>
-          n._id === notificationId ? { ...n, read: true, isRead: true } : n
-        ),
-        unreadCount: Math.max(0, state.unreadCount - 1),
-      }));
+      set((state) => {
+        const target = state.notifications.find((notification) => notification._id === notificationId);
+        const wasUnread = target && !target.isRead && !target.read;
+        return {
+          notifications: state.notifications.map((notification) =>
+            notification._id === notificationId
+              ? { ...notification, read: true, isRead: true }
+              : notification,
+          ),
+          unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+        };
+      });
     } catch (error) {
       logger.error('Failed to mark notification as read:', error);
     }
@@ -122,6 +128,53 @@ export const useNotificationStore = create(
       ),
       unreadCount: Math.max(0, state.unreadCount - (state.notifications.find((n) => n._id === notificationId && !n.isRead && !n.read) ? 1 : 0)),
     }));
+  },
+
+  /**
+   * Apply server read-sync events from any TaskChat client/device.
+   * Events may identify notifications directly, by their source message,
+   * by channel, or mark the workspace's notifications all read.
+   */
+  syncReadState: ({ notificationId, notificationIds, messageId, messageIds, channelId, allRead, allChannelRead } = {}) => {
+    const notificationIdSet = new Set(
+      [notificationId, ...(Array.isArray(notificationIds) ? notificationIds : [])]
+        .filter(Boolean)
+        .map(String),
+    );
+    const messageIdSet = new Set(
+      [messageId, ...(Array.isArray(messageIds) ? messageIds : [])]
+        .filter(Boolean)
+        .map(String),
+    );
+    const hasSpecificTarget = notificationIdSet.size > 0 || messageIdSet.size > 0;
+
+    set((state) => {
+      let unreadDelta = 0;
+      const notifications = state.notifications.map((notification) => {
+        if (notification.isRead || notification.read) return notification;
+
+        const notificationIdValue = String(notification._id || '');
+        const sourceMessageId = String(
+          notification.messageId || notification.sourceId || notification.deepLink?.messageId || '',
+        );
+        const sourceChannelId = String(notification.channelId?._id || notification.channelId || '');
+        const shouldMarkRead = allRead
+          || (hasSpecificTarget && (
+            notificationIdSet.has(notificationIdValue)
+            || (sourceMessageId && messageIdSet.has(sourceMessageId))
+          ))
+          || (allChannelRead && channelId && sourceChannelId === String(channelId));
+
+        if (!shouldMarkRead) return notification;
+        unreadDelta += 1;
+        return { ...notification, read: true, isRead: true, readAt: notification.readAt || new Date().toISOString() };
+      });
+
+      return {
+        notifications,
+        unreadCount: Math.max(0, state.unreadCount - unreadDelta),
+      };
+    });
   },
 
   /**

@@ -254,8 +254,15 @@ export async function registerFCMToken(userId, { token, deviceId, platform }) {
   const ChatUser = (await import('../modules/users/ChatUser.model.js')).default
 
   // A physical installation must not keep receiving pushes for a previous account.
-  await ChatUser.updateMany({ _id: { $ne: userId }, 'chatPreferences.fcmTokens.token': token }, {
-    $pull: { 'chatPreferences.fcmTokens': { token } },
+  // The Expo token can rotate while the installation ID remains stable, so transfer
+  // ownership by either identity when registering the current account.
+  const previousInstallation = [{ token }]
+  if (deviceId && deviceId !== 'unknown') previousInstallation.push({ deviceId })
+  await ChatUser.updateMany({
+    _id: { $ne: userId },
+    $or: previousInstallation.map((entry) => ({ 'chatPreferences.fcmTokens': { $elemMatch: entry } })),
+  }, {
+    $pull: { 'chatPreferences.fcmTokens': { $or: previousInstallation } },
   })
   // Atomic replacement prevents duplicate entries on concurrent registrations.
   const conditions = [{ $ne: ['$$entry.token', { $literal: token }] }]

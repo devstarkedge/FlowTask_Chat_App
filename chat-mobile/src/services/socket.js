@@ -680,16 +680,13 @@ export const connectSocket = async () => {
   });
 
   // ─── Notification Sync Events (cross-device) ─────────────────────────
-  socket.on('notification:read:sync', ({ notificationId, channelId, workspaceId }) => {
+  socket.on('notification:read:sync', (payload) => {
     try {
       const { useNotificationStore } = require('../stores/notificationStore');
-      if (notificationId) {
-        // Mark single notification as read locally
-        useNotificationStore.getState().markAsReadLocal(notificationId);
-      } else {
-        // notificationId === null means "mark all as read"
-        useNotificationStore.getState().markAllAsReadLocal();
-      }
+      const store = useNotificationStore.getState();
+      if (store.syncReadState) store.syncReadState(payload || {});
+      else if (payload?.allRead) store.markAllAsReadLocal();
+      else if (payload?.notificationId) store.markAsReadLocal(payload.notificationId);
     } catch (err) {
       logger.error('[Socket] notification:read:sync handler error:', err.message);
     }

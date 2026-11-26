@@ -639,6 +639,11 @@ class NotificationService {
     const notification = await Notification.findOneAndDelete({ _id: notificationId, recipientId, workspaceId });
 
     if (notification) {
+      // Keep deletion in sync with every other session for this account.
+      emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_DISMISS, {
+        notificationId: notification._id.toString(),
+      }, workspaceId?.toString());
+
       // Get updated unread count
       const unreadCount = await Notification.getUnreadCount(recipientId, workspaceId);
 

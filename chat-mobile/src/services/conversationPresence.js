@@ -15,6 +15,7 @@ class ConversationPresenceManager {
   constructor() {
     this.activeConversationId = null;
     this.activeConversationType = null; // 'channel' | 'dm' | 'thread'
+    this.scrolledAway = false;
     this.appActive = AppState.currentState === 'active';
     this._initialized = false;
     this._appStateSub = null;
@@ -28,7 +29,7 @@ class ConversationPresenceManager {
       this.appActive = nextState === 'active';
 
       if (this.appActive && !wasActive) {
-        if (this.activeConversationId) {
+        if (this.activeConversationId && !this.scrolledAway) {
           this.emitSocketFocus(this.activeConversationId);
           useChannelStore.getState().updateUnread(this.activeConversationId, 0);
           readReceiptAPI.markRead(this.activeConversationId).catch((err) => {
@@ -38,6 +39,15 @@ class ConversationPresenceManager {
       } else if (!this.appActive && wasActive) {
         this.emitSocketBlur();
       }
+      try {
+        const { reportMobileActivity } = require('./pushNotificationService');
+        const { useWorkspaceStore } = require('../stores/workspaceStore');
+        reportMobileActivity({
+          appState: nextState,
+          activeWorkspaceId: useWorkspaceStore.getState().activeWorkspaceId,
+          activeChannelId: this.scrolledAway ? null : this.activeConversationId,
+        });
+      } catch {}
     });
 
     this._initialized = true;
@@ -68,9 +78,20 @@ class ConversationPresenceManager {
     this.emitSocketBlur();
   }
 
+  setScrolledAway(away) {
+    const next = Boolean(away);
+    if (this.scrolledAway === next) return;
+    this.scrolledAway = next;
+    if (next) {
+      this.emitSocketBlur();
+    } else if (this.activeConversationId && this.appActive) {
+      this.emitSocketFocus(this.activeConversationId);
+    }
+  }
+
   isActive(conversationId) {
     if (!conversationId || !this.activeConversationId) return false;
-    return String(conversationId) === String(this.activeConversationId) && this.appActive;
+    return String(conversationId) === String(this.activeConversationId) && this.appActive && !this.scrolledAway;
   }
 
   getActiveConversationId() {

@@ -54,6 +54,22 @@ const notificationPreferenceSchema = new Schema({
     desktopPush: { type: Boolean, default: true },
     mobilePush: { type: Boolean, default: true },
     emailDigest: { type: Boolean, default: false },
+    deliveryMode: {
+      type: String,
+      enum: ['immediately', 'desktop_first'],
+      default: 'immediately',
+    },
+    desktopFirstDelaySec: {
+      type: Number,
+      default: 60,
+      min: 0,
+      max: 300,
+    },
+    lockScreenPreview: {
+      type: String,
+      enum: ['full', 'sender_only', 'hidden'],
+      default: 'full',
+    },
   },
 
   // ─── Pause / Quiet Hours ────────────────────────────────────────────
@@ -164,6 +180,9 @@ notificationPreferenceSchema.statics.getOrCreate = async function (userId, works
       desktopPush: true,
       mobilePush: true,
       emailDigest: false,
+      deliveryMode: 'immediately',
+      desktopFirstDelaySec: 60,
+      lockScreenPreview: 'full',
       ...(pref.global || {}),
     },
   };

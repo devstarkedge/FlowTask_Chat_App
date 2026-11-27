@@ -375,6 +375,9 @@ export const markAsRead = async (messageId, channelId, userId, workspaceId, opti
 
   // 3. Broadcast real-time MESSAGE_READ to the channel room
   if (resolvedChannelId) {
+    import('../../services/notificationOutbox.service.js')
+      .then(({ default: outbox }) => outbox.cancelForChannelRead(userIdStr, resolvedChannelId, 'already_read'))
+      .catch(() => {});
     emitToChannel(
       resolvedChannelId.toString(),
       SOCKET_EVENTS.MESSAGE_READ,

@@ -125,9 +125,9 @@ const initNotificationHandler = () => {
 
         const now = Date.now();
         for (const [id, time] of _presented) if (now - time > 60000) _presented.delete(id);
-        const id = data.notificationId;
-        const duplicate = id && _presented.has(id);
-        if (id && !duplicate) _presented.set(id, now);
+        const dedupKey = data.notificationId || data.eventKey || (data.messageId ? `msg:${data.messageId}` : null);
+        const duplicate = dedupKey && _presented.has(dedupKey);
+        if (dedupKey && !duplicate) _presented.set(dedupKey, now);
         // Socket-generated local notifications and remote pushes share an ID.
         // Present whichever arrives first on both native platforms.
         return {
@@ -304,10 +304,11 @@ export async function unregisterPushNotifications({ expectedUserId } = {}) {
     if (registration?.requestStarted) await registration.promise;
     else _registration = null;
     const token = await storage.getItem(PUSH_TOKEN_KEY);
+    const deviceId = await storage.getItem(PUSH_INSTALLATION_KEY);
     // A delayed logout from A must not use the currently active B session to
     // revoke this installation after it has already been rebound to B.
     if (token && revokingUserId && session().userId === revokingUserId) {
-      const response = await pushAPI.removeToken(token);
+      const response = await pushAPI.removeToken(token, deviceId);
       if (response?.data?.success !== true) throw new Error('Push removal was not confirmed');
     }
     await storage.removeItem(PUSH_TOKEN_KEY);
@@ -341,6 +342,33 @@ export async function isPushEnabled() {
     return permissionGranted(await Notifications.getPermissionsAsync(), Notifications);
   } catch {
     return false;
+  }
+}
+
+export async function reportMobileActivity({
+  appState = AppState.currentState || 'active',
+  activeWorkspaceId = null,
+  activeChannelId = null,
+} = {}) {
+  const owner = session();
+  if (!owner.userId || !owner.accessToken) return;
+  try {
+    const installationId = await storage.getItem(PUSH_INSTALLATION_KEY);
+    if (!installationId) return;
+    const focused = appState === 'active';
+    await pushAPI.reportActivity({
+      installationId,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      deviceType: 'mobile',
+      focused,
+      idleState: focused ? 'active' : 'idle',
+      appState: focused ? 'active' : 'background',
+      sessionState: 'signed_in',
+      activeWorkspaceId: activeWorkspaceId || null,
+      activeChannelId: activeChannelId || null,
+    });
+  } catch {
+    // Non-critical telemetry
   }
 }
 
@@ -474,7 +502,7 @@ function _queueResponse(response) {
 }
 
 async function _flushResponse() {
-  const nav = _navigationRef?.current;
+  const nav = _navigationRef?.isReady ? _navigationRef : _navigationRef?.current;
   if (!_pendingResponse || _navigating || !nav?.isReady?.() || !session().accessToken) return;
   const response = _pendingResponse;
   const owner = session().userId;

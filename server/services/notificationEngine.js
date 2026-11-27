@@ -19,6 +19,8 @@ import {
 import { stripHtml, truncate } from '../utils/sanitize.js';
 import { getAttachmentPreview } from '../utils/getNotificationPreview.js';
 import { shouldSendMobilePush } from '../utils/mobilePushDelivery.js';
+import DeviceInstallation from '../modules/push/DeviceInstallation.model.js';
+import notificationOutboxService from './notificationOutbox.service.js';
 
 /**
  * Notification Engine — the central brain for all notification decisions.
@@ -112,6 +114,21 @@ class NotificationEngine {
       }
       if (/\b@here\b/i.test(rawText)) {
         hasBroadcastMention.here = true;
+      }
+
+      // Restrict @channel, @everyone, and @here to authorized senders
+      if (hasBroadcastMention.channel || hasBroadcastMention.here || hasBroadcastMention.everyone) {
+        const canBroadcast = await this._canSenderBroadcast(senderIdStr, channel, workspaceId, message);
+        if (!canBroadcast) {
+          logger.info('NotificationEngine: unauthorized broadcast mention suppressed', {
+            senderId: senderIdStr,
+            channelId: channelIdStr,
+            workspaceId,
+          });
+          hasBroadcastMention.channel = false;
+          hasBroadcastMention.here = false;
+          hasBroadcastMention.everyone = false;
+        }
       }
 
       // Build message preview — fall back to attachment label when there is no text
@@ -212,6 +229,21 @@ class NotificationEngine {
     if (isAttendanceReport && (!recipient || recipient.isActive === false)) {
       return { sent: false, reason: 'inactive_recipient' };
     }
+    if (!isAttendanceReport) {
+      try {
+        const { default: WorkspaceMembership } = await import('../modules/workspaces/WorkspaceMembership.model.js');
+        const membership = await WorkspaceMembership.findOne({
+          workspaceId,
+          userId: recipientIdStr,
+          isActive: { $ne: false },
+        }).select('_id').lean();
+        if (!membership) {
+          return { sent: false, reason: 'not_workspace_member' };
+        }
+      } catch (err) {
+        logger.debug('NotificationEngine: workspace membership check skipped', { error: err?.message });
+      }
+    }
 
     // 3. Check if sender is VIP (bypasses pause/DND)
     const isVIP = prefs.vipUsers?.some((id) => id.toString() === senderIdStr);
@@ -247,10 +279,11 @@ class NotificationEngine {
     const isDM = convType === 'dm';
     const isThreadReply = !!threadId;
 
-    // Direct mentions and broadcast @channel mentions bypass channel mute
+    // Direct mentions and authorized @channel/@everyone mentions bypass channel mute,
+    // but an explicitly muted DM suppresses alerts while remaining in unread feed.
     const isChannelMuted = !channelLevel.shouldNotify || channelLevel.muted;
-    if (isChannelMuted && !isMentioned && !isBroadcast && !(isDM && !isThreadReply)) {
-      return { sent: false, reason: 'channel_muted' };
+    if (isChannelMuted && (isDM || (!isMentioned && !isBroadcast))) {
+      return { sent: false, reason: isDM ? 'dm_muted' : 'channel_muted' };
     }
 
     let shouldNotify = false;
@@ -432,9 +465,17 @@ class NotificationEngine {
       });
     }
 
-    // 14. Send push to configured devices. For attendance each client handles its own focus.
-    const shouldSendPush = isAttendanceReport || (!isViewingSameChat && (isAway || isOffline || isWindowBlurred));
+    // 14. Send push to configured devices using unified delivery policy.
+    const shouldSendDesktopPush = isAttendanceReport || (!isViewingSameChat && (isAway || isOffline || isWindowBlurred));
+    const desktopPushEnabled = Boolean(prefs.global?.desktopPush);
     const mobilePushEnabled = shouldSendMobilePush({ mobilePushEnabled: prefs.global?.mobilePush });
+    const deliveryMode = prefs.global?.deliveryMode || 'immediately';
+    const desktopFirstDelayMs = Math.max(0, Number(prefs.global?.desktopFirstDelaySec ?? 60)) * 1000;
+    const desktopCanReceive = deliveryMode === 'desktop_first' && desktopPushEnabled && !isAttendanceReport
+      ? await DeviceInstallation.canDesktopReceiveAlerts(recipientIdStr).catch(() => false)
+      : false;
+    const mobileDelayMs = deliveryMode === 'desktop_first' && desktopCanReceive ? desktopFirstDelayMs : 0;
+
     logger.info('NotificationEngine: delivery decision', {
       notificationId: notification._id?.toString(),
       eventKey,
@@ -446,31 +487,45 @@ class NotificationEngine {
       isAway,
       isOffline,
       isWindowBlurred,
-      desktopPushEnabled: Boolean(prefs.global?.desktopPush),
+      desktopPushEnabled,
       mobilePushEnabled,
-      route: shouldSendPush ? 'all-enabled-push' : mobilePushEnabled ? 'mobile-independent' : 'socket-only',
+      deliveryMode,
+      desktopCanReceive,
+      mobileDelayMs,
+      route: mobilePushEnabled
+        ? (mobileDelayMs > 0 ? 'desktop-first-delayed-mobile' : 'immediate-mobile')
+        : (shouldSendDesktopPush ? 'desktop-only' : 'socket-only'),
     });
-    if (shouldSendPush) {
-      const push = this._sendPush(recipientIdStr, notification, prefs, attendanceDelivery).catch((err) => {
-        logger.warn('NotificationEngine: push send failed', {
+
+    const payload = this._buildPushPayload(notification, attendanceDelivery, prefs);
+
+    // Web Push (desktop browser) when desktop is not actively viewing this chat
+    if (shouldSendDesktopPush && desktopPushEnabled) {
+      pushService.sendToUser(recipientIdStr, payload).catch((err) => {
+        logger.warn('NotificationEngine: web push failed', {
           recipientId: recipientIdStr,
           error: err?.message || err,
         });
       });
-      if (isAttendanceReport) await push;
-    } else if (mobilePushEnabled) {
-      // Keep existing web/FCM presence behavior. Expo push is independent so a
-      // connected desktop/web session or an open chat cannot silence the phone.
-      this._sendPush(recipientIdStr, notification, prefs, attendanceDelivery, {
-        web: false,
-        fcm: false,
-        expo: true,
+    }
+
+    // Mobile Push via durable outbox (supports immediately & desktop-first modes)
+    if (mobilePushEnabled) {
+      const enqueuePromise = notificationOutboxService.enqueueMobileOutbox({
+        notification,
+        recipientId: recipientIdStr,
+        workspaceId,
+        channelId: channelIdStr,
+        messageId: message._id,
+        payload,
+        delayMs: mobileDelayMs,
       }).catch((err) => {
-        logger.warn('NotificationEngine: mobile push send failed', {
+        logger.warn('NotificationEngine: mobile outbox enqueue failed', {
           recipientId: recipientIdStr,
           error: err?.message || err,
         });
       });
+      if (isAttendanceReport) await enqueuePromise;
     }
 
     return { sent: true, notificationId: notification._id };
@@ -535,9 +590,30 @@ class NotificationEngine {
 
       this._emitSocketNotification(recipientIdStr, notification, workspaceId);
 
-      // Send push for high/medium priority
-      if (priority !== NOTIFICATION_PRIORITIES.LOW) {
-        this._sendPush(recipientIdStr, notification, forceNotify ? { global: { desktopPush: true, mobilePush: true } } : await NotificationPreference.getOrCreate(recipientIdStr, workspaceId)).catch(() => {});
+      // Send push for high/medium priority (and FlowTask task updates)
+      if (priority !== NOTIFICATION_PRIORITIES.LOW || forceNotify) {
+        const effectivePrefs = forceNotify
+          ? { global: { enabled: true, desktopPush: true, mobilePush: true, deliveryMode: 'immediately', lockScreenPreview: 'full', sound: true } }
+          : await NotificationPreference.getOrCreate(recipientIdStr, workspaceId);
+        const payload = this._buildPushPayload(notification, null, effectivePrefs);
+        if (effectivePrefs.global?.desktopPush) {
+          pushService.sendToUser(recipientIdStr, payload).catch(() => {});
+        }
+        if (shouldSendMobilePush({ mobilePushEnabled: effectivePrefs.global?.mobilePush })) {
+          const deliveryMode = effectivePrefs.global?.deliveryMode || 'immediately';
+          const delayMs = deliveryMode === 'desktop_first' && effectivePrefs.global?.desktopPush
+            && (await DeviceInstallation.canDesktopReceiveAlerts(recipientIdStr).catch(() => false))
+            ? Math.max(0, Number(effectivePrefs.global?.desktopFirstDelaySec ?? 60)) * 1000
+            : 0;
+          notificationOutboxService.enqueueMobileOutbox({
+            notification,
+            recipientId: recipientIdStr,
+            workspaceId,
+            channelId,
+            payload,
+            delayMs,
+          }).catch(() => {});
+        }
       }
 
       return notification;
@@ -550,6 +626,59 @@ class NotificationEngine {
   }
 
   // ─── Internal Helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Check whether the sender is authorized to trigger @channel / @everyone / @here broadcasts.
+   * Allowed for system/bot messages, workspace owners/admins, and channel admins/moderators.
+   * @private
+   */
+  async _canSenderBroadcast(senderIdStr, channel, workspaceId, message) {
+    try {
+      if (message?.isSystem || message?.senderType === 'bot') return true;
+      const { default: WorkspaceMembership } = await import('../modules/workspaces/WorkspaceMembership.model.js');
+      const wsMembership = await WorkspaceMembership.findOne({
+        workspaceId,
+        userId: senderIdStr,
+        isActive: { $ne: false },
+      }).select('role').lean();
+      if (wsMembership && ['owner', 'admin'].includes(wsMembership.role)) {
+        return true;
+      }
+      const { default: ChannelMember } = await import('../modules/channels/ChannelMember.model.js');
+      const chMembership = await ChannelMember.findOne({
+        channelId: channel._id,
+        userId: senderIdStr,
+      }).select('role').lean();
+      return Boolean(chMembership && ['admin', 'moderator'].includes(chMembership.role));
+    } catch {
+      return false;
+    }
+  }
+
+  _buildPushPayload(notification, attendanceDelivery = null, prefs = null) {
+    return {
+      title: notification.title,
+      body: notification.body || notification.messagePreview || '',
+      icon: notification.senderAvatar || '/icon-192x192.png',
+      badge: '/badge.png',
+      tag: notification.bundleKey || `notif:${notification._id}`,
+      priority: notification.priority === 'low' ? 'default' : 'high',
+      sound: prefs?.global?.sound === false ? false : undefined,
+      data: {
+        notificationId: notification._id?.toString(),
+        eventKey: notification.eventKey || undefined,
+        deepLink: this._buildDeepLinkUrl(notification.deepLink),
+        workspaceId: notification.workspaceId?.toString(),
+        channelId: notification.channelId?.toString(),
+        messageId: notification.sourceId?.toString(),
+        threadId: notification.threadId?.toString(),
+        senderId: notification.senderId?.toString(),
+        type: notification.type,
+        priority: notification.priority,
+        ...(attendanceDelivery && { reportingEventType: attendanceDelivery.reportingEventType }),
+      },
+    };
+  }
 
   /**
    * Determine conversation type from channel document.
@@ -771,29 +900,13 @@ class NotificationEngine {
     const sendWeb = channels.web !== false;
     const sendFCM = channels.fcm !== false;
     const sendExpo = channels.expo !== false;
+    const mobileEnabled = shouldSendMobilePush({ mobilePushEnabled: prefs.global?.mobilePush });
     // Skip if no push channel is enabled
     if (!(sendWeb && prefs.global?.desktopPush)
-      && !(sendFCM && prefs.global?.mobilePush)
-      && !(sendExpo && prefs.global?.mobilePush)) return;
+      && !(sendFCM && mobileEnabled)
+      && !(sendExpo && mobileEnabled)) return;
 
-    const payload = {
-      title: notification.title,
-      body: notification.body || notification.messagePreview || '',
-      icon: notification.senderAvatar || '/icon-192x192.png',
-      badge: '/badge.png',
-      tag: notification.bundleKey || `notif:${notification._id}`,
-      data: {
-        notificationId: notification._id?.toString(),
-        deepLink: this._buildDeepLinkUrl(notification.deepLink),
-        workspaceId: notification.workspaceId?.toString(),
-        channelId: notification.channelId?.toString(),
-        messageId: notification.sourceId?.toString(),
-        threadId: notification.threadId?.toString(),
-        type: notification.type,
-        priority: notification.priority,
-        ...(attendanceDelivery && { reportingEventType: attendanceDelivery.reportingEventType }),
-      },
-    };
+    const payload = this._buildPushPayload(notification, attendanceDelivery, prefs);
 
     // Send via Web Push (VAPID) — desktop browsers
     if (sendWeb && prefs.global?.desktopPush) {
@@ -808,7 +921,7 @@ class NotificationEngine {
     }
 
     // Send via FCM — Android/iOS when Firebase is configured
-    if (sendFCM && prefs.global?.mobilePush) {
+    if (sendFCM && mobileEnabled) {
       try {
         const result = await pushService.sendViaFCM(recipientId, payload);
         accepted += result.sent || 0;
@@ -820,7 +933,7 @@ class NotificationEngine {
     }
 
     // Send via Expo Push — mobile app (expo-server-sdk)
-    if (sendExpo && prefs.global?.mobilePush) {
+    if (sendExpo && mobileEnabled) {
       try {
         const result = await pushService.sendViaExpo(recipientId, payload);
         accepted += result.sent || 0;

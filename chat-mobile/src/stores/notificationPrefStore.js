@@ -174,4 +174,14 @@ export const useNotificationPrefStore = create((set, get) => ({
       set({ isLoading: false, error: error.message });
     }
   },
+
+  clearPreferences: () => set({
+    preferences: null,
+    isLoading: false,
+    isPaused: false,
+    pauseUntil: null,
+    level: 'all',
+    error: null,
+    mutedChannels: {},
+  }),
 }));

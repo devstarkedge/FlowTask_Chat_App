@@ -96,7 +96,7 @@ export const updateWindowControlsContrast = (targetElementOrColor) => {
 export const showDesktopNotification = (title, options = {}) => {
   if (isDesktopApp() && window.electronAPI && window.electronAPI.showNotification) {
     // Call the native Electron notification API
-    window.electronAPI.showNotification(title, options.body || '', options.data, options.icon);
+    window.electronAPI.showNotification(title, options.body || '', options.data, options.icon, Boolean(options.silent));
   } else {
     // Fallback to standard web notifications
     if ('Notification' in window && Notification.permission === 'granted') {

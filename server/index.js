@@ -322,6 +322,8 @@ async function startServer() {
     await import('./services/notificationQueue.service.js');
     const { initQueues } = await import('./services/jobQueue.service.js');
     await initQueues();
+    const { startOutboxSweeper } = await import('./services/notificationOutbox.service.js');
+    startOutboxSweeper();
     if (env.FLOWTASK_ENABLED) {
       projectChannelSyncService.startRecovery();
     }

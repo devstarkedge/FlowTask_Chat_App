@@ -132,7 +132,9 @@ export default function App() {
       // 2. Now safe to init theme (API call requires auth token)
       const subscription = await initTheme();
       await initPrefs();
-      fetchNotifPrefs();
+      if (useAuthStore.getState().accessToken && useWorkspaceStore.getState().activeWorkspaceId) {
+        fetchNotifPrefs();
+      }
       if (cancelled) {
         subscription?.remove();
         return;
@@ -171,6 +173,9 @@ export default function App() {
   // Register for push notifications once auth + workspace are ready
   useEffect(() => {
     if (!accessToken) return;
+    if (activeWorkspaceId) {
+      fetchNotifPrefs();
+    }
     const refresh = () => useAuthStore.getState().refreshUser().catch(error => {
       console.warn('[Profile] Current user refresh failed:', error?.message);
     });

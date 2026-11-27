@@ -192,6 +192,7 @@ export const useAuthStore = create((set, get) => ({
       const { useWorkspaceStore } = await import('./workspaceStore');
       const { useUIStore } = await import('./uiStore');
       const { useNotificationStore } = await import('./notificationStore');
+      const { useNotificationPrefStore } = await import('./notificationPrefStore');
 
       useChannelStore.setState({ activeChannelId: null, unreads: {} });
       console.log('[Logout] Channel store reset.');
@@ -221,6 +222,10 @@ export const useAuthStore = create((set, get) => ({
       if (useNotificationStore.getState().clearNotifications) {
         useNotificationStore.getState().clearNotifications();
         console.log('[Logout] Notification store reset.');
+      }
+      if (useNotificationPrefStore.getState().clearPreferences) {
+        useNotificationPrefStore.getState().clearPreferences();
+        console.log('[Logout] Notification pref store reset.');
       }
       useUIStore.setState({ isDrawerOpen: false });
       console.log('[Logout] UI store reset.');

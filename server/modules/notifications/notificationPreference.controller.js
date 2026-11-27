@@ -5,6 +5,7 @@ import ChatUser from '../users/ChatUser.model.js';
 import { emitToUser } from '../../sockets/socketManager.js';
 import { SOCKET_EVENTS } from '../../config/constants.js';
 import logger from '../../utils/logger.js';
+import notificationOutboxService from '../../services/notificationOutbox.service.js';
 
 // ─── Get Preferences ─────────────────────────────────────────────────────────
 
@@ -31,6 +32,12 @@ export const updatePreferences = asyncHandler(async (req, res) => {
     for (const [key, value] of Object.entries(global)) {
       if (['enabled', 'sound', 'desktopPush', 'mobilePush', 'emailDigest'].includes(key)) {
         updateData[`global.${key}`] = value;
+      } else if (key === 'deliveryMode' && ['immediately', 'desktop_first'].includes(value)) {
+        updateData['global.deliveryMode'] = value;
+      } else if (key === 'desktopFirstDelaySec' && Number.isFinite(Number(value))) {
+        updateData['global.desktopFirstDelaySec'] = Math.max(0, Math.min(300, Number(value)));
+      } else if (key === 'lockScreenPreview' && ['full', 'sender_only', 'hidden'].includes(value)) {
+        updateData['global.lockScreenPreview'] = value;
       }
     }
   }
@@ -59,6 +66,11 @@ export const updatePreferences = asyncHandler(async (req, res) => {
   emitToUser(userId.toString(), SOCKET_EVENTS.NOTIFICATION_PREFERENCES_UPDATED, {
     preferences: updated,
   }, workspaceId?.toString());
+
+  // If global/mobile push was disabled, cancel pending delayed outbox alerts
+  if (global?.enabled === false || global?.mobilePush === false) {
+    notificationOutboxService.cancelForSettingsChange(userId, workspaceId, 'settings_changed').catch(() => {});
+  }
 
   res.json({ success: true, data: updated });
 });

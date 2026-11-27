@@ -13,6 +13,7 @@ router.use(protect)
 // Tokens belong to an account/installation, not to the currently selected workspace.
 router.post('/fcm-token', ctrl.registerFCMToken)
 router.delete('/fcm-token', ctrl.removeFCMToken)
+router.post('/activity', ctrl.reportActivity)
 router.use(resolveWorkspace)
 router.get('/status', ctrl.getStatus)
 router.post('/subscribe', ctrl.subscribe)

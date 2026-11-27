@@ -8,6 +8,8 @@ import NotificationPreference from '../notifications/NotificationPreference.mode
 import { emitToUser } from '../../sockets/socketManager.js'
 import { SOCKET_EVENTS } from '../../config/constants.js'
 import { Expo } from 'expo-server-sdk'
+import DeviceInstallation, { getTokenFingerprint } from './DeviceInstallation.model.js'
+import notificationOutboxService from '../../services/notificationOutbox.service.js'
 
 function extractDeviceMetadata(body = {}, req) {
   return {
@@ -134,22 +136,93 @@ export const registerFCMToken = asyncHandler(async (req, res) => {
   const user = await pushService.registerFCMToken(userId, { token, deviceId, platform })
   if (!user) return res.status(404).json({ success: false, error: { message: 'Push account not found' } })
 
-  logger.info('FCM token registered', { userId: userId.toString(), platform, deviceId })
-  res.json({ success: true, message: 'FCM token registered' })
+  const installationId = deviceId && deviceId !== 'unknown' ? deviceId : `token:${getTokenFingerprint(token)}`
+  const previousInst = await DeviceInstallation.findOne({ installationId }).select('userId').lean()
+  if (previousInst?.userId && String(previousInst.userId) !== String(userId)) {
+    await notificationOutboxService.cancelForInstallationSwitch(installationId, previousInst.userId, 'account_switched')
+  }
+  await DeviceInstallation.bindInstallation({
+    installationId,
+    userId,
+    platform: platform || 'expo',
+    deviceType: ['desktop', 'desktop_win', 'desktop_mac', 'desktop_linux'].includes(platform) ? 'desktop' : platform === 'web' ? 'web' : 'mobile',
+    pushProvider: platform === 'expo' ? 'expo' : 'fcm',
+    pushToken: token,
+  })
+
+  logger.info('FCM token registered', {
+    userId: userId.toString(),
+    platform,
+    deviceId: installationId,
+    tokenFingerprint: getTokenFingerprint(token),
+  })
+  res.json({ success: true, message: 'FCM token registered', data: { installationId } })
 })
 
 // DELETE /api/chat/push/fcm-token
 // Remove an FCM token for the authenticated user
 export const removeFCMToken = asyncHandler(async (req, res) => {
-  const { token } = req.body || {}
+  const { token, deviceId } = req.body || {}
   if (!token) {
     return res.status(400).json({ success: false, error: { message: 'FCM token is required' } })
   }
 
   const userId = req.user._id
   await pushService.removeFCMToken(userId, token)
+  await DeviceInstallation.unbindInstallation({
+    installationId: deviceId || null,
+    userId,
+    pushToken: token,
+  })
 
   res.json({ success: true, message: 'FCM token removed' })
+})
+
+// POST /api/chat/push/activity
+// Report per-installation activity state (focus, idle, lock, appState, activeChannelId)
+export const reportActivity = asyncHandler(async (req, res) => {
+  const userId = req.user._id
+  const {
+    installationId,
+    platform,
+    deviceType,
+    focused,
+    idleState,
+    screenLocked,
+    appState,
+    sessionState,
+    activeWorkspaceId,
+    activeChannelId,
+  } = req.body || {}
+
+  if (!installationId || typeof installationId !== 'string') {
+    return res.status(400).json({ success: false, error: { message: 'installationId is required' } })
+  }
+
+  const updated = await DeviceInstallation.updateActivity({
+    installationId,
+    userId,
+    platform,
+    deviceType,
+    focused,
+    idleState,
+    screenLocked,
+    appState,
+    sessionState,
+    activeWorkspaceId,
+    activeChannelId,
+  })
+
+  const desktopInactive = (deviceType === 'desktop' || String(platform || '').startsWith('desktop'))
+    && (screenLocked === true || idleState === 'idle' || idleState === 'locked' || appState === 'closed' || focused === false)
+  if (desktopInactive) {
+    const canStillReceive = await DeviceInstallation.canDesktopReceiveAlerts(userId)
+    if (!canStillReceive) {
+      notificationOutboxService.triggerPendingMobileAlertsForUser(userId).catch(() => {})
+    }
+  }
+
+  res.json({ success: true, data: updated })
 })
 
 // ─── Multi-Device Push Dismissal ─────────────────────────────────────────────
@@ -184,4 +257,4 @@ export const dismissNotification = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Notification dismissed' })
 })
 
-export default { subscribe, unsubscribe, getStatus, getPublicKey, registerFCMToken, removeFCMToken, dismissNotification }
+export default { subscribe, unsubscribe, getStatus, getPublicKey, registerFCMToken, removeFCMToken, reportActivity, dismissNotification }

@@ -31,11 +31,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('huddle-invitation:action', handler);
   },
   hasNativeWindowControls: process.platform === 'win32' || process.platform === 'linux',
-  showNotification: (title, body, data, icon) => ipcRenderer.send('show-notification', { title, body, data, icon }),
+  showNotification: (title, body, data, icon, silent = false) => ipcRenderer.send('show-notification', { title, body, data, icon, silent }),
   onNotificationClicked: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('notification-clicked', handler);
     return () => ipcRenderer.removeListener('notification-clicked', handler);
+  },
+  getDesktopActivityState: () => ipcRenderer.invoke('get-desktop-activity-state'),
+  onDesktopActivityChange: (callback) => {
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on('desktop-activity-state', handler);
+    return () => ipcRenderer.removeListener('desktop-activity-state', handler);
   },
   updateTaskbarBadge: (count, dataUrl, description) => ipcRenderer.send('update-taskbar-badge', { count, dataUrl, description }),
   clearTaskbarBadge: () => ipcRenderer.send('update-taskbar-badge', { count: 0, dataUrl: null, description: '' }),

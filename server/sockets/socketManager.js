@@ -828,6 +828,13 @@ export async function initializeSocket(httpServer, corsOptions) {
       socketRateLimits.delete(socket.id);
 
       const updatedUser = await userRepository.removeSocketId(userId, socket.id);
+      import('../services/notificationOutbox.service.js')
+        .then(async ({ default: outbox }) => {
+          const { default: DeviceInstallation } = await import('../modules/push/DeviceInstallation.model.js');
+          const canDesktop = await DeviceInstallation.canDesktopReceiveAlerts(userId);
+          if (!canDesktop) await outbox.triggerPendingMobileAlertsForUser(userId);
+        })
+        .catch(() => {});
 
       // Only broadcast offline if all sockets are gone (multi-tab support)
       if (updatedUser && updatedUser.socketIds.length === 0) {

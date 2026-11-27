@@ -349,6 +349,9 @@ class NotificationService {
       logger.warn('Notification not found or not owned by user', { notificationId, recipientId, workspaceId });
       return null;
     }
+    import('../../services/notificationOutbox.service.js')
+      .then(({ default: outbox }) => outbox.cancelForNotification(notificationId, 'already_read'))
+      .catch(() => {});
 
     // If this notification is tied to a message and shouldSyncMessage is not disabled, mark the message as read too
     if (!options.skipMessageSync && (notification.sourceType === 'message' || notification.deepLink?.messageId)) {
@@ -613,6 +616,15 @@ class NotificationService {
    */
   async markAllAsRead(recipientId, workspaceId) {
     const result = await Notification.markAllRead(recipientId, workspaceId);
+    import('../../services/notificationOutbox.service.js')
+      .then(async ({ default: outbox }) => {
+        const NotificationOutbox = (await import('./NotificationOutbox.model.js')).default;
+        await NotificationOutbox.updateMany(
+          { recipientId, workspaceId, status: 'pending' },
+          { $set: { status: 'cancelled', cancelReason: 'already_read' } },
+        );
+      })
+      .catch(() => {});
 
     // Emit NOTIFICATION_READ_SYNC to sync read state across all devices
     emitToUser(recipientId.toString(), SOCKET_EVENTS.NOTIFICATION_READ_SYNC, {

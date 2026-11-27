@@ -174,10 +174,29 @@ async function _sendFCMHttp(payload, token, fcmData = {}) {
           },
           data: fcmData,
           android: {
+            priority: 'high',
             notification: {
+              channelId: payload.channelId || 'default',
+              sound: payload.sound === false ? undefined : 'default',
               ...(payload.icon && { icon: payload.icon }),
               ...(payload.tag && { tag: payload.tag }),
               ...(payload.data?.deepLink && { clickAction: payload.data.deepLink }),
+            },
+          },
+          apns: {
+            headers: {
+              'apns-priority': '10',
+            },
+            payload: {
+              aps: {
+                alert: {
+                  title: payload.title || '',
+                  body: payload.body || '',
+                },
+                ...(payload.sound === false ? {} : { sound: payload.sound || IOS_NOTIFICATION_SOUND }),
+                ...(Number.isFinite(payload.badgeCount) ? { badge: payload.badgeCount } : {}),
+                'mutable-content': 1,
+              },
             },
           },
           webpush: {
@@ -267,11 +286,17 @@ export async function registerFCMToken(userId, { token, deviceId, platform }) {
   // Atomic replacement prevents duplicate entries on concurrent registrations.
   const conditions = [{ $ne: ['$$entry.token', { $literal: token }] }]
   if (deviceId && deviceId !== 'unknown') conditions.push({ $ne: ['$$entry.deviceId', { $literal: deviceId }] })
+  const updatedTokensExpr = { $concatArrays: [
+    { $filter: { input: { $ifNull: ['$chatPreferences.fcmTokens', []] }, as: 'entry', cond: { $and: conditions } } },
+    { $literal: [{ token, deviceId: deviceId || null, platform: platform || 'web', createdAt: new Date(), lastSeenAt: new Date() }] },
+  ] }
   return ChatUser.findByIdAndUpdate(userId, [{ $set: {
-    'chatPreferences.fcmTokens': { $concatArrays: [
-      { $filter: { input: { $ifNull: ['$chatPreferences.fcmTokens', []] }, as: 'entry', cond: { $and: conditions } } },
-      { $literal: [{ token, deviceId: deviceId || null, platform: platform || 'web', createdAt: new Date(), lastSeenAt: new Date() }] },
-    ] },
+    chatPreferences: {
+      $mergeObjects: [
+        { $ifNull: ['$chatPreferences', {}] },
+        { fcmTokens: updatedTokensExpr },
+      ],
+    },
   } }], { returnDocument: 'after', updatePipeline: true })
 }
 
@@ -325,15 +350,16 @@ export async function sendViaExpo(userId, payload) {
       }
       messages.push({
         to: token,
-        sound: payload.sound || IOS_NOTIFICATION_SOUND,
+        ...(payload.sound === false ? {} : { sound: payload.sound || IOS_NOTIFICATION_SOUND }),
         title: payload.title,
         body: payload.body,
         data: payload.data || {},
-        badge: payload.badge ? 1 : undefined,
+        ...(Number.isFinite(payload.badgeCount) ? { badge: payload.badgeCount } : {}),
         channelId: payload.channelId || 'default',
+        mutableContent: true,
         ...(payload.categoryIdentifier ? {categoryId:payload.categoryIdentifier} : {}),
         ...(Number.isFinite(payload.ttl) ? {ttl:payload.ttl} : {}),
-        priority: payload.data?.priority === 'high' ? 'high' : 'default',
+        priority: payload.priority === 'low' ? 'default' : 'high',
       });
       // Keep provider metadata outside the Expo payload.
       traceByToken.set(token, {
@@ -493,11 +519,102 @@ export async function clearBadgeOnAllDevices(userId) {
   }
 }
 
+/**
+ * Send push to a single installation/token with structured outcome for the outbox dispatcher.
+ * Returns { status: 'ok' | 'invalid_registration' | 'temporary_failure' | 'skipped', code?, receiptId? }
+ */
+export async function sendToInstallation({ userId, installationId, deliveryChannel = 'expo', pushToken, payload }) {
+  if (!pushToken) return { status: 'skipped', code: 'missing_token' };
+  const fp = tokenFingerprint(pushToken).slice(0, 16);
+
+  if (deliveryChannel === 'expo' || Expo.isExpoPushToken(pushToken)) {
+    if (!Expo.isExpoPushToken(pushToken)) {
+      return { status: 'invalid_registration', code: 'InvalidExpoToken' };
+    }
+    try {
+      const tickets = await _expoClient.sendPushNotificationsAsync([{
+        to: pushToken,
+        ...(payload.sound === false ? {} : { sound: payload.sound || IOS_NOTIFICATION_SOUND }),
+        title: payload.title,
+        body: payload.body,
+        data: payload.data || {},
+        ...(Number.isFinite(payload.badgeCount) ? { badge: payload.badgeCount } : {}),
+        channelId: payload.channelId || 'default',
+        mutableContent: true,
+        ...(payload.categoryIdentifier ? { categoryId: payload.categoryIdentifier } : {}),
+        ...(Number.isFinite(payload.ttl) ? { ttl: payload.ttl } : {}),
+        priority: payload.priority === 'low' ? 'default' : 'high',
+      }]);
+      const ticket = tickets?.[0];
+      logger.info('Expo push provider ticket', {
+        userId: String(userId),
+        notificationId: payload.data?.notificationId,
+        deviceId: installationId,
+        tokenFingerprint: fp,
+        status: ticket?.status || 'missing',
+        code: ticket?.details?.error || undefined,
+      });
+      if (ticket?.status === 'ok') {
+        if (ticket.id) {
+          scheduleReceiptCheck(String(userId), [{
+            id: ticket.id,
+            tokenHash: tokenFingerprint(pushToken),
+            deviceId: installationId,
+          }], payload.data?.notificationId);
+        }
+        return { status: 'ok', receiptId: ticket.id || null };
+      }
+      const errCode = ticket?.details?.error || 'ExpoTicketError';
+      if (errCode === 'DeviceNotRegistered') {
+        await removeFCMToken(userId, pushToken).catch(() => {});
+        return { status: 'invalid_registration', code: errCode };
+      }
+      if (errCode === 'MessageTooBig' || errCode === 'InvalidCredentials') {
+        return { status: 'temporary_failure', code: errCode };
+      }
+      return { status: 'temporary_failure', code: errCode };
+    } catch (err) {
+      logger.warn('Expo sendToInstallation failed', {
+        userId: String(userId),
+        deviceId: installationId,
+        tokenFingerprint: fp,
+        code: err.code || 'RequestFailed',
+        status: err.statusCode,
+      });
+      return { status: 'temporary_failure', code: err.code || 'RequestFailed' };
+    }
+  }
+
+  // Direct FCM/APNs
+  try {
+    const fcmData = Object.fromEntries(
+      Object.entries(payload.data || {}).map(([k, v]) => [k, String(v ?? '')])
+    );
+    const res = await _sendFCMHttp(payload, pushToken, fcmData);
+    logger.info('FCM push provider outcome', {
+      userId: String(userId),
+      notificationId: payload.data?.notificationId,
+      deviceId: installationId,
+      tokenFingerprint: fp,
+      status: res.success ? 'ok' : res.expired ? 'invalid_registration' : 'failed',
+    });
+    if (res.success) return { status: 'ok' };
+    if (res.expired) {
+      await removeFCMToken(userId, pushToken).catch(() => {});
+      return { status: 'invalid_registration', code: 'NotRegistered' };
+    }
+    return { status: 'temporary_failure', code: 'FCMDeliveryFailed' };
+  } catch (err) {
+    return { status: 'temporary_failure', code: err?.code || 'FCMError' };
+  }
+}
+
 export default {
   sendToUser,
   sendToSubscription,
   sendViaFCM,
   sendViaExpo,
+  sendToInstallation,
   registerFCMToken,
   removeFCMToken,
   sendToAllDevices,

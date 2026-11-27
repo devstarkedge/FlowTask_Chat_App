@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../services/api', () => ({ default: {}, notificationAPI: {} }))
 vi.mock('../../services/desktopService', () => ({
   showDesktopNotification: vi.fn(),
+  flashFrame: vi.fn(),
   onDesktopNotificationClicked: vi.fn(),
   isDesktopApp: () => true,
 }))
@@ -399,6 +400,7 @@ describe('Centralized Notification System', () => {
   describe('Full End-to-End Pipeline Execution', () => {
     it('processes incoming socket message and calls native desktop delivery', () => {
       const service = new NotificationService()
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
 
       // Event in a background channel
       const rawMessage = {

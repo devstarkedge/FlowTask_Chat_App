@@ -120,6 +120,42 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
             onValueChange: value => notificationPrefs.updateGlobal('mobilePush', value).catch(() => {}),
           },
         )}
+        {renderSwitchRow(
+          <Bell size={22} color={colors.textSecondary} />,
+          'Desktop notifications',
+          'notifDesktopNotifications',
+          {
+            value: notificationPrefs.preferences?.global?.desktopPush !== false,
+            onValueChange: value => notificationPrefs.updateGlobal('desktopPush', value).catch(() => {}),
+          },
+        )}
+        {renderSwitchRow(
+          <Bell size={22} color={colors.textSecondary} />,
+          'Notification sound',
+          'notifSoundEnabled',
+          {
+            value: notificationPrefs.preferences?.global?.sound !== false,
+            onValueChange: value => notificationPrefs.updateGlobal('sound', value).catch(() => {}),
+          },
+        )}
+        {renderLinkRow(
+          <Clock size={22} color={colors.textSecondary} />,
+          'Multi-device delivery',
+          notificationPrefs.preferences?.global?.deliveryMode === 'desktop_first'
+            ? `Desktop-first (${notificationPrefs.preferences?.global?.desktopFirstDelaySec ?? 60}s delay)`
+            : 'Immediately on all enabled devices',
+          'deliveryMode',
+        )}
+        {renderLinkRow(
+          <Bell size={22} color={colors.textSecondary} />,
+          'Lock-screen preview',
+          notificationPrefs.preferences?.global?.lockScreenPreview === 'hidden'
+            ? 'Hide preview'
+            : notificationPrefs.preferences?.global?.lockScreenPreview === 'sender_only'
+              ? 'Sender name only'
+              : 'Full message preview',
+          'lockScreenPreview',
+        )}
         
         <View style={styles.divider} />
 
@@ -148,6 +184,17 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
           onClose={() => setActivePicker(null)}
           title={`Select Option`}
           options={
+            activePicker === 'deliveryMode' ? [
+              'Immediately (all devices)',
+              'Desktop-first (30s delay)',
+              'Desktop-first (60s delay)',
+              'Desktop-first (120s delay)',
+            ] :
+            activePicker === 'lockScreenPreview' ? [
+              'Full message preview',
+              'Sender name only',
+              'Hide preview',
+            ] :
             activePicker === 'notifAllowSchedule' ? NOTIF_OPTIONS.schedule :
             activePicker === 'notifDefaultReminder' ? NOTIF_OPTIONS.reminderTime :
             activePicker === 'notifNotifyMobile' ? NOTIF_OPTIONS.notifyMobile :
@@ -155,8 +202,36 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
             activePicker === 'notifLetYouKnowAbout' ? NOTIF_OPTIONS.letYouKnowAbout :
             NOTIF_OPTIONS.keywords
           }
-          selectedValue={prefs[activePicker]}
-          onSelect={(val) => prefs.setPreference(activePicker, val)}
+          selectedValue={
+            activePicker === 'deliveryMode'
+              ? (notificationPrefs.preferences?.global?.deliveryMode === 'desktop_first'
+                ? `Desktop-first (${notificationPrefs.preferences?.global?.desktopFirstDelaySec ?? 60}s delay)`
+                : 'Immediately (all devices)')
+              : activePicker === 'lockScreenPreview'
+                ? (notificationPrefs.preferences?.global?.lockScreenPreview === 'hidden'
+                  ? 'Hide preview'
+                  : notificationPrefs.preferences?.global?.lockScreenPreview === 'sender_only'
+                    ? 'Sender name only'
+                    : 'Full message preview')
+                : prefs[activePicker]
+          }
+          onSelect={(val) => {
+            if (activePicker === 'deliveryMode') {
+              if (val.startsWith('Desktop-first')) {
+                const match = val.match(/(\d+)s/);
+                const delay = match ? Number(match[1]) : 60;
+                notificationPrefs.updateGlobal('deliveryMode', 'desktop_first').catch(() => {});
+                notificationPrefs.updateGlobal('desktopFirstDelaySec', delay).catch(() => {});
+              } else {
+                notificationPrefs.updateGlobal('deliveryMode', 'immediately').catch(() => {});
+              }
+            } else if (activePicker === 'lockScreenPreview') {
+              const mode = val === 'Hide preview' ? 'hidden' : val === 'Sender name only' ? 'sender_only' : 'full';
+              notificationPrefs.updateGlobal('lockScreenPreview', mode).catch(() => {});
+            } else {
+              prefs.setPreference(activePicker, val);
+            }
+          }}
         />
       )}
     </SafeAreaView>

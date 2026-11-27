@@ -10,6 +10,21 @@ const LAST_SUCCESSFUL_UPDATE_STORAGE_KEY = '@taskchat_last_successful_update';
 const DISMISSED_UPDATE_STORAGE_KEY = '@taskchat_dismissed_update_id';
 const LAST_CHECK_TIME_STORAGE_KEY = '@taskchat_last_check_timestamp';
 const MIN_BACKGROUND_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const UPDATE_CHECK_TIMEOUT_MS = 20 * 1000;
+
+function checkForUpdateWithTimeout() {
+  let timeoutId;
+  const nativeCheck = Updates.checkForUpdateAsync();
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error('Update check timed out. Check your connection and try again.');
+      error.code = 'UPDATE_CHECK_TIMEOUT';
+      reject(error);
+    }, UPDATE_CHECK_TIMEOUT_MS);
+  });
+
+  return Promise.race([nativeCheck, timeout]).finally(() => clearTimeout(timeoutId));
+}
 
 export const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
 
@@ -250,7 +265,7 @@ export const useUpdateStore = create((set, get) => ({
     }
 
     try {
-      const result = await Updates.checkForUpdateAsync();
+      const result = await checkForUpdateWithTimeout();
       const now = new Date().toISOString();
       await storage.setItem(LAST_CHECK_TIME_STORAGE_KEY, now);
 
@@ -318,10 +333,13 @@ export const useUpdateStore = create((set, get) => ({
           activeModal: 'native-required',
         });
       } else {
+        const checkTimedOut = err?.code === 'UPDATE_CHECK_TIMEOUT';
         set({
           status: 'error',
           errorType: 'check',
-          error: 'Unable to check for updates. Please check your internet connection.',
+          error: checkTimedOut
+            ? err.message
+            : 'Unable to check for updates. Please check your internet connection.',
           activeModal: 'none',
         });
       }

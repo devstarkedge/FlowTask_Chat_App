@@ -5,7 +5,7 @@ const { installWindowSecurity, createTrustedAppUrl } = require('./security.cjs')
 const { openPeer, installNavigation } = require('./app-navigation.cjs');
 const { installHuddlePopout } = require('./huddlePopout.cjs');
 const { initUpdater } = require('./updater.cjs');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen, clipboard, nativeImage, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, Tray, nativeTheme, desktopCapturer, dialog, Notification, screen, clipboard, nativeImage, safeStorage, powerMonitor } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const isDev = !app.isPackaged;
@@ -338,7 +338,7 @@ app.on('window-all-closed', () => {
 });
 
 // IPC handler for notifications
-ipcMain.on('show-notification', (event, { title, body, data, icon }) => {
+ipcMain.on('show-notification', (event, { title, body, data, icon, silent }) => {
   let notifIcon = getNotificationIconPath();
   if (icon && typeof icon === 'string' && icon.startsWith('data:image/')) {
     try {
@@ -350,21 +350,67 @@ ipcMain.on('show-notification', (event, { title, body, data, icon }) => {
     title: title || 'TaskChat',
     body: body || '',
     icon: notifIcon,
+    silent: silent === true,
   });
+
+  const deliverClick = (win) => {
+    if (!win || win.isDestroyed()) return;
+    if (!win.isVisible()) {
+      win.show();
+      if (process.platform === 'darwin' && app.dock) app.dock.show();
+    }
+    if (win.isMinimized()) win.restore();
+    win.moveTop();
+    win.focus();
+    win.webContents.send('notification-clicked', data);
+  };
 
   notification.on('click', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      if (!mainWindow.isVisible()) {
-        mainWindow.show();
-        if (process.platform === 'darwin' && app.dock) app.dock.show();
+      deliverClick(mainWindow);
+    } else if (process.platform === 'darwin') {
+      createWindow();
+      if (mainWindow) {
+        mainWindow.webContents.once('did-finish-load', () => deliverClick(mainWindow));
       }
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-      mainWindow.webContents.send('notification-clicked', data);
     }
   });
 
   notification.show();
+});
+
+function getDesktopActivityState() {
+  const isDestroyed = !mainWindow || mainWindow.isDestroyed();
+  const isMinimized = !isDestroyed && mainWindow.isMinimized();
+  const isVisible = !isDestroyed && mainWindow.isVisible();
+  const focused = !isDestroyed && isVisible && !isMinimized && mainWindow.isFocused();
+  let idleState = 'active';
+  try {
+    idleState = powerMonitor.getSystemIdleState(60);
+  } catch {}
+  return {
+    focused,
+    isMinimized,
+    isVisible,
+    idleState: idleState === 'locked' ? 'locked' : idleState === 'idle' ? 'idle' : 'active',
+    screenLocked: idleState === 'locked',
+    appState: isDestroyed ? 'closed' : !isVisible ? 'tray' : isMinimized ? 'minimized' : focused ? 'active' : 'background',
+  };
+}
+
+function broadcastDesktopActivity() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('desktop-activity-state', getDesktopActivityState());
+  }
+}
+
+ipcMain.handle('get-desktop-activity-state', () => getDesktopActivityState());
+
+app.whenReady().then(() => {
+  powerMonitor.on('lock-screen', broadcastDesktopActivity);
+  powerMonitor.on('unlock-screen', broadcastDesktopActivity);
+  powerMonitor.on('suspend', broadcastDesktopActivity);
+  powerMonitor.on('resume', broadcastDesktopActivity);
 });
 
 // IPC handler for taskbar badge overlay

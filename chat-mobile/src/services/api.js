@@ -201,7 +201,8 @@ api.interceptors.response.use(
   (response) => {
     try {
       const url = response.config?.url || '';
-      if (response.config?._workspaceVersion !== undefined && response.config._workspaceVersion !== workspaceContextVersion) {
+      const isWorkspaceIndependent = /^\/?(push\/fcm-token|push\/activity|auth\/)/.test(url);
+      if (!isWorkspaceIndependent && response.config?._workspaceVersion !== undefined && response.config._workspaceVersion !== workspaceContextVersion) {
         return Promise.reject(new axios.CanceledError('Workspace context changed'));
       }
       const currentRev = useReportingHistoryStore?.getState?.()?.revision ?? 0;
@@ -646,12 +647,14 @@ export const pinsAPI = {
   unpin: (messageId) => api.delete(`/messages/${messageId}/pin`),
 };
 
-// Push Notification API — register/remove device push tokens
+// Push Notification API — register/remove device push tokens & report activity
 export const pushAPI = {
   registerToken: (token, deviceId, platform = 'mobile') =>
     api.post('/push/fcm-token', { token, deviceId, platform }),
-  removeToken: (token) =>
-    api.delete('/push/fcm-token', { data: { token } }),
+  removeToken: (token, deviceId = null) =>
+    api.delete('/push/fcm-token', { data: { token, deviceId } }),
+  reportActivity: (payload) =>
+    api.post('/push/activity', payload),
 };
 
 // Search API (global workspace search)

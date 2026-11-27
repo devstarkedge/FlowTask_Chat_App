@@ -127,12 +127,15 @@ export class NotificationService {
     ) {
       const isViewingActiveChannel =
         activeChannelId && channelId && String(channelId) === String(activeChannelId)
+      const isMinimized = typeof window !== 'undefined' && Boolean(window.__taskchatWindowMinimized)
+      const isScrolledAway = typeof window !== 'undefined' && Boolean(window.__taskchatChatScrolledAway)
       const isDocumentFocused =
         typeof document !== 'undefined' &&
         document.visibilityState === 'visible' &&
+        !isMinimized &&
         (typeof document.hasFocus === 'function' ? document.hasFocus() : true)
 
-      if (isViewingActiveChannel && isDocumentFocused) {
+      if (isViewingActiveChannel && isDocumentFocused && !isScrolledAway) {
         return true
       }
     }
@@ -145,25 +148,31 @@ export class NotificationService {
    * @param {import('./types.js').NotificationEvent} event
    */
   deliverNotification(event) {
-    // A. Native Desktop Notification (Electron or Browser Web API)
-    showDesktopNotification(event.title, {
-      body: event.body,
-      icon: event.sender?.avatar,
-      data: {
-        eventId: event.eventId,
-        channelId: event.channelId,
-        navigationTarget: event.navigationTarget,
-      },
-    })
-
-    // Attract user attention if window is blurred or backgrounded
     const isDocumentFocused =
       typeof document !== 'undefined' &&
       document.visibilityState === 'visible' &&
+      !(typeof window !== 'undefined' && window.__taskchatWindowMinimized) &&
       (typeof document.hasFocus === 'function' ? document.hasFocus() : true)
+    const soundEnabled = notificationConfig.getConfig().soundBehavior?.enabled !== false
 
+    // A. Native Desktop Notification when app is in background, minimized, or tray
     if (!isDocumentFocused) {
+      showDesktopNotification(event.title, {
+        body: event.body,
+        icon: event.sender?.avatar,
+        silent: !soundEnabled,
+        data: {
+          eventId: event.eventId,
+          channelId: event.channelId,
+          navigationTarget: event.navigationTarget,
+        },
+      })
       flashFrame(true)
+    } else {
+      // App is open and focused on another chat/screen: show one in-app alert
+      toast(event.body ? `${event.title}: ${event.body}` : event.title, {
+        id: event.eventId || undefined,
+      })
     }
 
     // B. In-App Notification Store (only for activity notifications/mentions/tasks)

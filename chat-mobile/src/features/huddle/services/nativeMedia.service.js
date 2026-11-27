@@ -41,7 +41,7 @@ export async function cameraPermission(){
   }
 }
 export function nativeCallAudio(){
-  if(!NativeModules.InCallManager || audio)return;
+  if(!NativeModules.InCallManager)return;
   audio=require('react-native-incall-manager').default;
   audio.start({media:'audio',auto:true});audio.setForceSpeakerphoneOn(true);
 }
@@ -50,8 +50,8 @@ export async function startNativeCallLifetime(microphone){
   await NativeModules.TaskChatHuddle.start(Boolean(microphone));
 }
 export function setHuddleSpeaker(enabled){audio?.setForceSpeakerphoneOn(enabled);}
-export function setNativeMicrophoneMute(muted){if(Platform.OS==='android')audio?.setMicrophoneMute?.(Boolean(muted));}
-export function stopNativeCallAudio(){pendingCapture?.();NativeModules.TaskChatHuddle?.stop();if(Platform.OS==='android')audio?.setMicrophoneMute?.(false);audio?.stop();audio=null;}
+export function setHuddleMicrophoneMute(muted){audio?.setMicrophoneMute?.(Boolean(muted));}
+export function stopNativeCallAudio(){pendingCapture?.();NativeModules.TaskChatHuddle?.stop();audio?.setMicrophoneMute?.(false);audio?.stop();audio=null;}
 export function nativeCaptureDevices(){
   const rtc=ensureNativeCalling();
   if(Platform.OS==='ios')return {

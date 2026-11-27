@@ -25,7 +25,7 @@ export class HuddleSfuController {
       transport.on('connectionstatechange',state=>{if(this.epoch!==epoch)return;if(state==='failed'){this.pause();this.update({connection:'failed',error:'Media connection failed. Retry audio.'});}else if(state==='connected')this.update({connection:this.consumers.size?'connected':'waiting'});});
     }
     const microphone=this.audioMixer.track || this.stream.getAudioTracks()[0];
-    if(microphone){microphone.enabled=!this.muted;this.audioProducer=await this.send.produce({track:microphone,appData:{source:'microphone'},stopTracks:false,zeroRtpOnPause:true});if(this.muted)this.audioProducer.pause();}
+    if(microphone){this.audioProducer=await this.send.produce({track:microphone,appData:{source:'microphone'},stopTracks:false,zeroRtpOnPause:true});if(this.epoch===epoch && this.muted)this.audioProducer.pause();}
     if(this.cameraStream)this.cameraProducer=await this.send.produce({track:this.cameraStream.getVideoTracks()[0],appData:{source:'camera'},stopTracks:false});
     this.live(epoch);this.initialized=true;
     const changed=()=>this.requestRefresh(epoch);socket.on('media:changed',changed);changed();this.update({notice:null,error:null});
@@ -57,17 +57,19 @@ export class HuddleSfuController {
   sync(state){if(!this.initialized)return;const own=state?.participants?.find(p=>p.id===this.context?.sessionId);if(!own?.audioReady || own.mediaId!==this.context.mediaId)this.pause();}
   receive(){}
   setMuted(muted){this.muted=muted;this.stream?.getAudioTracks().forEach(t=>{t.enabled=!muted;});
-    // The producer can be attached to a mixer output instead of the captured
-    // microphone track. Disable the track that is actually sent and pause/resume
-    // the Producer (with zeroRtpOnPause) so no RTP audio is sent while muted.
-    if(this.audioProducer?.track)this.audioProducer.track.enabled=!muted;
-    if(this.audioProducer){if(muted)this.audioProducer.pause();else this.audioProducer.resume();}
+    // Pause/resume the mediasoup producer (with zeroRtpOnPause) so no RTP audio
+    // packets or comfort-noise frames are transmitted while muted.
+    if(this.audioProducer){
+      if(muted)this.audioProducer.pause();
+      else this.audioProducer.resume();
+      if(this.audioProducer.track)this.audioProducer.track.enabled=!muted;
+    }
     this.update({muted});}
   async setMicrophone(stream){
     const epoch=this.epoch,track=stream.getAudioTracks()[0];track.enabled=!this.muted;
     const outgoing=await this.audioMixer.setSources(stream,this.screenStream);this.live(epoch);outgoing.enabled=!this.muted;let producer=this.audioProducer;
-    if(producer){await producer.replaceTrack({track:outgoing});if(this.muted && !producer.paused)producer.pause();else if(!this.muted && producer.paused)producer.resume();}
-    else {if(!this.initialized)throw new Error('Reconnect audio before enabling the microphone');producer=await this.send.produce({track:outgoing,appData:{source:'microphone'},stopTracks:false,zeroRtpOnPause:true});if(this.muted)producer.pause();}
+    if(producer){await producer.replaceTrack({track:outgoing});if(this.muted)producer.pause();else producer.resume();}
+    else {if(!this.initialized)throw new Error('Reconnect audio before enabling the microphone');producer=await this.send.produce({track:outgoing,appData:{source:'microphone'},stopTracks:false,zeroRtpOnPause:true});if(this.epoch===epoch && this.muted)producer.pause();}
     if(this.epoch!==epoch || !this.context){producer.close();throw new Error('Media session changed');}
     this.audioProducer=producer;const old=this.stream;this.stream=stream;this.update({localMicrophoneStream:stream});const channelId=this.context.channelId;
     track.onended=()=>{this.setMuted(true);this.onLocalEnded(channelId);};releaseStream(old);
@@ -84,7 +86,7 @@ export class HuddleSfuController {
       if(this.screenProducer){const old=this.screenProducer;this.screenProducer=null;old.close();await this.request('close-producer',{producerId:old.id});}
       const track=await this.audioMixer.setSources(this.stream,stream);this.live(epoch);if(track)track.enabled=!this.muted;
       if(this.audioProducer){
-        if(track){await this.audioProducer.replaceTrack({track});if(this.muted && !this.audioProducer.paused)this.audioProducer.pause();else if(!this.muted && this.audioProducer.paused)this.audioProducer.resume();}
+        if(track)await this.audioProducer.replaceTrack({track});
         else {const old=this.audioProducer;this.audioProducer=null;old.close();await this.request('close-producer',{producerId:old.id});}
       } else if(track){const producer=await this.send.produce({track,appData:{source:'microphone'},stopTracks:false,zeroRtpOnPause:true});if(this.epoch!==epoch){producer.close();throw new Error('Media session changed');}if(this.muted)producer.pause();this.audioProducer=producer;}
       this.live(epoch);

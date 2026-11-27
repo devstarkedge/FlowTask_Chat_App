@@ -42,9 +42,9 @@ const NOTIF_OPTIONS = {
   ],
   deliveryMode: [
     { label: 'Immediately (all devices)', value: 'immediately' },
-    { label: 'Desktop-first (30s delay)', value: 'desktop_first_30' },
-    { label: 'Desktop-first (60s delay)', value: 'desktop_first_60' },
-    { label: 'Desktop-first (120s delay)', value: 'desktop_first_120' },
+    { label: 'Desktop-first (30s delay)', value: 'desktop_first:30' },
+    { label: 'Desktop-first (60s delay)', value: 'desktop_first:60' },
+    { label: 'Desktop-first (120s delay)', value: 'desktop_first:120' },
   ],
   lockScreenPreview: [
     { label: 'Full message preview', value: 'full' },
@@ -122,15 +122,16 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.content}>
         {notificationPrefs.error ? (
           <TouchableOpacity
+            style={[styles.row, { borderBottomColor: colors.border, backgroundColor: colors.surface || '#FEF2F2' }]}
             onPress={() => notificationPrefs.fetchPreferences()}
-            style={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(10), backgroundColor: colors.danger ? `${colors.danger}18` : '#FEE2E2' }}
+            activeOpacity={0.7}
           >
-            <Text style={{ color: colors.danger || '#B91C1C', fontSize: moderateScale(13) }}>
-              Could not load notification settings ({notificationPrefs.error}). Tap to retry.
+            <Text style={[styles.rowSubtitle, { color: colors.danger || '#DC2626' }]}>
+              Could not load saved notification settings. Tap to retry.
             </Text>
           </TouchableOpacity>
         ) : null}
-        
+
         {renderSectionTitle('How to notify you')}
         {renderSwitchRow(
           <Smartphone size={22} color={colors.textSecondary} />,
@@ -217,23 +218,23 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
           selectedValue={
             activePicker === 'deliveryMode'
               ? (notificationPrefs.preferences?.global?.deliveryMode === 'desktop_first'
-                ? `desktop_first_${notificationPrefs.preferences?.global?.desktopFirstDelaySec ?? 60}`
+                ? `desktop_first:${notificationPrefs.preferences?.global?.desktopFirstDelaySec ?? 60}`
                 : 'immediately')
               : activePicker === 'lockScreenPreview'
                 ? (notificationPrefs.preferences?.global?.lockScreenPreview || 'full')
                 : prefs[activePicker]
           }
-          onSelect={(val) => {
+          onSelect={async (val) => {
             if (activePicker === 'deliveryMode') {
-              if (String(val).startsWith('desktop_first_')) {
-                const delay = Number(String(val).replace('desktop_first_', '')) || 60;
-                notificationPrefs.updateGlobal('deliveryMode', 'desktop_first').catch(() => {});
-                notificationPrefs.updateGlobal('desktopFirstDelaySec', delay).catch(() => {});
+              if (typeof val === 'string' && val.startsWith('desktop_first:')) {
+                const delay = Number(val.split(':')[1]) || 60;
+                await notificationPrefs.updateGlobal('deliveryMode', 'desktop_first').catch(() => {});
+                await notificationPrefs.updateGlobal('desktopFirstDelaySec', delay).catch(() => {});
               } else {
-                notificationPrefs.updateGlobal('deliveryMode', 'immediately').catch(() => {});
+                await notificationPrefs.updateGlobal('deliveryMode', 'immediately').catch(() => {});
               }
             } else if (activePicker === 'lockScreenPreview') {
-              notificationPrefs.updateGlobal('lockScreenPreview', val).catch(() => {});
+              await notificationPrefs.updateGlobal('lockScreenPreview', val).catch(() => {});
             } else {
               prefs.setPreference(activePicker, val);
             }

@@ -107,7 +107,10 @@ export class HuddleAudioController {
     // added transceivers are not associated with the incoming offer by JSEP.
     if(!peer.polite) {
       const audioTrack=this.audioMixer.track || this.stream.getAudioTracks()[0];
-      if(audioTrack)peer.audioSender=pc.addTrack(audioTrack,this.stream);
+      if(audioTrack){
+        peer.audioSender=pc.addTrack(audioTrack,this.stream);
+        if(this.muted)peer.audioSender?.replaceTrack?.(null)?.catch?.(()=>{});
+      }
       else peer.audioSender=pc.addTransceiver('audio',{direction:'sendrecv'}).sender;
       peer.cameraTransceiver=pc.addTransceiver('video',{direction:'sendrecv'});
       if(this.cameraStream)peer.cameraTransceiver.sender.replaceTrack(this.cameraStream.getVideoTracks()[0]).catch(error=>this.fail(peer,error));
@@ -128,7 +131,8 @@ export class HuddleAudioController {
     const audio=peer.remoteSources.size?named('microphone'):slots.find(item=>item.receiver.track.kind==='audio');
     const [camera,screen]=peer.remoteSources.size?[named('camera'),named('screen')]:this.negotiatedVideoSlots(peer);
     peer.audioSender=audio?.sender;peer.cameraTransceiver=camera;peer.screenSender=screen?.sender;
-    const replacements=[[audio,this.audioMixer.track || this.stream?.getAudioTracks()[0]],[camera,this.cameraStream?.getVideoTracks()[0]],[screen,this.screenStream?.getVideoTracks()[0]]];
+    const outgoingAudio=this.muted?null:(this.audioMixer.track || this.stream?.getAudioTracks()[0]);
+    const replacements=[[audio,outgoingAudio],[camera,this.cameraStream?.getVideoTracks()[0]],[screen,this.screenStream?.getVideoTracks()[0]]];
     await Promise.all(replacements.filter(([slot])=>slot).map(([slot,track])=>{slot.direction='sendrecv';return slot.sender.replaceTrack(track || null);}));
     configureScreenSender(peer.screenSender).catch(error=>huddleLogger.debug('SCREEN_QUALITY_UNAVAILABLE',{message:error.message}));
   }
@@ -203,6 +207,13 @@ export class HuddleAudioController {
   setMuted(muted) {
     this.muted=muted;
     this.stream?.getAudioTracks().forEach(track=>{track.enabled=!muted;});
+    const outgoing=muted?null:(this.audioMixer.track || this.stream?.getAudioTracks()[0] || null);
+    // Keep the active sender in sync and detach the track while muted so no RTP audio is sent.
+    for(const peer of this.peers.values()){
+      if(peer.failed)continue;
+      if(peer.audioSender?.track)peer.audioSender.track.enabled=!muted;
+      peer.audioSender?.replaceTrack?.(outgoing)?.catch?.(()=>{});
+    }
     this.update({muted});
   }
 
@@ -212,7 +223,9 @@ export class HuddleAudioController {
     track.enabled=!this.muted;
     const outgoing=await this.audioMixer.setSources(stream,this.screenStream);
     if(this.context!==context || !context)throw new Error('Media session changed');
-    await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>peer.audioSender?.replaceTrack(outgoing)));
+    outgoing.enabled=!this.muted;
+    const senderTrack=this.muted?null:outgoing;
+    await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>peer.audioSender?.replaceTrack(senderTrack)));
     if(this.context!==context || !context)throw new Error('Media session changed');
     track.enabled=!this.muted;
     const old=this.stream;this.stream=stream;this.update({localMicrophoneStream:stream});
@@ -236,11 +249,13 @@ export class HuddleAudioController {
     try {
       const outgoing=await this.audioMixer.setSources(this.stream,stream);
       if(this.context!==context || !context)throw new Error('Media session changed');
+      if(outgoing)outgoing.enabled=!this.muted;
+      const senderTrack=this.muted?null:outgoing;
       await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).flatMap(peer=>[
-        peer.screenSender?.replaceTrack(stream?.getVideoTracks()[0] || null),peer.audioSender?.replaceTrack(outgoing)]));
+        peer.screenSender?.replaceTrack(stream?.getVideoTracks()[0] || null),peer.audioSender?.replaceTrack(senderTrack)]));
       if(stream)await Promise.all([...this.peers.values()].filter(peer=>!peer.failed).map(peer=>configureScreenSender(peer.screenSender).catch(error=>huddleLogger.debug('SCREEN_QUALITY_UNAVAILABLE',{message:error.message}))));
     } catch(error) {
-      if(this.context===context){const restored=await this.audioMixer.setSources(this.stream,old).catch(()=>this.stream?.getAudioTracks()[0] || null);await Promise.allSettled([...this.peers.values()].flatMap(peer=>[peer.audioSender?.replaceTrack(restored),peer.screenSender?.replaceTrack(old?.getVideoTracks()[0] || null)]));}
+      if(this.context===context){const restored=await this.audioMixer.setSources(this.stream,old).catch(()=>this.stream?.getAudioTracks()[0] || null);const senderTrack=this.muted?null:restored;await Promise.allSettled([...this.peers.values()].flatMap(peer=>[peer.audioSender?.replaceTrack(senderTrack),peer.screenSender?.replaceTrack(old?.getVideoTracks()[0] || null)]));}
       throw error;
     }
     if(this.context!==context || !context)throw new Error('Media session changed');

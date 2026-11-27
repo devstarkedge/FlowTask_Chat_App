@@ -7,7 +7,7 @@ import {useHuddleStore} from '../stores/huddleStore';
 import {useHuddleAudioStore} from '../stores/huddleAudioStore';
 import {HuddleAudioController} from './HuddleAudioController';
 import {HuddleSfuController} from './HuddleSfuController';
-import {ensureNativeCalling,nativeCallAudio,stopNativeCallAudio,nativeCaptureDevices,microphonePermission,cameraPermission,startNativeCallLifetime} from '../features/huddle/services/nativeMedia.service';
+import {ensureNativeCalling,nativeCallAudio,stopNativeCallAudio,setNativeMicrophoneMute,nativeCaptureDevices,microphonePermission,cameraPermission,startNativeCallLifetime} from '../features/huddle/services/nativeMedia.service';
 import {prepareScreenTrack} from '../features/huddle/services/screenQuality.service';
 
 
@@ -18,6 +18,9 @@ const update=patch=>{
   if(Object.hasOwn(patch,'localScreenStream') && !patch.localScreenStream){
 
     globalThis.electronAPI?.setHuddleScreenSharing?.(false);
+  }
+  if(Object.hasOwn(patch,'muted')){
+    setNativeMicrophoneMute(Boolean(patch.muted));
   }
   useHuddleAudioStore.getState().update(patch);
 };
@@ -155,7 +158,7 @@ export async function retryHuddleAudio() {
 }
 
 export async function toggleHuddleMute() {
-  const session=useHuddleStore.getState().session;if(!session || useHuddleAudioStore.getState().micBusy)return;
+  const session=useHuddleStore.getState().session;if(!session || !controller || useHuddleAudioStore.getState().micBusy)return;
   if(!controller?.stream?.getAudioTracks().some(track=>track.readyState!=='ended')) {
     const epoch=audioEpoch;let stream;update({micBusy:true,error:null});
     try {

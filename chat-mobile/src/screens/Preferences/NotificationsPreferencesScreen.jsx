@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, HelpCircle, ChevronRight, Bell, Smartphone, MessageCircle, Headphones, Grid, Key } from "lucide-react-native";
+import { ChevronLeft, HelpCircle, ChevronRight, Bell, Smartphone, MessageCircle, Headphones, Grid, Key, Clock } from "lucide-react-native";
 import { useThemeStore } from '../../stores/themeStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { useNotificationPrefStore } from '../../stores/notificationPrefStore';
@@ -39,7 +39,18 @@ const NOTIF_OPTIONS = {
   keywords: [
     { label: 'None', value: 'None' },
     { label: 'Important', value: 'Important' },
-  ]
+  ],
+  deliveryMode: [
+    { label: 'Immediately (all devices)', value: 'immediately' },
+    { label: 'Desktop-first (30s delay)', value: 'desktop_first_30' },
+    { label: 'Desktop-first (60s delay)', value: 'desktop_first_60' },
+    { label: 'Desktop-first (120s delay)', value: 'desktop_first_120' },
+  ],
+  lockScreenPreview: [
+    { label: 'Full message preview', value: 'full' },
+    { label: 'Sender name only', value: 'sender_only' },
+    { label: 'Hide preview', value: 'hidden' },
+  ],
 };
 
 const NotificationsPreferencesScreen = ({ navigation }) => {
@@ -109,6 +120,16 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {notificationPrefs.error ? (
+          <TouchableOpacity
+            onPress={() => notificationPrefs.fetchPreferences()}
+            style={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(10), backgroundColor: colors.danger ? `${colors.danger}18` : '#FEE2E2' }}
+          >
+            <Text style={{ color: colors.danger || '#B91C1C', fontSize: moderateScale(13) }}>
+              Could not load notification settings ({notificationPrefs.error}). Tap to retry.
+            </Text>
+          </TouchableOpacity>
+        ) : null}
         
         {renderSectionTitle('How to notify you')}
         {renderSwitchRow(
@@ -184,17 +205,8 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
           onClose={() => setActivePicker(null)}
           title={`Select Option`}
           options={
-            activePicker === 'deliveryMode' ? [
-              'Immediately (all devices)',
-              'Desktop-first (30s delay)',
-              'Desktop-first (60s delay)',
-              'Desktop-first (120s delay)',
-            ] :
-            activePicker === 'lockScreenPreview' ? [
-              'Full message preview',
-              'Sender name only',
-              'Hide preview',
-            ] :
+            activePicker === 'deliveryMode' ? NOTIF_OPTIONS.deliveryMode :
+            activePicker === 'lockScreenPreview' ? NOTIF_OPTIONS.lockScreenPreview :
             activePicker === 'notifAllowSchedule' ? NOTIF_OPTIONS.schedule :
             activePicker === 'notifDefaultReminder' ? NOTIF_OPTIONS.reminderTime :
             activePicker === 'notifNotifyMobile' ? NOTIF_OPTIONS.notifyMobile :
@@ -205,29 +217,23 @@ const NotificationsPreferencesScreen = ({ navigation }) => {
           selectedValue={
             activePicker === 'deliveryMode'
               ? (notificationPrefs.preferences?.global?.deliveryMode === 'desktop_first'
-                ? `Desktop-first (${notificationPrefs.preferences?.global?.desktopFirstDelaySec ?? 60}s delay)`
-                : 'Immediately (all devices)')
+                ? `desktop_first_${notificationPrefs.preferences?.global?.desktopFirstDelaySec ?? 60}`
+                : 'immediately')
               : activePicker === 'lockScreenPreview'
-                ? (notificationPrefs.preferences?.global?.lockScreenPreview === 'hidden'
-                  ? 'Hide preview'
-                  : notificationPrefs.preferences?.global?.lockScreenPreview === 'sender_only'
-                    ? 'Sender name only'
-                    : 'Full message preview')
+                ? (notificationPrefs.preferences?.global?.lockScreenPreview || 'full')
                 : prefs[activePicker]
           }
           onSelect={(val) => {
             if (activePicker === 'deliveryMode') {
-              if (val.startsWith('Desktop-first')) {
-                const match = val.match(/(\d+)s/);
-                const delay = match ? Number(match[1]) : 60;
+              if (String(val).startsWith('desktop_first_')) {
+                const delay = Number(String(val).replace('desktop_first_', '')) || 60;
                 notificationPrefs.updateGlobal('deliveryMode', 'desktop_first').catch(() => {});
                 notificationPrefs.updateGlobal('desktopFirstDelaySec', delay).catch(() => {});
               } else {
                 notificationPrefs.updateGlobal('deliveryMode', 'immediately').catch(() => {});
               }
             } else if (activePicker === 'lockScreenPreview') {
-              const mode = val === 'Hide preview' ? 'hidden' : val === 'Sender name only' ? 'sender_only' : 'full';
-              notificationPrefs.updateGlobal('lockScreenPreview', mode).catch(() => {});
+              notificationPrefs.updateGlobal('lockScreenPreview', val).catch(() => {});
             } else {
               prefs.setPreference(activePicker, val);
             }

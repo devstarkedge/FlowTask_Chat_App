@@ -10,7 +10,7 @@ import logger from "../utils/logger";
 import { CHAT_FEATURE_FLAGS } from "../config/featureFlags";
 import { normalizeNotification } from "../utils/notificationFormat";
 import {
-  enqueueMessageSend,
+  nextClientSendOrder,
   nextOptimisticTimestamp,
 } from "../utils/messageSendQueue";
 import {
@@ -492,15 +492,19 @@ export const useChatStore = create((set, get) => ({
           );
           merged = [...uniqueNew, ...existingMessages];
         } else {
-          // Initial load: prefer fresh messages, keep only RECENT pending local messages (< 30s old)
+          // Initial load: prefer fresh messages, keep recent pending local messages
+          // AND any real-time socket messages newer than the fetched snapshot.
           const freshIds = new Set(sortedIncoming.map((m) => m._id));
+          const newestFreshTime = sortedIncoming.length
+            ? new Date(sortedIncoming[sortedIncoming.length - 1].createdAt).getTime()
+            : -Infinity;
           const thirtySecsAgo = Date.now() - 30000;
           const uniqueExisting = existingMessages.filter(
             (m) =>
               !freshIds.has(m._id) &&
-              m.pending &&
               m.channelId === channelId &&
-              new Date(m.createdAt).getTime() > thirtySecsAgo,
+              ((m.pending && new Date(m.createdAt).getTime() > thirtySecsAgo) ||
+                (!m.pending && sortedIncoming.length > 0 && new Date(m.createdAt).getTime() >= newestFreshTime)),
           );
           merged = [...sortedIncoming, ...uniqueExisting];
         }
@@ -605,15 +609,17 @@ export const useChatStore = create((set, get) => ({
         useChannelStore.getState().handleNewMessage(optimisticMessage);
       }
 
-      // Send to server with tempId for ACK reconciliation
-      const { data } = await enqueueMessageSend(channelId, () =>
-        messageAPI.send(channelId, {
-          content,
-          htmlContent: options.htmlContent || undefined,
-          tempId,
-          ...options,
-        }),
-      );
+      // Pipeline HTTP sends concurrently with monotonic clientSeq so rapid
+      // messages do not wait on previous round-trips while preserving order.
+      const { clientSessionId, clientSeq } = nextClientSendOrder(channelId);
+      const { data } = await messageAPI.send(channelId, {
+        content,
+        htmlContent: options.htmlContent || undefined,
+        tempId,
+        clientSeq,
+        clientSessionId,
+        ...options,
+      });
 
       // Server ACK will arrive via socket and reconcile via reconcileMessage()
       // But if ACK hasn't arrived yet, reconcile from HTTP response

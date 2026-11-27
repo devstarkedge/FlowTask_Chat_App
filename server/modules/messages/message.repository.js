@@ -22,7 +22,7 @@ class MessageRepository {
    * @param {object} data
    * @returns {Promise<Message>}
    */
-  async create(data) {
+  async create(data, { preloadedAuthor = null } = {}) {
     if (data.clientMessageId) {
       const existing = await Message.findOne({ clientMessageId: data.clientMessageId });
       if (existing) {
@@ -37,6 +37,19 @@ class MessageRepository {
     const encryptedData = encryptMessageData(data, data.workspaceId);
     const message = new Message(encryptedData);
     await message.save();
+    if (preloadedAuthor && !data.activityMeta?.actorId && !data.activityMeta?.targetUserId) {
+      const plain = message.toObject();
+      plain.authorId = {
+        _id: preloadedAuthor._id,
+        name: preloadedAuthor.name,
+        email: preloadedAuthor.email,
+        avatar: preloadedAuthor.avatar,
+        flowTaskUserId: preloadedAuthor.flowTaskUserId,
+        onlineStatus: preloadedAuthor.onlineStatus,
+        flowTaskProfileUpdatedAt: preloadedAuthor.flowTaskProfileUpdatedAt,
+      };
+      return decryptMessageData(plain, data.workspaceId);
+    }
     const populated = await message.populate([
       { path: 'authorId', select: 'name email avatar flowTaskUserId onlineStatus flowTaskProfileUpdatedAt' },
       { path: 'activityMeta.actorId', select: 'name email avatar flowTaskUserId flowTaskProfileUpdatedAt' },

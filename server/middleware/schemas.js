@@ -93,6 +93,8 @@ export const sendMessageSchema = z
         previewText: z.string().optional().nullable(),
       })
       .optional(),
+    clientSeq: z.number().int().positive().optional(),
+    clientSessionId: z.string().max(100).optional(),
   })
   .refine(
     (data) =>

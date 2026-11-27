@@ -77,6 +77,8 @@ export const sendMessage = asyncHandler(async (req, res) => {
     audioMeta,
     videoMeta,
     canvasMeta,
+    clientSeq,
+    clientSessionId,
   } = req.body;
 
   const channelId = req.params.channelId;
@@ -103,11 +105,18 @@ export const sendMessage = asyncHandler(async (req, res) => {
     audioMeta,
     videoMeta,
     canvasMeta,
+    clientSeq,
+    clientSessionId,
+    channel: req.channel,
+    sender: req.user,
   });
 
-  // Bot eligibility and generation are background work, including the lookup.
+  // Bot eligibility and generation are background work, using req.channel when available.
   if (content) {
-    channelRepository.findById(channelId, { workspaceId })
+    const resolveChannel = req.channel
+      ? Promise.resolve(req.channel)
+      : channelRepository.findById(channelId, { workspaceId });
+    resolveChannel
       .then((channel) => channel?.isAI
         ? botService.processAIMessage(content, { userId, channelId, workspaceId })
         : undefined)

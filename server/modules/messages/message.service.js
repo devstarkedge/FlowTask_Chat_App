@@ -31,6 +31,7 @@ import {
 import FileReference from '../files/FileReference.model.js';
 import SavedMessage from './SavedMessage.model.js';
 import { getAttachmentPreview } from '../../utils/getNotificationPreview.js';
+import { runInClientOrder } from './messageSendSequencer.js';
 
 /**
  * Message Service — business logic for sending, editing, deleting messages,
@@ -63,11 +64,11 @@ class MessageService {
    * Supports optimistic UI via tempId — client generates a temporary ID,
    * server includes it in the ACK so the client can reconcile.
    */
-  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, parentMessageId, tempId, workspaceId, mentions, gifMeta, audioMeta, videoMeta, canvasMeta }) {
+  async sendMessage({ channelId, authorId, content, htmlContent, contentType, attachments, fileReferences, flowTaskRef, threadId, parentMessageId, tempId, workspaceId, mentions, gifMeta, audioMeta, videoMeta, canvasMeta, clientSeq, clientSessionId, channel: preloadedChannel = null, sender: preloadedSender = null }) {
     const startTime = performance.now();
 
     // Validate channel exists and is not archived
-    const channel = await channelRepository.findById(channelId, { workspaceId });
+    const channel = preloadedChannel || await channelRepository.findById(channelId, { workspaceId });
     if (!channel) throw new NotFoundError('Channel not found');
     if (channel.isArchived) throw new ForbiddenError('Channel is archived');
     if (isReportingChannel(channel)) {
@@ -148,7 +149,7 @@ class MessageService {
     }
 
     // Fetch sender data for snapshot denormalization
-    const sender = await userRepository.findById(authorId);
+    const sender = preloadedSender || await userRepository.findById(authorId);
     const senderSnapshot = sender
       ? { name: sender.name, avatar: sender.avatar || null, profileUpdatedAt: sender.flowTaskProfileUpdatedAt || null }
       : { name: 'Unknown User', avatar: null };
@@ -289,44 +290,97 @@ class MessageService {
       messageData.threadId = actualThreadId;
     }
 
-    // Persist
-    const message = await messageRepository.create(messageData);
+    const wsId = (workspaceId || channel.workspaceId)?.toString();
 
-    if (canvasFiles.length) {
-      await FileReference.insertMany(canvasFiles.map(({ fileId, canvasId }) => ({
-        workspaceId: workspaceId || channel.workspaceId,
-        channelId, messageId: message._id, canvasId,
-        fileId, referencedBy: authorId, contextType: 'canvas',
-      })));
-    }
+    // Persist and broadcast in client-send order when clientSeq is provided
+    // so rapid concurrent HTTP sends never overtake each other.
+    const { message, populated } = await runInClientOrder(
+      { authorId, channelId, clientSessionId, clientSeq },
+      async () => {
+        const createdMessage = await messageRepository.create(messageData, {
+          preloadedAuthor: sender,
+        });
 
-    if (fileReferences && fileReferences.length > 0) {
-      const refContextType = actualThreadId
-        ? 'thread'
-        : channel.type === CHANNEL_TYPES.DM
-          ? 'dm'
-          : 'channel';
-          
-      // Deduplicate fileIds to prevent E11000 duplicate key error on workspaceId_messageId_fileId index
-      const uniqueFileReferences = [...new Set(fileReferences.map(id => id.toString()))];
-      
-      const refsToCreate = uniqueFileReferences.map((fileId, order) => ({
-        fileId,
-        order,
-        channelId,
-        messageId: message._id,
-        threadId: actualThreadId || null,
-        referencedBy: authorId,
-        contextType: refContextType,
-        ...(workspaceId && { workspaceId }),
-      }));
-      await FileReference.insertMany(refsToCreate);
-    }
+        if (canvasFiles.length) {
+          await FileReference.insertMany(canvasFiles.map(({ fileId, canvasId }) => ({
+            workspaceId: workspaceId || channel.workspaceId,
+            channelId, messageId: createdMessage._id, canvasId,
+            fileId, referencedBy: authorId, contextType: 'canvas',
+          })));
+        }
 
-    // create already populates the author. Only attachment references need a reload.
-    const populated = fileReferences?.length ? await messageRepository.findById(message._id, {
-      workspaceId: (workspaceId || channel.workspaceId)?.toString(),
-    }) : message;
+        if (fileReferences && fileReferences.length > 0) {
+          const refContextType = actualThreadId
+            ? 'thread'
+            : channel.type === CHANNEL_TYPES.DM
+              ? 'dm'
+              : 'channel';
+
+          // Deduplicate fileIds to prevent E11000 duplicate key error on workspaceId_messageId_fileId index
+          const uniqueFileReferences = [...new Set(fileReferences.map(id => id.toString()))];
+
+          const refsToCreate = uniqueFileReferences.map((fileId, order) => ({
+            fileId,
+            order,
+            channelId,
+            messageId: createdMessage._id,
+            threadId: actualThreadId || null,
+            referencedBy: authorId,
+            contextType: refContextType,
+            ...(workspaceId && { workspaceId }),
+          }));
+          await FileReference.insertMany(refsToCreate);
+        }
+
+        // create already populates the author. Only attachment references need a reload.
+        const loadedMessage = fileReferences?.length ? await messageRepository.findById(createdMessage._id, {
+          workspaceId: (workspaceId || channel.workspaceId)?.toString(),
+        }) : createdMessage;
+
+        // Build minimal socket payload
+        const socketPayload = messageSocketPayload(loadedMessage, { tempId: tempId || null });
+
+        // Emit to channel (real-time)
+        try {
+          if (actualThreadId) {
+            // Thread reply → dedicated event (not injected into main chat)
+            const resolvedRootMessageId = (thread?.rootMessageId || threadId).toString();
+            emitToChannel(channelId.toString(), SOCKET_EVENTS.THREAD_REPLY, {
+              message: socketPayload,
+              threadId: actualThreadId.toString(),
+              rootMessageId: resolvedRootMessageId,
+            }, wsId);
+          } else {
+            // Main message → standard event
+            emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, {
+              message: socketPayload,
+            }, wsId);
+          }
+        } catch (err) {
+          logDeliveryFailure(createdMessage._id, err);
+        }
+
+        // Emit ACK to the sender specifically (for optimistic UI reconciliation)
+        if (tempId) {
+          try {
+            const ackPayload = {
+              tempId,
+              message: socketPayload,
+            };
+            // Include rootMessageId for thread replies so frontend can reconcile
+            // against the correct threadRepliesByRoot store key
+            if (actualThreadId && thread) {
+              ackPayload.rootMessageId = (thread.rootMessageId || threadId).toString();
+            }
+            emitToUser(authorId.toString(), SOCKET_EVENTS.MESSAGE_ACK, ackPayload, wsId);
+          } catch (err) {
+            logDeliveryFailure(createdMessage._id, err);
+          }
+        }
+
+        return { message: createdMessage, populated: loadedMessage };
+      },
+    );
 
     // Update channel's last message and emit socket event so sidebar reorders in real-time
     // Build preview: text wins, fall back to attachment label so the channel sidebar
@@ -334,7 +388,6 @@ class MessageService {
     const textPreview = truncate(stripHtml(sanitizedContent), 100);
     const attachmentPreview = getAttachmentPreview(populated);
     const preview = textPreview || attachmentPreview || '';
-    const wsId = (workspaceId || channel.workspaceId)?.toString();
     const lastMessageAt = new Date();
     channelRepository.updateLastMessage(channelId, preview, lastMessageAt, wsId)
       .then(() => {
@@ -374,47 +427,6 @@ class MessageService {
         .catch((err) => {
           logger.error('Failed to update thread on reply', { threadId: actualThreadId, error: err.message });
         });
-    }
-
-    // Build minimal socket payload
-    const socketPayload = messageSocketPayload(populated, { tempId: tempId || null });
-
-    // Emit to channel (real-time)
-    try {
-      if (actualThreadId) {
-        // Thread reply → dedicated event (not injected into main chat)
-        const resolvedRootMessageId = (thread?.rootMessageId || threadId).toString();
-        emitToChannel(channelId.toString(), SOCKET_EVENTS.THREAD_REPLY, {
-          message: socketPayload,
-          threadId: actualThreadId.toString(),
-          rootMessageId: resolvedRootMessageId,
-        }, wsId);
-      } else {
-        // Main message → standard event
-        emitToChannel(channelId.toString(), SOCKET_EVENTS.MESSAGE_CREATE, {
-          message: socketPayload,
-        }, wsId);
-      }
-    } catch (err) {
-      logDeliveryFailure(message._id, err);
-    }
-
-    // Emit ACK to the sender specifically (for optimistic UI reconciliation)
-    if (tempId) {
-      try {
-        const ackPayload = {
-          tempId,
-          message: socketPayload,
-        };
-        // Include rootMessageId for thread replies so frontend can reconcile
-        // against the correct threadRepliesByRoot store key
-        if (actualThreadId && thread) {
-          ackPayload.rootMessageId = (thread.rootMessageId || threadId).toString();
-        }
-        emitToUser(authorId.toString(), SOCKET_EVENTS.MESSAGE_ACK, ackPayload, wsId);
-      } catch (err) {
-        logDeliveryFailure(message._id, err);
-      }
     }
 
     // Receipts must never hold up delivery or the sender's next queued request.

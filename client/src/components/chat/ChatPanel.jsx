@@ -8,7 +8,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useNotificationStore } from "../../stores/notificationStore";
 import { shallow } from "zustand/shallow";
-import { getSocket, joinChannel, leaveChannel } from "../../services/socket";
+import { getSocket, joinChannel } from "../../services/socket";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
 import ChatHeader from "./ChatHeader";
@@ -73,7 +73,6 @@ export default function ChatPanel({
   const removeOpenTab = useCanvasStore((s) => s.removeOpenTab);
   const requestChannelTabs = useCanvasStore((s) => s.requestChannelTabs);
 
-  const prevChannelRef = useRef(null);
   const [activeTab, setActiveTab] = useState("messages");
   // Controls whether the CanvasMenu popup is open in the header tab bar
   const [showCanvasPopup, setShowCanvasPopup] = useState(false);
@@ -113,21 +112,11 @@ export default function ChatPanel({
   const location = useLocation();
   const prevChannelForTabRef = useRef(channelId);
 
-  // Keep socket room membership tied ONLY to channelId.
-  // Unrelated dep changes (location.state, fetch fn identity) must not leave/rejoin,
-  // or typing indicators and live messages are dropped during the async re-join gap.
+  // Ensure socket is joined to the active channel room without leaving previously
+  // viewed channels, so background conversations continue receiving real-time messages.
   useEffect(() => {
     if (!channelId) return;
-
-    if (prevChannelRef.current && prevChannelRef.current !== channelId) {
-      leaveChannel(prevChannelRef.current);
-    }
     joinChannel(channelId);
-    prevChannelRef.current = channelId;
-
-    return () => {
-      leaveChannel(channelId);
-    };
   }, [channelId]);
 
   // When channel changes, reset tab and load messages
